@@ -1,85 +1,79 @@
 import Link from "next/link";
-import { Building2, ClipboardList, KeyRound, LineChart } from "lucide-react";
+import { Building2, KeyRound, Users } from "lucide-react";
 
-export default function LandingPage() {
+export default function WelcomePage() {
   return (
-    <main className="min-h-screen">
-      <div className="bg-gradient-to-br from-primary/20 via-base-200 to-secondary/10">
-        <div className="mx-auto max-w-6xl px-4 py-10 sm:py-16">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="rounded-box bg-primary text-primary-content p-3">
-              <Building2 className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="font-bold text-lg">Harborline Property Management</p>
-              <p className="text-sm opacity-70">ACCY 628 · Final Project G16</p>
-            </div>
-          </div>
+    <main className="relative min-h-screen overflow-hidden">
+      <div
+        className="absolute inset-0 welcome-wash"
+        aria-hidden="true"
+        style={{
+          background:
+            "radial-gradient(ellipse 90% 70% at 70% 20%, rgba(31,122,140,0.28), transparent 55%), radial-gradient(ellipse 60% 50% at 10% 80%, rgba(240,194,122,0.22), transparent 45%), linear-gradient(160deg, #f3efe6 0%, #d7eef2 42%, #134e5a 100%)",
+        }}
+      />
+      <div
+        className="absolute inset-y-0 right-0 w-[55%] hidden md:block welcome-drift"
+        aria-hidden="true"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(11,42,50,0.08), rgba(11,42,50,0.55)), url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 900'%3E%3Crect fill='%230b2a32' width='800' height='900'/%3E%3Cpath fill='%23134e5a' d='M0 520c80-40 140-20 220 10s160 40 240 10 140-50 220-30v390H0z'/%3E%3Cpath fill='%231f7a8c' d='M0 610c90-30 150 0 230 20s150 10 230-15 150-20 220 5v280H0z'/%3E%3Ccircle fill='%23f0c27a' cx='620' cy='180' r='48' opacity='.7'/%3E%3C/svg%3E\") center/cover no-repeat",
+        }}
+      />
 
-          <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
-            <div>
-              <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight">
-                Contract-to-cash for commercial property managers
-              </h1>
-              <p className="mt-4 text-lg opacity-80 max-w-xl">
-                Manage owner contracts, tenant leases, maintenance work, billing,
-                collections, and property profitability in one shared system.
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link href="/login" className="btn btn-primary">
-                  Log in
-                </Link>
-                <Link href="/signup" className="btn btn-outline">
-                  Sign up
-                </Link>
+      <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-6 py-16 md:px-10">
+        <div className="max-w-xl welcome-rise">
+          <p className="font-display text-5xl sm:text-6xl md:text-7xl tracking-tight text-[var(--harbor-ink)]">
+            Harborline
+          </p>
+          <h1 className="mt-4 text-2xl sm:text-3xl font-semibold text-[var(--harbor-deep)] leading-snug">
+            Property management built around clear leases and clean cash flow.
+          </h1>
+          <p className="mt-4 text-base sm:text-lg text-[var(--harbor-ink)]/75 max-w-md">
+            Whether you are looking for commercial space or running the portfolio
+            behind the scenes, start with the path that matches your role.
+          </p>
+        </div>
+
+        <div className="mt-10 flex flex-col sm:flex-row gap-4 max-w-2xl welcome-rise-delay">
+          <Link
+            href="/portal"
+            className="group flex-1 rounded-2xl bg-[var(--harbor-ink)] text-[var(--harbor-sand)] px-6 py-5 shadow-lg transition hover:-translate-y-0.5 hover:bg-[var(--harbor-deep)]"
+          >
+            <div className="flex items-start gap-3">
+              <Users className="mt-0.5 h-6 w-6 shrink-0 opacity-90" />
+              <div>
+                <p className="text-lg font-semibold leading-tight">
+                  I am a tenant or future tenant
+                </p>
+                <p className="mt-1 text-sm opacity-75">
+                  Apply for a property, manage contracts, and handle billing.
+                </p>
               </div>
             </div>
+          </Link>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Feature
-                icon={<KeyRound className="h-5 w-5" />}
-                title="Role-based access"
-                text="Owner, manager, tenant, maintenance, and accounting workspaces."
-              />
-              <Feature
-                icon={<ClipboardList className="h-5 w-5" />}
-                title="Work & costs"
-                text="Track work orders, vendors, and costs tied to properties."
-              />
-              <Feature
-                icon={<LineChart className="h-5 w-5" />}
-                title="Billing & profit"
-                text="Simulate rent billing, payments, deposits, and profitability."
-              />
-              <Feature
-                icon={<Building2 className="h-5 w-5" />}
-                title="Shared foundation"
-                text="This skeleton is ready for teammates to build modules on top."
-              />
+          <Link
+            href="/team"
+            className="group flex-1 rounded-2xl bg-[var(--harbor-sand)] text-[var(--harbor-ink)] border border-[var(--harbor-deep)]/15 px-6 py-5 shadow-lg transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]"
+          >
+            <div className="flex items-start gap-3">
+              <KeyRound className="mt-0.5 h-6 w-6 shrink-0 text-[var(--harbor-mid)]" />
+              <div>
+                <p className="text-lg font-semibold leading-tight">Team member</p>
+                <p className="mt-1 text-sm opacity-70">
+                  Enter your company ID to open the management system.
+                </p>
+              </div>
             </div>
-          </div>
+          </Link>
         </div>
+
+        <p className="mt-8 flex items-center gap-2 text-sm text-[var(--harbor-ink)]/55 welcome-rise-delay">
+          <Building2 className="h-4 w-4" />
+          Harborline Property Management · ACCY 628 · Group 16
+        </p>
       </div>
     </main>
-  );
-}
-
-function Feature({
-  icon,
-  title,
-  text,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  text: string;
-}) {
-  return (
-    <div className="card bg-base-100 border border-base-300 shadow-sm">
-      <div className="card-body p-4 gap-2">
-        <div className="text-primary">{icon}</div>
-        <h2 className="font-semibold">{title}</h2>
-        <p className="text-sm opacity-70">{text}</p>
-      </div>
-    </div>
   );
 }

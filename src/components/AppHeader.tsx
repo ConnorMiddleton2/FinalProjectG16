@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Building2, LogOut } from "lucide-react";
+import { teamLogout } from "@/app/team/actions";
 import { createClient } from "@/lib/supabase/client";
 import { ALL_ROLES, ROLE_META, type UserRole } from "@/lib/types";
 
@@ -16,10 +17,13 @@ export function AppHeader({ email, role }: Props) {
   const router = useRouter();
 
   async function handleLogout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {
+      /* team-only sessions may not have Supabase auth */
+    }
+    await teamLogout();
   }
 
   async function handleRoleChange(nextRole: UserRole) {
@@ -27,7 +31,10 @@ export function AppHeader({ email, role }: Props) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      router.push(ROLE_META[nextRole].href);
+      return;
+    }
 
     const { error } = await supabase
       .from("profiles")
@@ -83,6 +90,12 @@ export function AppHeader({ email, role }: Props) {
       </div>
 
       <nav className="mx-auto max-w-6xl px-4 pb-3 flex flex-wrap gap-2">
+        <Link
+          href="/ops"
+          className={`btn btn-sm ${pathname.startsWith("/ops") ? "btn-primary" : "btn-ghost"}`}
+        >
+          Ops home
+        </Link>
         {ALL_ROLES.map((r) => {
           const active = pathname.startsWith(ROLE_META[r].href);
           return (
