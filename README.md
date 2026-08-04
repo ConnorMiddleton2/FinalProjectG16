@@ -29,6 +29,17 @@ npm run dev
 
 5. Open http://localhost:3000
 
+### If login says "Email not confirmed"
+
+Supabase Auth is currently requiring email confirmation. For this class project, an org admin should:
+
+1. Open [Authentication → Providers → Email](https://supabase.com/dashboard/project/dgnrtqzapshumasjvoei/auth/providers)
+2. Turn **Confirm email** off and save
+
+Or temporarily confirm a user under **Authentication → Users**.
+
+(Default Supabase email sending is rate-limited and often only delivers to org members, so confirmation emails are unreliable for teammate signups.)
+
 ## Suggested team lanes
 
 | Area | Examples |
