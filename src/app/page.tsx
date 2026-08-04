@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, KeyRound, Users } from "lucide-react";
+import { Building2, KeyRound, Landmark, Users } from "lucide-react";
 
 export default function WelcomePage() {
   return (
@@ -30,15 +30,16 @@ export default function WelcomePage() {
             Property management built around clear leases and clean cash flow.
           </h1>
           <p className="mt-4 text-base sm:text-lg text-[var(--harbor-ink)]/75 max-w-md">
-            Whether you are looking for commercial space or running the portfolio
-            behind the scenes, start with the path that matches your role.
+            Whether you are looking for commercial space, own the asset, or run
+            the portfolio behind the scenes, start with the path that matches
+            your role.
           </p>
         </div>
 
-        <div className="mt-10 flex flex-col sm:flex-row gap-4 max-w-2xl welcome-rise-delay">
+        <div className="mt-10 grid gap-4 max-w-3xl sm:grid-cols-2 lg:grid-cols-3 welcome-rise-delay">
           <Link
             href="/portal"
-            className="group flex-1 rounded-2xl bg-[var(--harbor-ink)] text-[var(--harbor-sand)] px-6 py-5 shadow-lg transition hover:-translate-y-0.5 hover:bg-[var(--harbor-deep)]"
+            className="group rounded-2xl bg-[var(--harbor-ink)] text-[var(--harbor-sand)] px-6 py-5 shadow-lg transition hover:-translate-y-0.5 hover:bg-[var(--harbor-deep)]"
           >
             <div className="flex items-start gap-3">
               <Users className="mt-0.5 h-6 w-6 shrink-0 opacity-90" />
@@ -54,8 +55,25 @@ export default function WelcomePage() {
           </Link>
 
           <Link
+            href="/owners"
+            className="group rounded-2xl bg-[var(--harbor-sand)] text-[var(--harbor-ink)] border border-[var(--harbor-deep)]/15 px-6 py-5 shadow-lg transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]"
+          >
+            <div className="flex items-start gap-3">
+              <Landmark className="mt-0.5 h-6 w-6 shrink-0 text-[var(--harbor-mid)]" />
+              <div>
+                <p className="text-lg font-semibold leading-tight">
+                  Property owner
+                </p>
+                <p className="mt-1 text-sm opacity-70">
+                  Log in with your Harborline account, or apply for owner access.
+                </p>
+              </div>
+            </div>
+          </Link>
+
+          <Link
             href="/team"
-            className="group flex-1 rounded-2xl bg-[var(--harbor-sand)] text-[var(--harbor-ink)] border border-[var(--harbor-deep)]/15 px-6 py-5 shadow-lg transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]"
+            className="group rounded-2xl bg-[var(--harbor-sand)] text-[var(--harbor-ink)] border border-[var(--harbor-deep)]/15 px-6 py-5 shadow-lg transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)] sm:col-span-2 lg:col-span-1"
           >
             <div className="flex items-start gap-3">
               <KeyRound className="mt-0.5 h-6 w-6 shrink-0 text-[var(--harbor-mid)]" />

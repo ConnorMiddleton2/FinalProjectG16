@@ -11,12 +11,21 @@ export async function updateSession(request: NextRequest) {
     path === "/" ||
     path.startsWith("/portal") ||
     path.startsWith("/team") ||
+    path.startsWith("/owners") ||
     path.startsWith("/login") ||
     path.startsWith("/signup");
+
+  const hasOwnerCookie = Boolean(request.cookies.get("harborline_owner")?.value);
 
   if (path.startsWith("/ops") && !hasTeamCookie) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/team";
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  if (path.startsWith("/owners/dashboard") && !hasOwnerCookie) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/owners";
     return NextResponse.redirect(redirectUrl);
   }
 
@@ -55,7 +64,8 @@ export async function updateSession(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     const isAppRoute =
-      path.startsWith("/owner") ||
+      path === "/owner" ||
+      path.startsWith("/owner/") ||
       path.startsWith("/manager") ||
       path.startsWith("/tenant") ||
       path.startsWith("/maintenance") ||

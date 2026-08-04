@@ -1,19 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { ArrowLeft, Building2, KeyRound } from "lucide-react";
+import { DEMO_EMPLOYEE } from "@/lib/team-credentials";
 import { teamLogin, type TeamLoginState } from "./actions";
 
 const initialState: TeamLoginState = {};
 
 export default function TeamLoginPage() {
   const [state, formAction, pending] = useActionState(teamLogin, initialState);
+  const [companyId, setCompanyId] = useState<string>(DEMO_EMPLOYEE.companyId);
+  const [password, setPassword] = useState<string>(DEMO_EMPLOYEE.password);
 
   return (
     <main className="min-h-screen bg-[linear-gradient(165deg,#0b2a32_0%,#134e5a_45%,#1f7a8c_100%)] text-[var(--harbor-sand)]">
       <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-12">
-        <Link href="/" className="mb-8 inline-flex items-center gap-2 text-sm opacity-80 hover:opacity-100">
+        <Link
+          href="/"
+          className="mb-8 inline-flex items-center gap-2 text-sm opacity-80 hover:opacity-100"
+        >
           <ArrowLeft className="h-4 w-4" />
           Back to welcome
         </Link>
@@ -29,10 +35,20 @@ export default function TeamLoginPage() {
             </div>
           </div>
 
+          <div className="mt-5 rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm">
+            <p className="font-semibold">{DEMO_EMPLOYEE.name}</p>
+            <p className="mt-1 opacity-80">
+              Company ID: <strong>{DEMO_EMPLOYEE.companyId}</strong>
+            </p>
+            <p className="opacity-80">
+              Password: <strong>{DEMO_EMPLOYEE.password}</strong>
+            </p>
+          </div>
+
           <h1 className="mt-6 text-xl font-semibold">Enter company credentials</h1>
           <p className="mt-2 text-sm opacity-75">
-            Background management is restricted to Harborline staff. Use your
-            company ID and shared team password.
+            Use the employee credentials above to open the background management
+            system.
           </p>
 
           <form action={formAction} className="mt-6 space-y-4">
@@ -41,7 +57,8 @@ export default function TeamLoginPage() {
               <input
                 name="companyId"
                 className="input input-bordered w-full bg-white text-[var(--harbor-ink)]"
-                placeholder="HARBORLINE"
+                value={companyId}
+                onChange={(e) => setCompanyId(e.target.value)}
                 autoComplete="organization"
                 required
               />
@@ -50,9 +67,10 @@ export default function TeamLoginPage() {
               <span className="mb-1 text-sm opacity-80">Password</span>
               <input
                 name="password"
-                type="password"
+                type="text"
                 className="input input-bordered w-full bg-white text-[var(--harbor-ink)]"
-                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 required
               />
@@ -73,11 +91,6 @@ export default function TeamLoginPage() {
               {pending ? "Checking…" : "Open management system"}
             </button>
           </form>
-
-          <p className="mt-5 text-xs opacity-60">
-            Demo credentials for class use: company ID <strong>HARBORLINE</strong>,
-            password <strong>harborline2026</strong>
-          </p>
         </div>
       </div>
     </main>

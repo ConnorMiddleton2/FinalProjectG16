@@ -13,19 +13,26 @@ export async function teamLogin(
   formData: FormData
 ): Promise<TeamLoginState> {
   const companyId = String(formData.get("companyId") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-
+  const password = String(formData.get("password") ?? "").trim();
   const expected = getTeamCredentials();
 
-  if (
-    companyId.toUpperCase() !== expected.companyId.toUpperCase() ||
-    password !== expected.password
-  ) {
-    return { error: "Invalid company ID or password." };
+  const idOk = companyId.toUpperCase() === expected.companyId.toUpperCase();
+  const passOk = password === expected.password;
+
+  if (!companyId || !password) {
+    return { error: "Enter both company ID and password." };
+  }
+
+  if (!idOk || !passOk) {
+    return {
+      error: "Invalid company ID or password. Use G16 / team123 for the demo employee.",
+    };
   }
 
   const jar = await cookies();
-  jar.set(TEAM_COOKIE, "1", {
+  jar.set({
+    name: TEAM_COOKIE,
+    value: "1",
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

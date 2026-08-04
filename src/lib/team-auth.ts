@@ -1,11 +1,13 @@
 import { cookies } from "next/headers";
+import { DEMO_EMPLOYEE } from "@/lib/team-credentials";
 
 export const TEAM_COOKIE = "harborline_team";
+export { DEMO_EMPLOYEE };
 
 export function getTeamCredentials() {
   return {
-    companyId: process.env.TEAM_COMPANY_ID ?? "HARBORLINE",
-    password: process.env.TEAM_PASSWORD ?? "harborline2026",
+    companyId: process.env.TEAM_COMPANY_ID?.trim() || DEMO_EMPLOYEE.companyId,
+    password: process.env.TEAM_PASSWORD?.trim() || DEMO_EMPLOYEE.password,
   };
 }
 
