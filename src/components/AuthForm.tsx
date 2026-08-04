@@ -24,50 +24,57 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setError(null);
     setMessage(null);
 
-    const supabase = createClient();
+    try {
+      const supabase = createClient();
 
-    if (mode === "login") {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      setLoading(false);
-      if (signInError) {
-        setError(signInError.message);
+      if (mode === "login") {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (signInError) {
+          setError(signInError.message);
+          return;
+        }
+        router.push("/workspace");
+        router.refresh();
         return;
       }
-      router.push("/workspace");
-      router.refresh();
-      return;
-    }
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName || email,
-          role,
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName || email,
+            role,
+          },
         },
-      },
-    });
+      });
 
-    setLoading(false);
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
 
-    if (signUpError) {
-      setError(signUpError.message);
-      return;
+      if (data.session) {
+        router.push(ROLE_META[role].href);
+        router.refresh();
+        return;
+      }
+
+      setMessage(
+        "Account created. If email confirmation is required, confirm your email, then log in."
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Check your Supabase env vars in .env.local."
+      );
+    } finally {
+      setLoading(false);
     }
-
-    if (data.session) {
-      router.push(ROLE_META[role].href);
-      router.refresh();
-      return;
-    }
-
-    setMessage(
-      "Account created. If email confirmation is required, confirm your email, then log in."
-    );
   }
 
   return (
