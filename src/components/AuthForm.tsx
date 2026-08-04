@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { ALL_ROLES, ROLE_META, type UserRole } from "@/lib/types";
+import { ALL_ROLES, DEFAULT_ROLE, ROLE_META, type UserRole } from "@/lib/types";
 
 type Mode = "login" | "signup";
 
@@ -13,7 +13,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<UserRole>("manager");
+  const [role, setRole] = useState<UserRole>(DEFAULT_ROLE);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

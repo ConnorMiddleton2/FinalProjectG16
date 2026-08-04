@@ -22,7 +22,8 @@ export function RoleWorkspace({ role, title, summary, upcomingModules }: Props) 
       <div className="alert alert-info">
         <span>
           This is a skeleton workspace. Teammates can build real features here without
-          rewriting login or navigation.
+          rewriting login or navigation. Navigation and actions below are scoped to this
+          role.
         </span>
       </div>
 
@@ -44,6 +45,28 @@ export function RoleWorkspace({ role, title, summary, upcomingModules }: Props) 
             <h2 className="card-title text-lg">Planned modules</h2>
             <ul className="list-disc pl-5 space-y-1 text-sm opacity-80">
               {upcomingModules.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section className="card bg-base-100 border border-base-300 shadow-sm">
+          <div className="card-body">
+            <h2 className="card-title text-lg">Allowed actions</h2>
+            <ul className="list-disc pl-5 space-y-1 text-sm opacity-80">
+              {meta.allowedActions.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section className="card bg-base-100 border border-error/30 shadow-sm">
+          <div className="card-body">
+            <h2 className="card-title text-lg">Restricted for this role</h2>
+            <ul className="list-disc pl-5 space-y-1 text-sm opacity-80">
+              {meta.restrictedActions.map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>

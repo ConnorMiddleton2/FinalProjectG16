@@ -1,36 +1,26 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { ALL_ROLES, ROLE_META, type Profile, type UserRole } from "@/lib/types";
+import { getEffectiveRole } from "@/lib/effective-role";
+import { ALL_ROLES, ROLE_META } from "@/lib/types";
 
 export default async function WorkspacePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const role = ((profile as Profile | null)?.role ?? "manager") as UserRole;
+  const { role, isDemoOverride, profileRole } = await getEffectiveRole();
+  const allowedHrefs = new Set(ROLE_META[role].allowedPaths);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Role hub</h1>
         <p className="opacity-70 mt-1">
-          You are currently set as <strong>{ROLE_META[role].label}</strong>. Use
-          the header switcher to demo other roles for the panel.
+          Effective role: <strong>{ROLE_META[role].label}</strong>
+          {isDemoOverride
+            ? ` (demo override · account role is ${ROLE_META[profileRole].label})`
+            : null}
+          . Only destinations allowed for this role are shown below.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {ALL_ROLES.map((r) => (
+        {ALL_ROLES.filter((r) => allowedHrefs.has(ROLE_META[r].href)).map((r) => (
           <Link
             key={r}
             href={ROLE_META[r].href}
@@ -49,6 +39,25 @@ export default async function WorkspacePage() {
           </Link>
         ))}
       </div>
+
+      <section className="card bg-base-100 border border-base-300 shadow-sm">
+        <div className="card-body">
+          <h2 className="card-title text-lg">Blocked from this role</h2>
+          <p className="text-sm opacity-70">
+            These workspaces stay hidden in navigation and redirect away if opened
+            directly.
+          </p>
+          <ul className="mt-2 list-disc pl-5 space-y-1 text-sm opacity-80">
+            {ALL_ROLES.filter((r) => !allowedHrefs.has(ROLE_META[r].href)).map(
+              (r) => (
+                <li key={r}>
+                  {ROLE_META[r].label} — {ROLE_META[r].href}
+                </li>
+              )
+            )}
+          </ul>
+        </div>
+      </section>
     </div>
   );
 }

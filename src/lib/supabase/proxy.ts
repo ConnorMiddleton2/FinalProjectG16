@@ -44,11 +44,13 @@ export async function updateSession(request: NextRequest) {
       path === "/" || path.startsWith("/login") || path.startsWith("/signup");
 
     const isAppRoute =
+      path.startsWith("/executive") ||
       path.startsWith("/owner") ||
       path.startsWith("/manager") ||
       path.startsWith("/tenant") ||
       path.startsWith("/maintenance") ||
       path.startsWith("/accounting") ||
+      path.startsWith("/vendor") ||
       path.startsWith("/workspace");
 
     if (!user && isAppRoute) {
