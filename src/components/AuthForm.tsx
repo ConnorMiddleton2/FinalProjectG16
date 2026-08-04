@@ -24,9 +24,9 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setError(null);
     setMessage(null);
 
-    const supabase = createClient();
-
     try {
+      const supabase = createClient();
+
       if (mode === "login") {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
