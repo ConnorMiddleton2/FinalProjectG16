@@ -5,7 +5,6 @@ import { teamLogout } from "@/app/team/actions";
 import { hasTeamAccess } from "@/lib/team-auth";
 
 const DASHBOARDS: Record<string, { title: string }> = {
-  tenant: { title: "Tenant" },
   "slot-1": { title: "Blank category" },
   "slot-2": { title: "Blank category" },
   "slot-3": { title: "Blank category" },
