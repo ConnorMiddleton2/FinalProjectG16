@@ -1,3 +1,6 @@
+import { SEED_MONTHS } from "@/lib/accounts-receivable";
+import { monthCode, monthDay, shiftDays } from "@/lib/seed-dates";
+
 export type PayableCategory =
   | "maintenance"
   | "utilities"
@@ -152,10 +155,142 @@ export function emptyPayableForm() {
 
 export type PayableFormState = ReturnType<typeof emptyPayableForm>;
 
-function shiftDays(offset: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
+type RecurringVendor = {
+  code: string;
+  invoicePrefix: string;
+  vendorName: string;
+  vendorId: string;
+  category: PayableCategory;
+  property: string;
+  /** Amount per month, indexed by how many months ago the invoice was issued. */
+  amounts: number[];
+  invoiceDay: number;
+  dueDay: number;
+  notes: string;
+};
+
+/**
+ * Vendor contracts that bill every month. Seeding them across six months keeps
+ * the monthly margin history realistic instead of showing empty prior months.
+ */
+const RECURRING_VENDORS: RecurringVendor[] = [
+  {
+    code: "GG",
+    invoicePrefix: "GG",
+    vendorName: "Greenline Grounds",
+    vendorId: "V-1003",
+    category: "lawncare",
+    property: "Canal Yard",
+    amounts: [1650, 1650, 1650, 1650, 1450, 1450],
+    invoiceDay: 2,
+    dueDay: 28,
+    notes: "Monthly grounds-maintenance contract.",
+  },
+  {
+    code: "BRC",
+    invoicePrefix: "BRC",
+    vendorName: "Bright Path Janitorial",
+    vendorId: "V-1007",
+    category: "janitorial",
+    property: "Riverbend Commerce Center",
+    amounts: [1875, 1875, 1875, 1875, 1875, 1875],
+    invoiceDay: 3,
+    dueDay: 28,
+    notes: "Nightly cleaning, three floors.",
+  },
+  {
+    code: "SS",
+    invoicePrefix: "SS",
+    vendorName: "Sentry Shield Security",
+    vendorId: "V-1006",
+    category: "security",
+    property: "Pier 12 Commerce Center",
+    amounts: [2400, 2400, 2400, 2400, 2400, 2400],
+    invoiceDay: 4,
+    dueDay: 30,
+    notes: "Overnight patrol coverage.",
+  },
+  {
+    code: "MSPWR",
+    invoicePrefix: "MSPWR",
+    vendorName: "Magnolia State Power",
+    vendorId: "V-1002",
+    category: "utilities",
+    property: "Pier 12 Commerce Center",
+    amounts: [4218.44, 4402.1, 4890.75, 3980.22, 3610.48, 3455.9],
+    invoiceDay: 5,
+    dueDay: 25,
+    notes: "Common-area electric service.",
+  },
+  {
+    code: "GCG",
+    invoicePrefix: "GCG",
+    vendorName: "Gulf Coast Gas",
+    vendorId: "V-1005",
+    category: "gas",
+    property: "Canal Yard",
+    amounts: [962.18, 1045.6, 1120.35, 880.14, 742.66, 690.25],
+    invoiceDay: 5,
+    dueDay: 25,
+    notes: "Boiler gas service.",
+  },
+];
+
+type PayableException = {
+  paid?: number;
+  notes?: string;
+};
+
+/** Recurring invoices not paid in full; everything else was settled on time. */
+const PAYABLE_EXCEPTIONS: Record<string, PayableException> = {
+  "0:GG": { paid: 0 },
+  "0:BRC": { paid: 0 },
+  "0:SS": { paid: 0 },
+  "0:MSPWR": { paid: 0 },
+  "0:GCG": { paid: 0 },
+  "1:GG": {
+    paid: 800,
+    notes:
+      "Partial payment released while the balance waits on owner approval for extra storm cleanup.",
+  },
+  "1:GCG": {
+    paid: 0,
+    notes: "Boiler gas service. Past due, late-fee risk.",
+  },
+};
+
+function recurringPayables(): PayableInvoice[] {
+  const rows: PayableInvoice[] = [];
+
+  for (let monthsAgo = SEED_MONTHS - 1; monthsAgo >= 0; monthsAgo -= 1) {
+    for (const vendor of RECURRING_VENDORS) {
+      const amount = vendor.amounts[monthsAgo] ?? vendor.amounts[0];
+      const exception = PAYABLE_EXCEPTIONS[`${monthsAgo}:${vendor.code}`];
+      const paid = exception ? (exception.paid ?? amount) : amount;
+      const code = monthCode(monthsAgo);
+      const invoiceNumber = `${vendor.invoicePrefix}-${code}`;
+      const invoiceDate = monthDay(monthsAgo, vendor.invoiceDay);
+
+      rows.push({
+        id: `ap-${vendor.code}-${code}`.toLowerCase(),
+        invoiceNumber,
+        vendorName: vendor.vendorName,
+        vendorId: vendor.vendorId,
+        category: vendor.category,
+        property: vendor.property,
+        amount,
+        amountPaid: paid,
+        disputed: false,
+        invoiceDate,
+        dueDate: monthDay(monthsAgo, vendor.dueDay),
+        fileName: `${invoiceNumber.toLowerCase()}.pdf`,
+        notes: exception?.notes ?? vendor.notes,
+        createdAt: invoiceDate,
+      });
+    }
+  }
+
+  return rows;
 }
 
 export function seedPayableInvoices(): PayableInvoice[] {
@@ -179,38 +314,6 @@ export function seedPayableInvoices(): PayableInvoice[] {
       invoiceOffset: -12,
     },
     {
-      id: "ap-1002",
-      invoiceNumber: "MSPWR-88301",
-      vendorName: "Magnolia State Power",
-      vendorId: "V-1002",
-      category: "utilities",
-      property: "Pier 12 Commerce Center",
-      amount: 4218.44,
-      amountPaid: 4218.44,
-      disputed: false,
-      invoiceDate: shiftDays(-40),
-      dueDate: shiftDays(-10),
-      fileName: "magnolia-power-jul.pdf",
-      notes: "Common area electric, July cycle. Paid in full.",
-      invoiceOffset: -40,
-    },
-    {
-      id: "ap-1003",
-      invoiceNumber: "GG-2214",
-      vendorName: "Greenline Grounds",
-      vendorId: "V-1003",
-      category: "lawncare",
-      property: "Canal Yard",
-      amount: 1650,
-      amountPaid: 800,
-      disputed: false,
-      invoiceDate: shiftDays(-33),
-      dueDate: shiftDays(-3),
-      fileName: "greenline-2214.pdf",
-      notes: "Monthly grounds contract. Partial payment sent pending owner approval.",
-      invoiceOffset: -33,
-    },
-    {
       id: "ap-1004",
       invoiceNumber: "DR-7788",
       vendorName: "Delta Roofing",
@@ -226,54 +329,6 @@ export function seedPayableInvoices(): PayableInvoice[] {
       notes:
         "Billed for full membrane replacement; approved scope was a patch. Disputed with vendor.",
       invoiceOffset: -26,
-    },
-    {
-      id: "ap-1005",
-      invoiceNumber: "GCG-5567",
-      vendorName: "Gulf Coast Gas",
-      vendorId: "V-1005",
-      category: "gas",
-      property: "Canal Yard",
-      amount: 962.18,
-      amountPaid: 0,
-      disputed: false,
-      invoiceDate: shiftDays(-35),
-      dueDate: shiftDays(-5),
-      fileName: "gulf-coast-gas-5567.pdf",
-      notes: "Boiler gas service. Past due, late fee risk.",
-      invoiceOffset: -35,
-    },
-    {
-      id: "ap-1006",
-      invoiceNumber: "SS-3390",
-      vendorName: "Sentry Shield Security",
-      vendorId: "V-1006",
-      category: "security",
-      property: "Pier 12 Commerce Center",
-      amount: 2400,
-      amountPaid: 0,
-      disputed: false,
-      invoiceDate: shiftDays(-6),
-      dueDate: shiftDays(24),
-      fileName: "sentry-shield-3390.pdf",
-      notes: "Overnight patrol coverage, current month.",
-      invoiceOffset: -6,
-    },
-    {
-      id: "ap-1007",
-      invoiceNumber: "BRC-1120",
-      vendorName: "Bright Path Janitorial",
-      vendorId: "V-1007",
-      category: "janitorial",
-      property: "Riverbend Commerce Center",
-      amount: 1875,
-      amountPaid: 0,
-      disputed: false,
-      invoiceDate: shiftDays(-20),
-      dueDate: shiftDays(-1),
-      fileName: "bright-path-1120.pdf",
-      notes: "Nightly cleaning, three floors.",
-      invoiceOffset: -20,
     },
     {
       id: "ap-1008",
@@ -309,8 +364,10 @@ export function seedPayableInvoices(): PayableInvoice[] {
     },
   ];
 
-  return rows.map(({ invoiceOffset, ...row }) => ({
+  const oneOffs = rows.map(({ invoiceOffset, ...row }) => ({
     ...row,
     createdAt: shiftDays(invoiceOffset),
   }));
+
+  return [...recurringPayables(), ...oneOffs];
 }
