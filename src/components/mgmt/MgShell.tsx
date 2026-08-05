@@ -1,35 +1,32 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
-import { hasTeamAccess } from "@/lib/team-auth";
 
-const DASHBOARDS: Record<string, { title: string }> = {
-  ap: { title: "Accounts Payable" },
-  ar: { title: "Accounts Receivable" },
-  hr: { title: "Human Resources" },
-};
+const tileClass =
+  "border border-[#8aa3b5]/55 bg-[#b7c9d6] text-[#2f4556] shadow-[0_1px_2px_rgba(47,69,86,0.10)] transition hover:-translate-y-0.5 hover:bg-[#a9bdcd] hover:border-[#7a95a9]/65";
 
 type Props = {
-  params: Promise<{ slug: string }>;
+  title: string;
+  subtitle?: string;
+  backHref?: string;
+  backLabel?: string;
+  children: React.ReactNode;
 };
 
-export default async function OpsDashboardPage({ params }: Props) {
-  if (!(await hasTeamAccess())) {
-    redirect("/team");
-  }
-
-  const { slug } = await params;
-  const dash = DASHBOARDS[slug];
-  if (!dash) notFound();
-
+export function MgShell({
+  title,
+  subtitle,
+  backHref = "/ops",
+  backLabel = "Back to operations",
+  children,
+}: Props) {
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
       <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
           <div>
             <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Background management</p>
+            <p className="text-xs opacity-70">Management</p>
           </div>
           <form action={teamLogout}>
             <button
@@ -43,27 +40,30 @@ export default async function OpsDashboardPage({ params }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-10 space-y-6">
+      <main className="mx-auto max-w-6xl space-y-6 px-6 py-10">
         <Link
-          href="/ops"
+          href={backHref}
           className="inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to operations
+          {backLabel}
         </Link>
 
         <div>
           <h1 className="font-display text-4xl tracking-tight text-[var(--harbor-ink)]">
-            {dash.title}
+            {title}
           </h1>
-          <p className="mt-2 text-[var(--harbor-ink)]/65">
-            This dashboard is intentionally blank for now. We will build it out
-            later.
-          </p>
+          {subtitle ? (
+            <p className="mt-2 max-w-3xl text-[var(--harbor-ink)]/65">
+              {subtitle}
+            </p>
+          ) : null}
         </div>
 
-        <div className="min-h-64 rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/50" />
+        {children}
       </main>
     </div>
   );
 }
+
+export { tileClass };
