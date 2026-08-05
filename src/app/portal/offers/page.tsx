@@ -1,5 +1,5 @@
-import { PortalPlaceholder } from "@/components/portal/PortalPlaceholder";
+import { LeaseOffersList } from "@/components/portal/LeaseOffersList";
 
 export default function LeaseOffersPage() {
-  return <PortalPlaceholder title="Lease offers" description="Review lease offers sent by the Harborline leasing team." />;
+  return <LeaseOffersList />;
 }
