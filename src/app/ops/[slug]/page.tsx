@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, LogOut } from "lucide-react";
+import { ArrowLeft, LogOut, Truck } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
 import { hasTeamAccess } from "@/lib/team-auth";
 
@@ -62,7 +62,15 @@ export default async function OpsDashboardPage({ params }: Props) {
           </p>
         </div>
 
-        <div className="min-h-64 rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/50" />
+        <div className="flex min-h-64 items-center justify-center rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/50">
+          {slug === "tenant" ? (
+            <Truck
+              className="h-24 w-24 text-[var(--harbor-ink)]/35"
+              strokeWidth={1.25}
+              aria-hidden
+            />
+          ) : null}
+        </div>
       </main>
     </div>
   );
