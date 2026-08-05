@@ -2,7 +2,7 @@ import {
   feeStructureLabel,
   type ManagementContractDraft,
 } from "@/lib/management-contract";
-import { OWNER_SPEND_APPROVAL_THRESHOLD } from "@/lib/owner-approvals";
+import { OWNER_SPEND_APPROVAL_THRESHOLD } from "@/lib/owner-approval-policy";
 import { ownerFacingFeeSummary } from "@/lib/owner-properties";
 
 export type ContractStatus =

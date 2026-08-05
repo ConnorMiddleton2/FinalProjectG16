@@ -8,7 +8,7 @@ import {
 import {
   OWNER_SPEND_APPROVAL_THRESHOLD,
   resolveThresholdForAmountCheck,
-} from "@/lib/owner-approvals";
+} from "@/lib/owner-approval-policy";
 
 const initial: StaffApprovalRequestState = {};
 

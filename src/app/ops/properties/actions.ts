@@ -6,12 +6,12 @@ import {
   declineOwnerApplication,
   requestOwnerApplicationInfo,
 } from "@/lib/owner-auth";
+import { createOwnerApproval } from "@/lib/owner-approvals";
 import {
-  createOwnerApproval,
   exceedsApprovalThreshold,
   parseAmount,
   resolveThresholdForAmountCheck,
-} from "@/lib/owner-approvals";
+} from "@/lib/owner-approval-policy";
 import { createClient } from "@/lib/supabase/server";
 import {
   COLLECTIONS,

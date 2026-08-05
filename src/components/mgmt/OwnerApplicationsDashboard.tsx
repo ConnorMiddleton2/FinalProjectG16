@@ -6,9 +6,7 @@ import {
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
 import type { OwnerApplication } from "@/lib/owner-auth";
-import { createClient } from "@/lib/supabase/client";
-import { listSharedRecords, upsertSharedRecord } from "@/lib/shared-store";
-import { hashPassword } from "@/lib/owner-password";
+import { provisionOwnerTempPassword } from "@/app/ops/management/owner-applications/actions";
 import {
   draftManagementAgreement,
   sillyOwnerApplication,
@@ -215,42 +213,14 @@ export function OwnerApplicationsDashboard() {
     setBusy(true);
     setActionError(null);
     try {
-      const password = `Temp${Math.random().toString(36).slice(2, 8)}!`;
-      const supabase = createClient();
-      const account = {
-        id: crypto.randomUUID(),
-        email: draft.email.trim().toLowerCase(),
-        password: hashPassword(password),
+      const provisioned = await provisionOwnerTempPassword({
+        email: draft.email,
         fullName: draft.fullName,
-        createdAt: new Date().toISOString(),
-        mustChangePassword: true,
-      };
-      const existing = await listSharedRecords<{
-        id: string;
-        email: string;
-        password: string;
-        fullName: string;
-        createdAt: string;
-        mustChangePassword?: boolean;
-      }>(supabase, COLLECTIONS.ownerAccounts);
-      const prior = existing.find(
-        (o) => o.email.toLowerCase() === account.email
-      );
-      const finalAccount = prior
-        ? {
-            ...prior,
-            password: hashPassword(password),
-            fullName: draft.fullName,
-            mustChangePassword: true,
-          }
-        : account;
-
-      await upsertSharedRecord(
-        supabase,
-        COLLECTIONS.ownerAccounts,
-        finalAccount.id,
-        finalAccount as unknown as Record<string, unknown>
-      );
+      });
+      if ("error" in provisioned) {
+        setActionError(provisioned.error ?? "Could not create temp password.");
+        return;
+      }
 
       await saveContract({
         ...signed,
@@ -265,9 +235,9 @@ export function OwnerApplicationsDashboard() {
         accountMessage: `Your management agreement is fully executed. Use the temporary password from Harborline Management to sign in at /owners.`,
       });
 
-      setTempPassword(password);
+      setTempPassword(provisioned.temporaryPassword);
       setMsg(
-        `Temporary password created for ${draft.email}. Share it with the owner so they can sign in.`
+        `Temporary password created for ${provisioned.email}. Share it with the owner so they can sign in.`
       );
     } catch (err) {
       setActionError(
