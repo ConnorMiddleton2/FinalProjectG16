@@ -1,9 +1,5 @@
-import { PortalPlaceholderPage } from "@/components/portal/PortalPlaceholderPage";
+import { DocumentCenterPage } from "@/components/portal/documents/DocumentCenterPage";
 
 export default function PortalDocumentsPage() {
-  return (
-    <PortalPlaceholderPage
-      actions={[{ href: "/portal/lease", label: "Lease information" }]}
-    />
-  );
+  return <DocumentCenterPage />;
 }

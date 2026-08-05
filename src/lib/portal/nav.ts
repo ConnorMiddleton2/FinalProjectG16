@@ -122,8 +122,9 @@ export const PORTAL_PAGE_META: Record<string, PortalPageMeta> = {
       "Property, unit, term, rent, deposit, occupants, parking, pets, renewal, and move-out details for your current occupancy.",
   },
   "/portal/documents": {
-    title: "Documents",
-    description: "Lease PDFs, addenda, and other files shared with you.",
+    title: "Document center",
+    description:
+      "Secure lease, payment, policy, inspection, notice, insurance, renewal, and move-out files authorized for your tenant account.",
   },
   "/portal/announcements": {
     title: "Announcements",
