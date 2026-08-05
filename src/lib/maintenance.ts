@@ -51,9 +51,28 @@ export type BudgetLine = {
   notes: string;
 };
 
+export type DocumentKind = "invoice" | "receipt";
+
+export type MaintenanceDocument = {
+  id: string;
+  kind: DocumentKind;
+  vendorName: string;
+  property: string;
+  amount: string;
+  documentDate: string;
+  workOrderId: string;
+  category: WorkOrderCategory | "";
+  fileName: string;
+  notes: string;
+  submittedAt: string;
+  applyToBudget: boolean;
+  budgetLineId: string;
+};
+
 export const WORK_ORDER_STORAGE_KEY = "harborline_work_orders";
 export const VENDOR_STORAGE_KEY = "harborline_vendors";
 export const BUDGET_STORAGE_KEY = "harborline_maintenance_budget";
+export const DOCUMENT_STORAGE_KEY = "harborline_maintenance_documents";
 
 export const WORK_ORDER_CATEGORIES: {
   value: WorkOrderCategory;
@@ -247,4 +266,43 @@ export function seedBudget(): BudgetLine[] {
       notes: "Annual allocation from management",
     },
   ];
+}
+
+export function seedDocuments(): MaintenanceDocument[] {
+  return [
+    {
+      id: "doc-1",
+      kind: "invoice",
+      vendorName: "Oxford HVAC Pros",
+      property: "Riverbend Commerce Center",
+      amount: "850",
+      documentDate: new Date().toISOString().slice(0, 10),
+      workOrderId: "wo-1",
+      category: "hvac",
+      fileName: "oxford-hvac-invoice-4412.pdf",
+      notes: "Service call + refrigerant top-off",
+      submittedAt: new Date().toISOString(),
+      applyToBudget: false,
+      budgetLineId: "",
+    },
+  ];
+}
+
+export function emptyDocument(): Omit<
+  MaintenanceDocument,
+  "id" | "submittedAt"
+> {
+  return {
+    kind: "invoice",
+    vendorName: "",
+    property: "",
+    amount: "",
+    documentDate: new Date().toISOString().slice(0, 10),
+    workOrderId: "",
+    category: "",
+    fileName: "",
+    notes: "",
+    applyToBudget: true,
+    budgetLineId: "",
+  };
 }
