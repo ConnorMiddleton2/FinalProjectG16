@@ -1,9 +1,5 @@
-import { PortalPlaceholderPage } from "@/components/portal/PortalPlaceholderPage";
+import { AnnouncementsPage } from "@/components/portal/announcements/AnnouncementsPage";
 
 export default function PortalAnnouncementsPage() {
-  return (
-    <PortalPlaceholderPage
-      actions={[{ href: "/portal/messages", label: "Messages" }]}
-    />
-  );
+  return <AnnouncementsPage />;
 }

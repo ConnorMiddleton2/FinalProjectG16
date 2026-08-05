@@ -128,7 +128,8 @@ export const PORTAL_PAGE_META: Record<string, PortalPageMeta> = {
   },
   "/portal/announcements": {
     title: "Announcements",
-    description: "Property and building notices from Harborline.",
+    description:
+      "Property updates, service interruptions, events, safety notices, policies, and other Harborline notices.",
   },
   "/portal/messages": {
     title: "Messages",
