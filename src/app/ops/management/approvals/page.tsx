@@ -8,7 +8,7 @@ export default async function Page() {
   return (
     <MgShell
       title="Approve receipts & invoices"
-      subtitle="Approve department expenses so they solidify against budgets."
+      subtitle="Approve department expenses, then send them to Accounts Payable."
       backHref="/ops/management"
       backLabel="Back to Management"
     >

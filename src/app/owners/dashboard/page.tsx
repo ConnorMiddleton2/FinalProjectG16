@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Building2,
   ChevronRight,
+  ClipboardList,
   FilePlus2,
   KeyRound,
 } from "lucide-react";
@@ -11,7 +12,7 @@ import { OwnerChangePasswordForm } from "@/components/OwnerChangePasswordForm";
 import { OwnerEmptyState } from "@/components/OwnerEmptyState";
 import { OwnerPortalHeader } from "@/components/OwnerPortalHeader";
 import { OwnerShell } from "@/components/OwnerShell";
-import { getCurrentOwner } from "@/lib/owner-auth";
+import { getCurrentOwner, readOwnerApplications } from "@/lib/owner-auth";
 import { getPendingApprovalsForOwner } from "@/lib/owner-approvals";
 import {
   ensureDemoOwnerProperty,
@@ -28,6 +29,12 @@ export default async function OwnerDashboardPage() {
   await ensureDemoOwnerProperty(owner);
   const properties = await getPropertiesForOwner(owner);
   const pendingApprovals = await getPendingApprovalsForOwner(owner.email);
+  const myApplications = (await readOwnerApplications())
+    .filter((a) => a.email.toLowerCase() === owner.email.toLowerCase())
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
 
   return (
     <OwnerShell
@@ -111,6 +118,38 @@ export default async function OwnerDashboardPage() {
               </Link>
             </div>
           </div>
+        ) : null}
+
+        {myApplications.length > 0 ? (
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 text-[var(--harbor-mid)]">
+              <ClipboardList className="h-5 w-5" />
+              <h2 className="owner-section-title">Your applications</h2>
+            </div>
+            <ul className="owner-stagger space-y-3">
+              {myApplications.map((app) => (
+                <li key={app.id}>
+                  <Link
+                    href={`/owners/status/${app.id}?email=${encodeURIComponent(owner.email)}`}
+                    className="owner-card owner-card-interactive group flex items-start justify-between gap-3 p-4"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold text-[var(--harbor-ink)]">
+                        {app.companyName || app.fullName}
+                      </p>
+                      <p className="owner-muted mt-1 text-sm capitalize">
+                        {app.status.replaceAll("_", " ")}
+                        {app.contractId || app.contractSentAt
+                          ? " · Contract sent — review & sign"
+                          : " · View submitted details"}
+                      </p>
+                    </div>
+                    <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-[var(--harbor-mid)] opacity-40 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
         ) : null}
 
         <section className="space-y-4">

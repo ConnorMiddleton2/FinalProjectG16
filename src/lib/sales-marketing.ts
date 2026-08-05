@@ -56,11 +56,7 @@ export type SmCode =
   | "SM002"
   | "SM003"
   | "SM004"
-  | "SM005"
-  | "SM006"
-  | "SM007"
-  | "SM008"
-  | "SM009";
+  | "SM005";
 
 export type SmReceipt = {
   id: string;
@@ -125,68 +121,70 @@ export const EVENT_TYPES: { value: CalendarEventType; label: string }[] = [
 ];
 
 export const SM_CODES: { value: SmCode; label: string }[] = [
-  { value: "SM001", label: "SM001 · Digital advertising" },
-  { value: "SM002", label: "SM002 · Listing portals" },
-  { value: "SM003", label: "SM003 · Print & collateral" },
-  { value: "SM004", label: "SM004 · Signage & banners" },
-  { value: "SM005", label: "SM005 · Events & hospitality" },
-  { value: "SM006", label: "SM006 · Sponsorships" },
-  { value: "SM007", label: "SM007 · Broker / referral fees" },
-  { value: "SM008", label: "SM008 · Travel & entertainment" },
-  { value: "SM009", label: "SM009 · Contingency / other" },
+  { value: "SM001", label: "SM001 · Supplies" },
+  { value: "SM002", label: "SM002 · Events" },
+  { value: "SM003", label: "SM003 · Decoration" },
+  { value: "SM004", label: "SM004 · Meals & entertainment" },
+  { value: "SM005", label: "SM005 · Online Advertising" },
 ];
 
 export const DEFAULT_BUDGET_CATEGORIES: SmBudgetCategory[] = [
-  { code: "SM001", label: "Digital advertising", budgeted: 12000 },
-  { code: "SM002", label: "Listing portals (CoStar, LoopNet, etc.)", budgeted: 6000 },
-  { code: "SM003", label: "Print & collateral", budgeted: 3500 },
-  { code: "SM004", label: "Signage & banners", budgeted: 4000 },
-  { code: "SM005", label: "Events & hospitality", budgeted: 8000 },
-  { code: "SM006", label: "Sponsorships", budgeted: 5000 },
-  { code: "SM007", label: "Broker / referral fees", budgeted: 7000 },
-  { code: "SM008", label: "Travel & entertainment", budgeted: 2500 },
-  { code: "SM009", label: "Contingency / other", budgeted: 2000 },
+  { code: "SM001", label: "Supplies", budgeted: 4000 },
+  { code: "SM002", label: "Events", budgeted: 10000 },
+  { code: "SM003", label: "Decoration", budgeted: 5000 },
+  { code: "SM004", label: "Meals & entertainment", budgeted: 6000 },
+  { code: "SM005", label: "Online Advertising", budgeted: 15000 },
 ];
+
+/** Map Management S&M category keys ↔ receipt codes. */
+export const SM_CATEGORY_TO_CODE: Record<string, SmCode> = {
+  supplies: "SM001",
+  events: "SM002",
+  decoration: "SM003",
+  meals_entertainment: "SM004",
+  online_advertising: "SM005",
+};
 
 export function netBudget(categories: SmBudgetCategory[]) {
   return categories.reduce((sum, c) => sum + c.budgeted, 0);
 }
 
-/** Map legacy codes (SM-ADS, etc.) to new SM00x codes when loading old rows. */
+/** Map legacy codes to current SM00x codes when loading old rows. */
 export function normalizeSmCode(code: string): SmCode {
   const legacy: Record<string, SmCode> = {
-    "SM-ADS": "SM001",
-    "SM-LIST": "SM002",
-    "SM-PRINT": "SM003",
-    "SM-SIGN": "SM004",
-    "SM-EVENTS": "SM005",
-    "SM-SPONSOR": "SM006",
-    "SM-BROKER": "SM007",
-    "SM-TRAVEL": "SM008",
-    "SM-OTHER": "SM009",
+    "SM-ADS": "SM005",
+    "SM-LIST": "SM005",
+    "SM-PRINT": "SM001",
+    "SM-SIGN": "SM003",
+    "SM-EVENTS": "SM002",
+    "SM-SPONSOR": "SM002",
+    "SM-BROKER": "SM004",
+    "SM-TRAVEL": "SM004",
+    "SM-OTHER": "SM001",
+    SM006: "SM002",
+    SM007: "SM004",
+    SM008: "SM004",
+    SM009: "SM001",
   };
   if (legacy[code]) return legacy[code];
   if (SM_CODES.some((c) => c.value === code)) return code as SmCode;
-  return "SM009";
+  return "SM001";
 }
 
 export function normalizeBudgetConfig(
   raw: SmBudgetConfig | null | undefined
 ): SmBudgetConfig {
-  if (raw?.categories?.length) {
-    return {
-      id: raw.id,
-      label: raw.label,
-      categories: raw.categories.map((c) => ({
-        ...c,
-        code: normalizeSmCode(c.code),
-      })),
-    };
-  }
+  const byCode = new Map(
+    (raw?.categories ?? []).map((c) => [normalizeSmCode(c.code), c] as const)
+  );
   return {
     id: raw?.id ?? "sm-budget-main",
     label: raw?.label ?? "FY2026 Sales & Marketing",
-    categories: DEFAULT_BUDGET_CATEGORIES.map((c) => ({ ...c })),
+    categories: DEFAULT_BUDGET_CATEGORIES.map((d) => ({
+      code: d.code,
+      label: d.label,
+      budgeted: byCode.get(d.code)?.budgeted ?? d.budgeted,
+    })),
   };
 }
 

@@ -129,6 +129,9 @@ export type ApplicationStatusSummary = {
   temporaryPassword?: string;
   ownerEmail?: string;
   signedAt?: string;
+  mgmtStatus?: string;
+  contractSent?: boolean;
+  accountMessage?: string;
 };
 
 const SEED_OWNERS: OwnerAccount[] = [
@@ -340,6 +343,14 @@ export async function lookupOwnerApplications(input: {
       propertyCount: a.properties.length,
       ownerEmail: a.email,
       signedAt: a.ownerSignedAt,
+      mgmtStatus: a.mgmtStatus ?? "new",
+      contractSent: Boolean(
+        a.contractId ||
+          a.contractSentAt ||
+          (a.contractPropertyIds?.length ?? 0) > 0 ||
+          a.status === "awaiting_signature"
+      ),
+      accountMessage: a.accountMessage ?? "",
     };
 
     if (

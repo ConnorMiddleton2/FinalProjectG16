@@ -324,12 +324,21 @@ export default function OwnerApplicationStatusPage() {
           ) : null}
 
           {displayed?.map((app) => (
-            <ApplicationResultCard
-              key={app.id}
-              app={app}
-              lookupEmail={lookupState.lookupEmail || app.ownerEmail || ""}
-              onSigned={handleSigned}
-            />
+            <div key={app.id} className="space-y-2">
+              <Link
+                href={`/owners/status/${app.id}?email=${encodeURIComponent(
+                  lookupState.lookupEmail || app.ownerEmail || ""
+                )}`}
+                className="link link-hover text-xs font-medium text-[var(--harbor-mid)]"
+              >
+                View full application details →
+              </Link>
+              <ApplicationResultCard
+                app={app}
+                lookupEmail={lookupState.lookupEmail || app.ownerEmail || ""}
+                onSigned={handleSigned}
+              />
+            </div>
           ))}
         </div>
       </div>

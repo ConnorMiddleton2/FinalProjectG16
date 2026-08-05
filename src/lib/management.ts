@@ -66,6 +66,49 @@ export type DepartmentExpense = {
   approvedAt?: string;
 };
 
+export type DepartmentKey = DepartmentExpense["department"];
+
+/** Departments you can open when setting Management budgets. */
+export type MgmtBudgetDepartment =
+  | "maintenance"
+  | "sales_marketing"
+  | "executive";
+
+export type DepartmentBudget = {
+  id: string;
+  department: MgmtBudgetDepartment;
+  categoryKey: string;
+  label: string;
+  budgeted: number;
+  notes: string;
+  updatedAt: string;
+};
+
+export type ApPayableStatus =
+  | "queued"
+  | "in_progress"
+  | "paid"
+  | "on_hold";
+
+/** Invoice/receipt forwarded to Accounts Payable after Management approval. */
+export type ApPayable = {
+  id: string;
+  sourceExpenseId: string;
+  source: "department" | "sales_marketing";
+  department: DepartmentKey | "sales_marketing";
+  departmentLabel: string;
+  code: string;
+  vendor: string;
+  amount: number;
+  description: string;
+  fileName: string;
+  status: ApPayableStatus;
+  receivedAt: string;
+  approvedByManagementAt: string;
+  notes: string;
+  paidAt?: string;
+};
+
 export type MissedPayment = {
   id: string;
   tenantName: string;
@@ -88,7 +131,7 @@ export function money(n: number) {
   });
 }
 
-export function departmentLabel(d: DepartmentExpense["department"]) {
+export function departmentLabel(d: DepartmentKey | "sales_marketing" | MgmtBudgetDepartment) {
   switch (d) {
     case "sales_marketing":
       return "Sales & Marketing";
@@ -100,9 +143,131 @@ export function departmentLabel(d: DepartmentExpense["department"]) {
       return "Human Resources";
     case "operations":
       return "Operations";
+    case "executive":
+      return "Executive";
     default:
       return "Other";
   }
+}
+
+export const MGMT_BUDGET_DEPARTMENTS: {
+  id: MgmtBudgetDepartment;
+  title: string;
+  blurb: string;
+}[] = [
+  {
+    id: "maintenance",
+    title: "Maintenance",
+    blurb: "Trades, make-ready, amenities, and related property upkeep.",
+  },
+  {
+    id: "sales_marketing",
+    title: "Sales & Marketing",
+    blurb: "Campaign spend, events, and leasing outreach.",
+  },
+  {
+    id: "executive",
+    title: "Executive",
+    blurb: "Company-level executive operating budget.",
+  },
+];
+
+export const MGMT_BUDGET_CATEGORIES: Record<
+  MgmtBudgetDepartment,
+  Array<{ key: string; label: string; defaultBudgeted: number }>
+> = {
+  maintenance: [
+    { key: "general", label: "General", defaultBudgeted: 8000 },
+    { key: "emergency", label: "Emergency", defaultBudgeted: 10000 },
+    { key: "make_ready", label: "Make-ready", defaultBudgeted: 12000 },
+    { key: "hvac", label: "HVAC", defaultBudgeted: 15000 },
+    { key: "plumbing", label: "Plumbing", defaultBudgeted: 9000 },
+    { key: "electrical", label: "Electrical", defaultBudgeted: 8000 },
+    { key: "appliances", label: "Appliances", defaultBudgeted: 6000 },
+    { key: "painting_drywall", label: "Painting & Drywall", defaultBudgeted: 7000 },
+    { key: "doors_locks", label: "Doors & Locks", defaultBudgeted: 4000 },
+    { key: "landscaping", label: "Landscaping", defaultBudgeted: 5000 },
+    { key: "housekeeping", label: "Housekeeping", defaultBudgeted: 6000 },
+    { key: "amenities", label: "Amenities", defaultBudgeted: 4500 },
+    { key: "pest_control", label: "Pest Control", defaultBudgeted: 3500 },
+    { key: "other", label: "Other", defaultBudgeted: 3000 },
+  ],
+  sales_marketing: [
+    { key: "supplies", label: "Supplies", defaultBudgeted: 4000 },
+    { key: "events", label: "Events", defaultBudgeted: 10000 },
+    { key: "decoration", label: "Decoration", defaultBudgeted: 5000 },
+    {
+      key: "meals_entertainment",
+      label: "Meals & entertainment",
+      defaultBudgeted: 6000,
+    },
+    {
+      key: "online_advertising",
+      label: "Online Advertising",
+      defaultBudgeted: 15000,
+    },
+  ],
+  executive: [
+    { key: "general", label: "General", defaultBudgeted: 20000 },
+    { key: "travel", label: "Travel", defaultBudgeted: 8000 },
+    {
+      key: "professional_services",
+      label: "Professional services",
+      defaultBudgeted: 12000,
+    },
+    { key: "other", label: "Other", defaultBudgeted: 5000 },
+  ],
+};
+
+export function seedDepartmentBudgets(): DepartmentBudget[] {
+  const now = new Date().toISOString();
+  const rows: DepartmentBudget[] = [];
+  for (const dept of Object.keys(MGMT_BUDGET_CATEGORIES) as MgmtBudgetDepartment[]) {
+    for (const cat of MGMT_BUDGET_CATEGORIES[dept]) {
+      rows.push({
+        id: `mgmt-budget-${dept}-${cat.key}`,
+        department: dept,
+        categoryKey: cat.key,
+        label: cat.label,
+        budgeted: cat.defaultBudgeted,
+        notes: "",
+        updatedAt: now,
+      });
+    }
+  }
+  return rows;
+}
+
+/** Merge saved rows with the canonical category list for a department. */
+export function normalizeDepartmentBudgetLines(
+  department: MgmtBudgetDepartment,
+  existing: DepartmentBudget[]
+): DepartmentBudget[] {
+  const now = new Date().toISOString();
+  const byKey = new Map(
+    existing
+      .filter((r) => r.department === department)
+      .map((r) => [r.categoryKey, r])
+  );
+  return MGMT_BUDGET_CATEGORIES[department].map((cat) => {
+    const prior = byKey.get(cat.key);
+    if (prior) {
+      return { ...prior, label: cat.label };
+    }
+    return {
+      id: `mgmt-budget-${department}-${cat.key}`,
+      department,
+      categoryKey: cat.key,
+      label: cat.label,
+      budgeted: cat.defaultBudgeted,
+      notes: "",
+      updatedAt: now,
+    };
+  });
+}
+
+export function seedApPayables(): ApPayable[] {
+  return [];
 }
 
 export function seedOwnerContracts(): OwnerContract[] {
@@ -410,5 +575,30 @@ export function deptExpenseToUnified(e: DepartmentExpense): UnifiedExpense {
     status: e.status,
     submittedAt: e.submittedAt,
     raw: e,
+  };
+}
+
+export function unifiedExpenseToApPayable(row: UnifiedExpense): ApPayable {
+  const now = new Date().toISOString();
+  const department: ApPayable["department"] =
+    row.source === "sales_marketing"
+      ? "sales_marketing"
+      : (row.raw as DepartmentExpense).department;
+
+  return {
+    id: crypto.randomUUID(),
+    sourceExpenseId: row.id,
+    source: row.source,
+    department,
+    departmentLabel: row.departmentLabel,
+    code: row.code,
+    vendor: row.vendor,
+    amount: row.amount,
+    description: row.description,
+    fileName: row.fileName,
+    status: "queued",
+    receivedAt: now,
+    approvedByManagementAt: now,
+    notes: "",
   };
 }
