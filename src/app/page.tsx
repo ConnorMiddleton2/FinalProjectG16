@@ -22,6 +22,15 @@ export default function WelcomePage() {
       />
 
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-6 py-16 md:px-10">
+        <div className="absolute right-6 top-6 md:right-10 md:top-10">
+          <Link
+            href="/tasks"
+            className="inline-flex items-center justify-center rounded-xl border border-[#8aa3b5]/55 bg-[#b7c9d6] px-5 py-2.5 text-sm font-semibold text-[#2f4556] shadow-[0_1px_2px_rgba(47,69,86,0.10)] transition hover:-translate-y-0.5 hover:bg-[#a9bdcd]"
+          >
+            Tasks
+          </Link>
+        </div>
+
         <div className="max-w-xl welcome-rise">
           <p className="font-display text-5xl sm:text-6xl md:text-7xl tracking-tight text-[var(--harbor-ink)]">
             Harborline
