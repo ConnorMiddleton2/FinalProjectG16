@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import {
   AlertTriangle,
   BarChart3,
-  Building2,
   ClipboardCheck,
   Landmark,
   ScrollText,
@@ -25,7 +24,7 @@ const categories = [
     href: "/ops/management/budgets",
     icon: Wallet,
     blurb:
-      "Set category budgets for Maintenance, Sales & Marketing, and Executive.",
+      "Per-property category budgets by fiscal year and month, using prior-year revenue.",
   },
   {
     title: "Capital expenditures",
@@ -35,11 +34,11 @@ const categories = [
       "Major renovations and expenses — from maintenance or management — sent to owners for approval.",
   },
   {
-    title: "Business analytics",
+    title: "Analytics",
     href: "/ops/management/analytics",
     icon: BarChart3,
     blurb:
-      "Company-wide KPIs: revenue, margins, turnover, maintenance speed, and more.",
+      "Business KPIs and property performance — occupancy, NOI, margins, and more.",
   },
   {
     title: "Missed payments",
@@ -47,12 +46,6 @@ const categories = [
     icon: AlertTriangle,
     blurb:
       "Delinquency track records, foreclosure risk, and step-by-step escalation.",
-  },
-  {
-    title: "Property analytics",
-    href: "/ops/management/property-analytics",
-    icon: Building2,
-    blurb: "High-level profit, occupancy, and performance by asset or group.",
   },
   {
     title: "Approve receipts & invoices",

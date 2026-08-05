@@ -14,6 +14,7 @@ export default async function SmBudgetPage() {
       subtitle="Track total budget vs approved spend, with pending submissions shown translucently."
       backHref="/ops/sales-marketing"
       backLabel="Back to Sales & Marketing"
+      activeNavHref="/ops/sales-marketing/budget"
     >
       <BudgetDashboard />
     </SmShell>

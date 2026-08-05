@@ -21,6 +21,8 @@ export const COLLECTIONS = {
   ownerContracts: "owner_contracts",
   departmentExpenses: "department_expenses",
   departmentBudgets: "department_budgets",
+  propertyBudgetPlans: "property_budget_plans",
+  propertyBudgetPacks: "property_budget_packs",
   apPayables: "ap_payables",
   missedPayments: "missed_payments",
   capitalExpenditures: "capital_expenditures",

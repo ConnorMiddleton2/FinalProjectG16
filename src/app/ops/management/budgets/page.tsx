@@ -11,8 +11,9 @@ export default async function ManagementBudgetsPage() {
   return (
     <MgShell
       title="Department budgets"
-      subtitle="Set category budgets for Maintenance, Sales & Marketing, and Executive."
+      subtitle="Per-property budgets by year and month. Revenue comes from Accounts Receivable (Paid invoices)."
       backHref="/ops/management"
+      activeNavHref="/ops/management/budgets"
     >
       <DepartmentBudgetsDashboard />
     </MgShell>

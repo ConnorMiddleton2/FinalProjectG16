@@ -14,6 +14,7 @@ export default async function SmApplicationsPage() {
       subtitle="Review applications, log calls/texts, and offer tour times that match your calendar."
       backHref="/ops/sales-marketing"
       backLabel="Back to Sales & Marketing"
+      activeNavHref="/ops/sales-marketing/applications"
     >
       <ApplicationsDashboard />
     </SmShell>

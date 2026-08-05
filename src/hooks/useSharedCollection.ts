@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   COLLECTIONS,
+  deleteSharedRecord,
   listSharedRecords,
   replaceSharedCollection,
   upsertSharedRecord,
@@ -77,7 +78,25 @@ export function useSharedCollection<T extends { id: string }>(
     [collection]
   );
 
-  return { items, setItems, loading, error, refresh, saveOne, saveAll };
+  const removeOne = useCallback(
+    async (id: string) => {
+      const supabase = createClient();
+      await deleteSharedRecord(supabase, collection, id);
+      setItems((prev) => prev.filter((p) => p.id !== id));
+    },
+    [collection]
+  );
+
+  return {
+    items,
+    setItems,
+    loading,
+    error,
+    refresh,
+    saveOne,
+    saveAll,
+    removeOne,
+  };
 }
 
 export { COLLECTIONS };
