@@ -12,9 +12,14 @@ import { BudgetFillBar } from "@/components/mgmt/BudgetFillBar";
 import { RevenueBudgetBars } from "@/components/mgmt/RevenueBudgetBars";
 import type { ManagementContractDraft } from "@/lib/management-contract";
 import {
-  paidArRevenueCompany,
-  paidArRevenueForProperty,
+  companyRevenueFromAr,
+  propertyRevenueFromAr,
 } from "@/lib/ar-revenue";
+import type { Receivable } from "@/lib/accounts-receivable";
+import {
+  seedMiscReceivables,
+  seedRentalReceivables,
+} from "@/lib/accounts-receivable";
 import {
   activeDepartmentsFromPack,
   budgetPackId,
@@ -102,6 +107,18 @@ function DepartmentBudgetsDashboardInner() {
   const { items: invoices } = useSharedCollection<TenantInvoice>(
     COLLECTIONS.tenantInvoices,
     seedTenantInvoices
+  );
+  const { items: rentalReceivables } = useSharedCollection<Receivable>(
+    COLLECTIONS.rentalReceivables,
+    seedRentalReceivables
+  );
+  const { items: miscReceivables } = useSharedCollection<Receivable>(
+    COLLECTIONS.miscellaneousReceivables,
+    seedMiscReceivables
+  );
+  const allReceivables = useMemo(
+    () => [...rentalReceivables, ...miscReceivables],
+    [rentalReceivables, miscReceivables]
   );
   const { items: smConfigs, saveOne: saveSmBudget } =
     useSharedCollection<SmBudgetConfig>(
@@ -279,41 +296,59 @@ function DepartmentBudgetsDashboardInner() {
     return buildYearCompareRows({
       thisYear,
       revenueFor: (year) =>
-        paidArRevenueForProperty(invoices, {
+        propertyRevenueFromAr({
+          receivables: allReceivables,
+          invoices,
           propertyId,
           propertyName: selectedProperty.name,
           fiscalYear: year,
         }),
       budgetFor: (year) => budgetTotalForYear(items, year, propertyId),
     });
-  }, [propertyId, selectedProperty, thisYear, invoices, items]);
+  }, [
+    propertyId,
+    selectedProperty,
+    thisYear,
+    allReceivables,
+    invoices,
+    items,
+  ]);
 
   const companyCompareRows = useMemo(
     () =>
       buildYearCompareRows({
         thisYear,
         revenueFor: (year) =>
-          paidArRevenueCompany(invoices, propertyOptions, year),
+          companyRevenueFromAr({
+            receivables: allReceivables,
+            invoices,
+            properties: propertyOptions,
+            fiscalYear: year,
+          }),
         budgetFor: (year) => budgetTotalForYear(items, year, null),
       }),
-    [thisYear, invoices, propertyOptions, items]
+    [thisYear, allReceivables, invoices, propertyOptions, items]
   );
 
   const companyByProperty = useMemo(() => {
     return propertyOptions.map((p) => {
       const budget = budgetTotalForYear(items, fiscalYear, p.id);
-      const revenue = paidArRevenueForProperty(invoices, {
+      const revenue = propertyRevenueFromAr({
+        receivables: allReceivables,
+        invoices,
         propertyId: p.id,
         propertyName: p.name,
         fiscalYear,
       });
       return { ...p, budget, revenue, net: revenue - budget };
     });
-  }, [propertyOptions, items, invoices, fiscalYear]);
+  }, [propertyOptions, items, allReceivables, invoices, fiscalYear]);
 
   const arRevenueThisFocus =
     propertyId && selectedProperty
-      ? paidArRevenueForProperty(invoices, {
+      ? propertyRevenueFromAr({
+          receivables: allReceivables,
+          invoices,
           propertyId,
           propertyName: selectedProperty.name,
           fiscalYear: fiscalYear - 1,
@@ -796,7 +831,9 @@ function DepartmentBudgetsDashboardInner() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {propertyOptions.map((p) => {
-              const priorRev = paidArRevenueForProperty(invoices, {
+              const priorRev = propertyRevenueFromAr({
+                receivables: allReceivables,
+                invoices,
                 propertyId: p.id,
                 propertyName: p.name,
                 fiscalYear: thisYear - 1,

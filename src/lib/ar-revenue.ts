@@ -1,3 +1,4 @@
+import type { Receivable } from "@/lib/accounts-receivable";
 import type { TenantInvoice } from "@/lib/portal-records";
 
 /** Parse "$4,800.00" / "4800" → number. */
@@ -17,7 +18,61 @@ export function invoiceRevenueDate(inv: TenantInvoice): Date | null {
   return d;
 }
 
-function propertyMatches(
+function propertyNameMatches(
+  haystack: string,
+  propertyName: string
+): boolean {
+  const want = propertyName.trim().toLowerCase();
+  const hay = haystack.trim().toLowerCase();
+  if (!want || !hay) return false;
+  return hay.includes(want) || want.includes(hay);
+}
+
+function receivableInYear(row: Receivable, fiscalYear: number): boolean {
+  const raw = row.dueDate || row.invoiceDate || row.createdAt || "";
+  const d = new Date(raw);
+  return Number.isFinite(d.getTime()) && d.getFullYear() === fiscalYear;
+}
+
+/**
+ * Primary AR revenue: cash collected (`amountReceived`) from the ops
+ * Accounts Receivable ledgers for a property + year.
+ */
+export function paidReceivableRevenueForProperty(
+  rows: Receivable[],
+  opts: { propertyName: string; fiscalYear: number }
+): number {
+  let total = 0;
+  for (const row of rows) {
+    if ((row.amountReceived || 0) <= 0) continue;
+    if (!propertyNameMatches(row.property || "", opts.propertyName)) continue;
+    if (!receivableInYear(row, opts.fiscalYear)) continue;
+    total += Number(row.amountReceived) || 0;
+  }
+  return Math.round(total);
+}
+
+export function paidReceivableRevenueCompany(
+  rows: Receivable[],
+  properties: { name: string }[],
+  fiscalYear: number
+): number {
+  const seen = new Set<string>();
+  let total = 0;
+  for (const p of properties) {
+    for (const row of rows) {
+      if (seen.has(row.id)) continue;
+      if ((row.amountReceived || 0) <= 0) continue;
+      if (!propertyNameMatches(row.property || "", p.name)) continue;
+      if (!receivableInYear(row, fiscalYear)) continue;
+      seen.add(row.id);
+      total += Number(row.amountReceived) || 0;
+    }
+  }
+  return Math.round(total);
+}
+
+function propertyMatchesInvoice(
   inv: TenantInvoice,
   opts: { propertyId?: string | null; propertyName?: string | null }
 ): boolean {
@@ -29,15 +84,10 @@ function propertyMatches(
   const candidates = [inv.propertyName || "", inv.label || ""]
     .map((s) => s.toLowerCase())
     .filter(Boolean);
-  return candidates.some(
-    (hay) => hay.includes(want) || want.includes(hay)
-  );
+  return candidates.some((hay) => hay.includes(want) || want.includes(hay));
 }
 
-/**
- * Accounts Receivable revenue algorithm:
- * sum of Paid invoice amounts for the property in the fiscal year.
- */
+/** Legacy portal tenant_invoices fallback (Paid status only). */
 export function paidArRevenueForProperty(
   invoices: TenantInvoice[],
   opts: {
@@ -49,7 +99,7 @@ export function paidArRevenueForProperty(
   let total = 0;
   for (const inv of invoices) {
     if (inv.status !== "Paid") continue;
-    if (!propertyMatches(inv, opts)) continue;
+    if (!propertyMatchesInvoice(inv, opts)) continue;
     const d = invoiceRevenueDate(inv);
     if (!d || d.getFullYear() !== opts.fiscalYear) continue;
     total += parseInvoiceAmount(inv.amount);
@@ -69,7 +119,7 @@ export function paidArRevenueCompany(
       if (inv.status !== "Paid") continue;
       if (seen.has(inv.id)) continue;
       if (
-        !propertyMatches(inv, {
+        !propertyMatchesInvoice(inv, {
           propertyId: p.id,
           propertyName: p.name,
         })
@@ -83,4 +133,43 @@ export function paidArRevenueCompany(
     }
   }
   return Math.round(total);
+}
+
+/** Prefer ops AR ledgers; fall back to portal Paid invoices. */
+export function propertyRevenueFromAr(input: {
+  receivables: Receivable[];
+  invoices: TenantInvoice[];
+  propertyId?: string | null;
+  propertyName: string;
+  fiscalYear: number;
+}): number {
+  const fromLedger = paidReceivableRevenueForProperty(input.receivables, {
+    propertyName: input.propertyName,
+    fiscalYear: input.fiscalYear,
+  });
+  if (fromLedger > 0) return fromLedger;
+  return paidArRevenueForProperty(input.invoices, {
+    propertyId: input.propertyId,
+    propertyName: input.propertyName,
+    fiscalYear: input.fiscalYear,
+  });
+}
+
+export function companyRevenueFromAr(input: {
+  receivables: Receivable[];
+  invoices: TenantInvoice[];
+  properties: { id: string; name: string }[];
+  fiscalYear: number;
+}): number {
+  const fromLedger = paidReceivableRevenueCompany(
+    input.receivables,
+    input.properties,
+    input.fiscalYear
+  );
+  if (fromLedger > 0) return fromLedger;
+  return paidArRevenueCompany(
+    input.invoices,
+    input.properties,
+    input.fiscalYear
+  );
 }
