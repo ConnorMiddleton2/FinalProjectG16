@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  approveOwnerApplication,
   declineOwnerApplication,
   requestOwnerApplicationInfo,
+  sendContractForOwnerSignature,
 } from "@/lib/owner-auth";
+import type { FeeStructure } from "@/lib/management-contract";
 import {
   createOwnerApproval,
   exceedsApprovalThreshold,
@@ -30,7 +31,21 @@ function reviewerLabel() {
   return "Harborline staff";
 }
 
-export async function createAccountFromApplication(
+const FEE_STRUCTURES: FeeStructure[] = [
+  "percent_collections",
+  "percent_gpr",
+  "flat_monthly",
+  "flat_annual",
+  "hybrid",
+];
+
+function parseFeeStructure(raw: string): FeeStructure | undefined {
+  return FEE_STRUCTURES.includes(raw as FeeStructure)
+    ? (raw as FeeStructure)
+    : undefined;
+}
+
+export async function sendContractForSignatureAction(
   _prev: StaffApplicationState,
   formData: FormData
 ): Promise<StaffApplicationState> {
@@ -39,14 +54,29 @@ export async function createAccountFromApplication(
   }
 
   const applicationId = String(formData.get("applicationId") ?? "");
-  const password = String(formData.get("password") ?? "").trim();
   const reviewNotes = String(formData.get("reviewNotes") ?? "");
 
-  const result = await approveOwnerApplication({
+  const result = await sendContractForOwnerSignature({
     applicationId,
-    password: password || undefined,
     reviewedBy: reviewerLabel(),
     reviewNotes,
+    terms: {
+      contractStartDate: String(formData.get("contractStartDate") ?? ""),
+      contractEndDate: String(formData.get("contractEndDate") ?? ""),
+      feeStructure: parseFeeStructure(
+        String(formData.get("feeStructure") ?? "")
+      ),
+      feePercent: String(formData.get("feePercent") ?? ""),
+      feeFlatAmount: String(formData.get("feeFlatAmount") ?? ""),
+      ownerApprovalThreshold: String(
+        formData.get("ownerApprovalThreshold") ?? ""
+      ),
+      renewalOptions: String(formData.get("renewalOptions") ?? ""),
+      terminationNoticeDays: String(
+        formData.get("terminationNoticeDays") ?? ""
+      ),
+      assignedManager: String(formData.get("assignedManager") ?? ""),
+    },
   });
   if ("error" in result) {
     return { error: result.error };
@@ -54,11 +84,10 @@ export async function createAccountFromApplication(
 
   revalidatePath("/ops/properties");
   revalidatePath("/ops/properties/applications");
-  revalidatePath("/owners/dashboard");
+  revalidatePath("/owners/status");
 
   return {
-    success: `Account created for ${result.fullName} (${result.email}). ${result.propertiesProvisioned} draft propert${result.propertiesProvisioned === 1 ? "y" : "ies"} linked. Copy the temporary password below and share it out of band — it is hashed at rest and will not be shown again.`,
-    temporaryPassword: result.temporaryPassword,
+    success: `Contract sent for ${result.fullName} (${result.email}). ${result.propertiesProvisioned} agreement${result.propertiesProvisioned === 1 ? "" : "s"} ready on Check Application Status. The owner signs there to receive a temporary password — no email required.`,
   };
 }
 

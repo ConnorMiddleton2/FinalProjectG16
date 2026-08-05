@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   emptyManagementContract,
   feeStructureLabel,
+  type FeeStructure,
   type ManagementContractDraft,
   type PropertyType,
   type SharedPropertyTenant,
@@ -13,6 +14,18 @@ import {
   listSharedRecords,
   upsertSharedRecord,
 } from "@/lib/shared-store";
+
+export type ContractTermsInput = {
+  contractStartDate?: string;
+  contractEndDate?: string;
+  feeStructure?: FeeStructure;
+  feePercent?: string;
+  feeFlatAmount?: string;
+  ownerApprovalThreshold?: string;
+  renewalOptions?: string;
+  terminationNoticeDays?: string;
+  assignedManager?: string;
+};
 
 function mapCategoryToPropertyType(category: string): PropertyType {
   const c = category.trim().toLowerCase();
@@ -56,13 +69,18 @@ export async function getOwnerPropertyById(
   return properties.find((p) => p.id === propertyId) ?? null;
 }
 
-/** Create draft managed properties from an approved application. */
+/** Create draft managed properties from an application (account optional until owner signs). */
 export async function provisionPropertiesFromApplication(
   app: OwnerApplication,
-  owner: OwnerAccount
+  options?: {
+    owner?: OwnerAccount;
+    terms?: ContractTermsInput;
+  }
 ): Promise<ManagementContractDraft[]> {
   const client = await createClient();
   const created: ManagementContractDraft[] = [];
+  const terms = options?.terms;
+  const owner = options?.owner;
 
   for (const prop of app.properties) {
     const base = emptyManagementContract();
@@ -81,7 +99,19 @@ export async function provisionPropertiesFromApplication(
       ownerContactName: app.fullName.trim(),
       ownerEmail: app.email.toLowerCase(),
       ownerPhone: app.phone.trim(),
-      ownerAccountId: owner.id,
+      ownerAccountId: owner?.id ?? "",
+      sourceApplicationId: app.id,
+      contractStartDate: terms?.contractStartDate?.trim() || base.contractStartDate,
+      contractEndDate: terms?.contractEndDate?.trim() || base.contractEndDate,
+      feeStructure: terms?.feeStructure ?? base.feeStructure,
+      feePercent: terms?.feePercent?.trim() || base.feePercent,
+      feeFlatAmount: terms?.feeFlatAmount?.trim() || base.feeFlatAmount,
+      ownerApprovalThreshold:
+        terms?.ownerApprovalThreshold?.trim() || base.ownerApprovalThreshold,
+      renewalOptions: terms?.renewalOptions?.trim() || base.renewalOptions,
+      terminationNoticeDays:
+        terms?.terminationNoticeDays?.trim() || base.terminationNoticeDays,
+      assignedManager: terms?.assignedManager?.trim() || base.assignedManager,
       notes: `Provisioned from owner application ${app.id}`,
     };
 
@@ -95,6 +125,47 @@ export async function provisionPropertiesFromApplication(
   }
 
   return created;
+}
+
+export async function getManagedPropertiesByIds(
+  ids: string[]
+): Promise<ManagementContractDraft[]> {
+  if (ids.length === 0) return [];
+  const client = await createClient();
+  const all = await listSharedRecords<ManagementContractDraft>(
+    client,
+    COLLECTIONS.managedProperties
+  );
+  const idSet = new Set(ids);
+  return all.filter((p) => idSet.has(p.id));
+}
+
+/** Attach owner account id to properties after the owner signs. */
+export async function linkOwnerAccountToProperties(
+  propertyIds: string[],
+  owner: OwnerAccount,
+  signature?: { signedAt: string; signatureName: string }
+): Promise<void> {
+  if (propertyIds.length === 0) return;
+  const client = await createClient();
+  const properties = await getManagedPropertiesByIds(propertyIds);
+  for (const property of properties) {
+    const updated: ManagementContractDraft = {
+      ...property,
+      ownerAccountId: owner.id,
+      ownerEmail: owner.email,
+      ownerContactName: owner.fullName || property.ownerContactName,
+      ownerSignedAt: signature?.signedAt ?? property.ownerSignedAt,
+      ownerSignatureName:
+        signature?.signatureName ?? property.ownerSignatureName,
+    };
+    await upsertSharedRecord(
+      client,
+      COLLECTIONS.managedProperties,
+      updated.id,
+      updated as unknown as Record<string, unknown>
+    );
+  }
 }
 
 export async function getTenantsForProperty(

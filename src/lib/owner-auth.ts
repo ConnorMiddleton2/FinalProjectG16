@@ -10,7 +10,13 @@ import {
   isHashedPassword,
   verifyPassword,
 } from "@/lib/owner-password";
-import { provisionPropertiesFromApplication } from "@/lib/owner-properties";
+import {
+  getManagedPropertiesByIds,
+  linkOwnerAccountToProperties,
+  provisionPropertiesFromApplication,
+  type ContractTermsInput,
+} from "@/lib/owner-properties";
+import { buildAgreementSections } from "@/lib/owner-contracts";
 import { cookies } from "next/headers";
 
 export const OWNER_COOKIE = "harborline_owner";
@@ -35,7 +41,8 @@ export type OwnerApplicationStatus =
   | "pending"
   | "approved"
   | "declined"
-  | "needs_info";
+  | "needs_info"
+  | "awaiting_signature";
 
 export type OwnerApplication = {
   id: string;
@@ -52,6 +59,39 @@ export type OwnerApplication = {
   reviewedAt?: string;
   reviewNotes?: string;
   reviewerDecision?: OwnerApplicationStatus;
+  /** Provisioned managed_properties ids sent for owner signature */
+  contractPropertyIds?: string[];
+  ownerSignedAt?: string;
+  ownerSignatureName?: string;
+  /** Plaintext temp password for Check Application Status until password change */
+  loginRevealPassword?: string;
+  credentialsIssuedAt?: string;
+};
+
+export type AgreementSectionSummary = {
+  title: string;
+  paragraphs: string[];
+};
+
+export type ApplicationContractSummary = {
+  propertyId: string;
+  propertyName: string;
+  sections: AgreementSectionSummary[];
+};
+
+export type ApplicationStatusSummary = {
+  id: string;
+  status: OwnerApplicationStatus;
+  fullName: string;
+  companyName: string;
+  createdAt: string;
+  reviewNotes: string;
+  reviewedAt: string;
+  propertyCount: number;
+  contracts?: ApplicationContractSummary[];
+  temporaryPassword?: string;
+  ownerEmail?: string;
+  signedAt?: string;
 };
 
 const SEED_OWNERS: OwnerAccount[] = [
@@ -194,7 +234,9 @@ export async function submitOwnerApplication(input: {
   const openSameEmail = apps.find(
     (a) =>
       a.email === email &&
-      (a.status === "pending" || a.status === "needs_info")
+      (a.status === "pending" ||
+        a.status === "needs_info" ||
+        a.status === "awaiting_signature")
   );
   if (openSameEmail) {
     return {
@@ -248,9 +290,9 @@ export async function lookupOwnerApplications(input: {
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
-  return {
-    ok: true as const,
-    applications: matches.map((a) => ({
+  const applications: ApplicationStatusSummary[] = [];
+  for (const a of matches) {
+    const summary: ApplicationStatusSummary = {
       id: a.id,
       status: a.status,
       fullName: a.fullName,
@@ -259,7 +301,32 @@ export async function lookupOwnerApplications(input: {
       reviewNotes: a.reviewNotes ?? "",
       reviewedAt: a.reviewedAt ?? "",
       propertyCount: a.properties.length,
-    })),
+      ownerEmail: a.email,
+      signedAt: a.ownerSignedAt,
+    };
+
+    if (
+      (a.status === "awaiting_signature" || a.status === "approved") &&
+      a.contractPropertyIds?.length
+    ) {
+      const properties = await getManagedPropertiesByIds(a.contractPropertyIds);
+      summary.contracts = properties.map((p) => ({
+        propertyId: p.id,
+        propertyName: p.propertyName || "Management agreement",
+        sections: buildAgreementSections(p),
+      }));
+    }
+
+    if (a.status === "approved" && a.loginRevealPassword) {
+      summary.temporaryPassword = a.loginRevealPassword;
+    }
+
+    applications.push(summary);
+  }
+
+  return {
+    ok: true as const,
+    applications,
   };
 }
 
@@ -268,6 +335,17 @@ export async function getOpenOwnerApplications() {
   return apps.filter(
     (a) => a.status === "pending" || a.status === "needs_info"
   );
+}
+
+export async function getAwaitingSignatureApplications() {
+  const apps = await readOwnerApplications();
+  return apps
+    .filter((a) => a.status === "awaiting_signature")
+    .sort(
+      (a, b) =>
+        new Date(b.reviewedAt || b.createdAt).getTime() -
+        new Date(a.reviewedAt || a.createdAt).getTime()
+    );
 }
 
 export async function getPendingOwnerApplications() {
@@ -315,6 +393,145 @@ export async function updateOwnerApplicationStatus(
   return { ok: true as const, application: updated };
 }
 
+export async function sendContractForOwnerSignature(input: {
+  applicationId: string;
+  reviewedBy: string;
+  reviewNotes?: string;
+  terms?: ContractTermsInput;
+}) {
+  const app = await getOwnerApplicationById(input.applicationId);
+  if (!app) {
+    return { error: "Application not found." as const };
+  }
+  if (app.status !== "pending" && app.status !== "needs_info") {
+    return { error: "This application is no longer open for sending." as const };
+  }
+
+  const provisioned = await provisionPropertiesFromApplication(app, {
+    terms: input.terms,
+  });
+
+  const updated: OwnerApplication = {
+    ...app,
+    status: "awaiting_signature",
+    reviewedBy: input.reviewedBy,
+    reviewedAt: new Date().toISOString(),
+    reviewNotes: input.reviewNotes?.trim() || app.reviewNotes || "",
+    reviewerDecision: "awaiting_signature",
+    contractPropertyIds: provisioned.map((p) => p.id),
+  };
+  await writeApplication(updated);
+
+  return {
+    ok: true as const,
+    application: updated,
+    propertiesProvisioned: provisioned.length,
+    fullName: app.fullName,
+    email: app.email,
+  };
+}
+
+export async function signOwnerApplicationContract(input: {
+  email: string;
+  applicationId: string;
+  signatureName: string;
+  acknowledged: boolean;
+}) {
+  const email = input.email.trim().toLowerCase();
+  const signatureName = input.signatureName.trim();
+  if (!email || !input.applicationId.trim()) {
+    return { error: "Email and application ID are required." as const };
+  }
+  if (!input.acknowledged) {
+    return {
+      error: "Confirm that you have read and agree to the agreement." as const,
+    };
+  }
+  if (signatureName.length < 2) {
+    return { error: "Type your full legal name to sign." as const };
+  }
+
+  const app = await getOwnerApplicationById(input.applicationId.trim());
+  if (!app || app.email !== email) {
+    return { error: "Application not found for that email." as const };
+  }
+  if (app.status !== "awaiting_signature") {
+    return {
+      error:
+        "This application is not waiting for a signature. Check status again." as const,
+    };
+  }
+  if (!app.contractPropertyIds?.length) {
+    return { error: "No contract was attached to this application." as const };
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+  const created = await createOwnerAccount({
+    email: app.email,
+    password: temporaryPassword,
+    fullName: app.fullName,
+    mustChangePassword: true,
+  });
+  if ("error" in created) {
+    return { error: created.error };
+  }
+
+  const signedAt = new Date().toISOString();
+  await linkOwnerAccountToProperties(app.contractPropertyIds, created.account, {
+    signedAt,
+    signatureName,
+  });
+
+  const updated: OwnerApplication = {
+    ...app,
+    status: "approved",
+    reviewerDecision: "approved",
+    ownerSignedAt: signedAt,
+    ownerSignatureName: signatureName,
+    loginRevealPassword: temporaryPassword,
+    credentialsIssuedAt: signedAt,
+  };
+  await writeApplication(updated);
+
+  const properties = await getManagedPropertiesByIds(app.contractPropertyIds);
+  const summary: ApplicationStatusSummary = {
+    id: updated.id,
+    status: updated.status,
+    fullName: updated.fullName,
+    companyName: updated.companyName,
+    createdAt: updated.createdAt,
+    reviewNotes: updated.reviewNotes ?? "",
+    reviewedAt: updated.reviewedAt ?? "",
+    propertyCount: updated.properties.length,
+    ownerEmail: updated.email,
+    signedAt,
+    temporaryPassword,
+    contracts: properties.map((p) => ({
+      propertyId: p.id,
+      propertyName: p.propertyName || "Management agreement",
+      sections: buildAgreementSections(p),
+    })),
+  };
+
+  return {
+    ok: true as const,
+    application: summary,
+    temporaryPassword,
+    email: created.email,
+  };
+}
+
+export async function clearLoginRevealPasswordForEmail(email: string) {
+  const normalized = email.trim().toLowerCase();
+  const apps = await readOwnerApplications();
+  const withReveal = apps.filter(
+    (a) => a.email === normalized && Boolean(a.loginRevealPassword)
+  );
+  for (const app of withReveal) {
+    await writeApplication({ ...app, loginRevealPassword: "" });
+  }
+}
+
 export async function approveOwnerApplication(input: {
   applicationId: string;
   password?: string;
@@ -342,7 +559,9 @@ export async function approveOwnerApplication(input: {
     return { error: created.error };
   }
 
-  await provisionPropertiesFromApplication(app, created.account);
+  const provisioned = await provisionPropertiesFromApplication(app, {
+    owner: created.account,
+  });
 
   const updated: OwnerApplication = {
     ...app,
@@ -351,13 +570,15 @@ export async function approveOwnerApplication(input: {
     reviewedAt: new Date().toISOString(),
     reviewNotes: input.reviewNotes?.trim() || app.reviewNotes || "",
     reviewerDecision: "approved",
+    contractPropertyIds: provisioned.map((p) => p.id),
+    loginRevealPassword: temporaryPassword,
+    credentialsIssuedAt: new Date().toISOString(),
   };
   await writeApplication(updated);
 
   return {
     ok: true as const,
     email: created.email,
-    /** One-time plaintext for secure out-of-band handoff — never stored. */
     temporaryPassword,
     fullName: app.fullName,
     propertiesProvisioned: app.properties.length,
@@ -442,6 +663,7 @@ export async function changeOwnerPassword(input: {
     mustChangePassword: false,
   };
   await saveOwnerAccount(updated);
+  await clearLoginRevealPasswordForEmail(owner.email);
   return { ok: true as const };
 }
 
