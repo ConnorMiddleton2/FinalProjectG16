@@ -122,8 +122,8 @@ export default function OwnerAuthPage() {
           </h1>
           <p className="owner-muted mt-2 text-sm leading-relaxed">
             {mode === "login"
-              ? "Sign in with the account Harborline created for you."
-              : "Owners cannot self-register. List one or more properties below. Harborline will review your application and create your account if approved."}
+              ? "Sign in with the email and temporary password from Check Application Status (after you sign your contract), or your updated password."
+              : "Owners cannot self-register. List one or more properties below. Harborline will review your application, send a contract for you to sign on Check Application Status, then issue a temporary password there."}
           </p>
 
           {mode === "login" ? (

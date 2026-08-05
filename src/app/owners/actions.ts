@@ -56,7 +56,7 @@ export async function ownerApply(
   }
 
   return {
-    success: `Application submitted (ID ${result.application.id}). Track status at Owner access → Check application status, or go to /owners/status.`,
+    success: `Application submitted (ID ${result.application.id}). Track status, sign your contract when ready, and pick up your temporary password at Check application status (/owners/status).`,
   };
 }
 
