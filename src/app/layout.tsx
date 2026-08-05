@@ -24,9 +24,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" data-theme="corporate">
+    <html lang="en" data-theme="corporate" suppressHydrationWarning>
       <body
         className={`${outfit.variable} ${fraunces.variable} min-h-screen bg-base-200 antialiased`}
+        suppressHydrationWarning
       >
         {children}
       </body>

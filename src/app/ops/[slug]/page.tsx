@@ -8,8 +8,6 @@ const DASHBOARDS: Record<string, { title: string }> = {
   ap: { title: "Accounts Payable" },
   ar: { title: "Accounts Receivable" },
   hr: { title: "Human Resources" },
-  "sales-marketing": { title: "Sales & Marketing" },
-  management: { title: "Management" },
 };
 
 type Props = {

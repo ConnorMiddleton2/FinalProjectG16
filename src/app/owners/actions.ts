@@ -56,8 +56,7 @@ export async function ownerApply(
   }
 
   return {
-    success:
-      "Application submitted. Harborline will review it and create your owner account if approved.",
+    success: `Application submitted (ID ${result.application.id}). Track status, sign your contract when ready, and pick up your temporary password at Check application status (/owners/status).`,
   };
 }
 

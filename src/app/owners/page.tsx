@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { ArrowLeft, Building2, Plus, Trash2 } from "lucide-react";
+import { OwnerAlert } from "@/components/OwnerAlert";
+import { OwnerShell } from "@/components/OwnerShell";
 import { ownerApply, ownerLogin, type OwnerAuthState } from "./actions";
 
 const initialState: OwnerAuthState = {};
@@ -50,130 +52,150 @@ export default function OwnerAuthPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(165deg,#f3efe6_0%,#d7eef2_55%,#e8f4f6_100%)]">
+    <OwnerShell variant="auth">
       <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-12">
         <Link
           href="/"
-          className="mb-8 inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
+          className="owner-muted mb-8 inline-flex items-center gap-2 text-sm transition hover:text-[var(--harbor-ink)] welcome-rise"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to welcome
         </Link>
 
-        <div className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 p-7 shadow-xl">
+        <div className="owner-card welcome-rise-delay p-7 shadow-xl">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-[var(--harbor-ink)] p-2 text-[var(--harbor-sand)]">
+            <div className="rounded-xl bg-[var(--harbor-ink)] p-2.5 text-[var(--harbor-sand)]">
               <Building2 className="h-5 w-5" />
             </div>
             <div>
               <p className="font-display text-2xl leading-tight text-[var(--harbor-ink)]">
                 Harborline
               </p>
-              <p className="text-sm opacity-60">Property owner access</p>
+              <p className="owner-muted text-sm">Property owner access</p>
             </div>
           </div>
 
-          <div className="mt-6 flex gap-2">
+          <div
+            className="mt-6 grid grid-cols-2 gap-1 rounded-2xl bg-[var(--harbor-sand)]/80 p-1"
+            role="tablist"
+            aria-label="Access mode"
+          >
             <button
               type="button"
-              className={`btn btn-sm flex-1 ${mode === "login" ? "btn-neutral" : "btn-ghost"}`}
+              role="tab"
+              aria-selected={mode === "login"}
+              className={`min-h-11 rounded-xl text-sm font-semibold transition ${
+                mode === "login"
+                  ? "bg-[var(--harbor-deep)] text-[var(--harbor-sand)] shadow-sm"
+                  : "text-[var(--harbor-ink)]/70 hover:bg-white/50"
+              }`}
               onClick={() => setMode("login")}
             >
               Log in
             </button>
             <button
               type="button"
-              className={`btn btn-sm flex-1 ${mode === "apply" ? "btn-neutral" : "btn-ghost"}`}
+              role="tab"
+              aria-selected={mode === "apply"}
+              className={`min-h-11 rounded-xl text-sm font-semibold transition ${
+                mode === "apply"
+                  ? "bg-[var(--harbor-deep)] text-[var(--harbor-sand)] shadow-sm"
+                  : "text-[var(--harbor-ink)]/70 hover:bg-white/50"
+              }`}
               onClick={() => setMode("apply")}
             >
               Apply for access
             </button>
           </div>
 
+          <p className="mt-3 text-center text-sm">
+            <Link
+              href="/owners/status"
+              className="font-medium text-[var(--harbor-mid)] underline-offset-2 hover:underline"
+            >
+              Check application status
+            </Link>
+          </p>
+
           <h1 className="mt-5 text-xl font-semibold text-[var(--harbor-ink)]">
             {mode === "login" ? "Owner sign in" : "Owner access application"}
           </h1>
-          <p className="mt-2 text-sm text-[var(--harbor-ink)]/65">
+          <p className="owner-muted mt-2 text-sm leading-relaxed">
             {mode === "login"
-              ? "Sign in with the account Harborline created for you."
-              : "Owners cannot self-register. List one or more properties below. Harborline will review your application and create your account if approved."}
+              ? "Sign in with the email and temporary password from Check Application Status (after you sign your contract), or your updated password."
+              : "Owners cannot self-register. List one or more properties below. Harborline will review your application, send a contract for you to sign on Check Application Status, then issue a temporary password there."}
           </p>
 
           {mode === "login" ? (
             <form action={loginAction} className="mt-6 space-y-4">
-              <label className="form-control w-full">
-                <span className="mb-1 text-sm opacity-70">Email</span>
+              <label className="block w-full">
+                <span className="owner-label">Email</span>
                 <input
                   name="email"
                   type="email"
-                  className="input input-bordered w-full"
+                  className="owner-input"
                   placeholder="BobOwner@Building.com"
                   defaultValue="BobOwner@Building.com"
                   required
                 />
               </label>
-              <label className="form-control w-full">
-                <span className="mb-1 text-sm opacity-70">Password</span>
+              <label className="block w-full">
+                <span className="owner-label">Password</span>
                 <input
                   name="password"
                   type="password"
-                  className="input input-bordered w-full"
+                  className="owner-input"
                   placeholder="••••••••"
                   defaultValue="12345"
                   required
                 />
               </label>
 
-              {error && (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {error}
-                </p>
-              )}
+              {error ? <OwnerAlert variant="error">{error}</OwnerAlert> : null}
 
               <button
                 type="submit"
-                className="btn btn-neutral w-full"
+                className="owner-btn-primary w-full"
                 disabled={pending}
+                aria-busy={pending}
               >
                 {pending ? "Please wait…" : "Sign in"}
               </button>
             </form>
           ) : (
             <form key="apply" action={applyAction} className="mt-6 space-y-4">
-              <label className="form-control w-full">
-                <span className="mb-1 text-sm opacity-70">Full name</span>
+              <label className="block w-full">
+                <span className="owner-label">Full name</span>
                 <input
                   name="fullName"
-                  className="input input-bordered w-full"
+                  className="owner-input"
                   placeholder="Alex Rivera"
                   required
                 />
               </label>
-              <label className="form-control w-full">
-                <span className="mb-1 text-sm opacity-70">Email</span>
+              <label className="block w-full">
+                <span className="owner-label">Email</span>
                 <input
                   name="email"
                   type="email"
-                  className="input input-bordered w-full"
+                  className="owner-input"
                   placeholder="owner@example.com"
                   required
                 />
               </label>
-              <label className="form-control w-full">
-                <span className="mb-1 text-sm opacity-70">Phone</span>
+              <label className="block w-full">
+                <span className="owner-label">Phone</span>
                 <input
                   name="phone"
-                  className="input input-bordered w-full"
+                  className="owner-input"
                   placeholder="(662) 555-0100"
                 />
               </label>
-              <label className="form-control w-full">
-                <span className="mb-1 text-sm opacity-70">
-                  Company / ownership entity
-                </span>
+              <label className="block w-full">
+                <span className="owner-label">Company / ownership entity</span>
                 <input
                   name="companyName"
-                  className="input input-bordered w-full"
+                  className="owner-input"
                   placeholder="Riverbend Holdings LLC"
                 />
               </label>
@@ -185,7 +207,7 @@ export default function OwnerAuthPage() {
                   </p>
                   <button
                     type="button"
-                    className="btn btn-ghost btn-xs gap-1"
+                    className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[var(--harbor-mid)] hover:bg-[var(--harbor-mist)]/50"
                     onClick={() =>
                       setProperties((rows) => [...rows, newPropertyRow()])
                     }
@@ -198,16 +220,16 @@ export default function OwnerAuthPage() {
                 {properties.map((property, index) => (
                   <div
                     key={property.id}
-                    className="rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/40 p-3 space-y-3"
+                    className="space-y-3 rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/50 p-3"
                   >
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-semibold uppercase tracking-wide opacity-60">
                         Property {index + 1}
                       </p>
-                      {properties.length > 1 && (
+                      {properties.length > 1 ? (
                         <button
                           type="button"
-                          className="btn btn-ghost btn-xs text-error"
+                          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-red-700 hover:bg-red-50"
                           onClick={() =>
                             setProperties((rows) =>
                               rows.filter((row) => row.id !== property.id)
@@ -217,16 +239,15 @@ export default function OwnerAuthPage() {
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
-                      )}
+                      ) : null}
                     </div>
 
-                    <label className="form-control w-full">
-                      <span className="mb-1 text-sm opacity-70">
-                        Category{" "}
-                        <span className="opacity-50">(optional)</span>
+                    <label className="block w-full">
+                      <span className="owner-label">
+                        Category <span className="opacity-50">(optional)</span>
                       </span>
                       <select
-                        className="select select-bordered w-full"
+                        className="owner-input"
                         value={property.category}
                         onChange={(e) =>
                           updateProperty(property.id, "category", e.target.value)
@@ -242,10 +263,10 @@ export default function OwnerAuthPage() {
                       </select>
                     </label>
 
-                    <label className="form-control w-full">
-                      <span className="mb-1 text-sm opacity-70">Location</span>
+                    <label className="block w-full">
+                      <span className="owner-label">Location</span>
                       <input
-                        className="input input-bordered w-full"
+                        className="owner-input"
                         value={property.location}
                         onChange={(e) =>
                           updateProperty(property.id, "location", e.target.value)
@@ -255,10 +276,10 @@ export default function OwnerAuthPage() {
                       />
                     </label>
 
-                    <label className="form-control w-full">
-                      <span className="mb-1 text-sm opacity-70">Square feet</span>
+                    <label className="block w-full">
+                      <span className="owner-label">Square feet</span>
                       <input
-                        className="input input-bordered w-full"
+                        className="owner-input"
                         value={property.squareFeet}
                         onChange={(e) =>
                           updateProperty(
@@ -286,33 +307,29 @@ export default function OwnerAuthPage() {
                 )}
               />
 
-              <label className="form-control w-full">
-                <span className="mb-1 text-sm opacity-70">
-                  Additional notes{" "}
-                  <span className="opacity-50">(optional)</span>
+              <label className="block w-full">
+                <span className="owner-label">
+                  Additional notes <span className="opacity-50">(optional)</span>
                 </span>
                 <textarea
                   name="message"
-                  className="textarea textarea-bordered w-full min-h-24"
+                  className="owner-input min-h-24 py-3"
                   placeholder="Tell us anything else about your portfolio or needs."
                 />
               </label>
 
-              {error && (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {error}
-                </p>
-              )}
-              {success && (
-                <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {error ? <OwnerAlert variant="error">{error}</OwnerAlert> : null}
+              {success ? (
+                <OwnerAlert variant="success" title="Application received">
                   {success}
-                </p>
-              )}
+                </OwnerAlert>
+              ) : null}
 
               <button
                 type="submit"
-                className="btn btn-neutral w-full"
+                className="owner-btn-primary w-full"
                 disabled={pending}
+                aria-busy={pending}
               >
                 {pending ? "Submitting…" : "Submit application"}
               </button>
@@ -320,6 +337,6 @@ export default function OwnerAuthPage() {
           )}
         </div>
       </div>
-    </main>
+    </OwnerShell>
   );
 }

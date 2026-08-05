@@ -4,6 +4,7 @@ export const COLLECTIONS = {
   managedProperties: "managed_properties",
   ownerApplications: "owner_applications",
   ownerAccounts: "owner_accounts",
+  ownerApprovals: "owner_approvals",
   workOrders: "work_orders",
   vendors: "vendors",
   budgetLines: "budget_lines",
@@ -17,6 +18,14 @@ export const COLLECTIONS = {
   ownerPayables: "owner_payables",
   rentalReceivables: "rental_receivables",
   miscellaneousReceivables: "miscellaneous_receivables",
+  smCampaigns: "sm_campaigns",
+  smCalendarEvents: "sm_calendar_events",
+  smBudgetConfig: "sm_budget_config",
+  smReceipts: "sm_receipts",
+  ownerContracts: "owner_contracts",
+  departmentExpenses: "department_expenses",
+  missedPayments: "missed_payments",
+  capitalExpenditures: "capital_expenditures",
 } as const;
 
 export type SharedCollection =

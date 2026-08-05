@@ -18,6 +18,7 @@ import {
   type ManagementContractDraft,
   type SharedPropertyTenant,
 } from "@/lib/management-contract";
+import { RequestOwnerApprovalForm } from "@/components/RequestOwnerApprovalForm";
 
 function Metric({
   label,
@@ -226,6 +227,10 @@ export function PropertyDetailView({ contract, onBack }: Props) {
             />
             <Row label="Assigned manager" value={contract.assignedManager} />
           </dl>
+          <RequestOwnerApprovalForm
+            propertyId={contract.id}
+            approvalThreshold={contract.ownerApprovalThreshold}
+          />
         </DetailBlock>
       </div>
 
