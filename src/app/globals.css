@@ -3,6 +3,15 @@
   themes: corporate --default, business, light, dark;
 }
 
+:root {
+  --harbor-ink: #0b2a32;
+  --harbor-deep: #134e5a;
+  --harbor-mid: #1f7a8c;
+  --harbor-mist: #d7eef2;
+  --harbor-sand: #f3efe6;
+  --harbor-glow: #f0c27a;
+}
+
 html,
 body {
   min-height: 100%;
@@ -10,4 +19,56 @@ body {
 
 body {
   font-family: var(--font-sans), system-ui, sans-serif;
+  color: var(--harbor-ink);
+}
+
+.font-display {
+  font-family: var(--font-display), Georgia, serif;
+}
+
+@keyframes welcome-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes welcome-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -10px, 0);
+  }
+}
+
+@keyframes welcome-wash {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.welcome-rise {
+  animation: welcome-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.welcome-rise-delay {
+  animation: welcome-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+}
+
+.welcome-drift {
+  animation: welcome-drift 7s ease-in-out infinite;
+}
+
+.welcome-wash {
+  animation: welcome-wash 8s ease-in-out infinite;
 }

@@ -20,14 +20,24 @@ Not built yet (for teammates): leases, work orders, invoices, payments, seed dat
 1. Clone the repo and open it in Cursor.
 2. Create/switch to your own branch (do not edit `main` directly).
 3. Copy `.env.local.example` to `.env.local` and paste the shared Supabase URL + anon key from the FinalProjectG16 project.
-4. Run:
+4. Team gate demo defaults (already in the example file):
+   - `TEAM_COMPANY_ID=HARBORLINE`
+   - `TEAM_PASSWORD=harborline2026`
+5. Run:
 
 ```bash
 npm install
 npm run dev
 ```
 
-5. Open http://localhost:3000
+6. Open http://localhost:3000
+
+### Entry paths
+
+- **Welcome** `/` — choose tenant portal or team member
+- **Tenant portal** `/portal` — applications, contracts, billing
+- **Team login** `/team` — company ID + password → `/ops` management console
+- Existing Supabase auth pages remain at `/login` and `/signup`
 
 ### If login says "Email not confirmed"
 

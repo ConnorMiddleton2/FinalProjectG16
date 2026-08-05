@@ -4,6 +4,30 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const path = request.nextUrl.pathname;
+  const hasTeamCookie = request.cookies.get("harborline_team")?.value === "1";
+
+  const isPublic =
+    path === "/" ||
+    path.startsWith("/portal") ||
+    path.startsWith("/team") ||
+    path.startsWith("/owners") ||
+    path.startsWith("/login") ||
+    path.startsWith("/signup");
+
+  const hasOwnerCookie = Boolean(request.cookies.get("harborline_owner")?.value);
+
+  if (path.startsWith("/ops") && !hasTeamCookie) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/team";
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  if (path.startsWith("/owners/dashboard") && !hasOwnerCookie) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/owners";
+    return NextResponse.redirect(redirectUrl);
+  }
 
   if (!url || !key) {
     return NextResponse.next({ request });
@@ -39,21 +63,18 @@ export async function updateSession(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const path = request.nextUrl.pathname;
-    const isPublic =
-      path === "/" || path.startsWith("/login") || path.startsWith("/signup");
-
     const isAppRoute =
-      path.startsWith("/owner") ||
+      path === "/owner" ||
+      path.startsWith("/owner/") ||
       path.startsWith("/manager") ||
       path.startsWith("/tenant") ||
       path.startsWith("/maintenance") ||
       path.startsWith("/accounting") ||
       path.startsWith("/workspace");
 
-    if (!user && isAppRoute) {
+    if (!user && isAppRoute && !hasTeamCookie) {
       const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = "/login";
+      redirectUrl.pathname = "/team";
       return NextResponse.redirect(redirectUrl);
     }
 
@@ -63,8 +84,8 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(redirectUrl);
     }
 
-    if (!user && !isPublic && path !== "/") {
-      // allow static assets already excluded by matcher
+    if (!user && !isPublic && path !== "/" && !path.startsWith("/ops")) {
+      // public routes already handled
     }
 
     return supabaseResponse;
