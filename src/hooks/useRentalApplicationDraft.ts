@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readApplicantProfile } from "@/lib/applicant-profile";
+import { recordSubmittedApplicationStatus } from "@/lib/application-status";
 import {
   clearRentalApplicationDraft,
   createConfirmationNumber,
@@ -115,7 +116,7 @@ export function useRentalApplicationDraft(initialUnitId = "") {
           : `MOCK-${confirmationNumber}`),
     };
 
-    writeSubmittedApplication({
+    const submission = {
       confirmationNumber,
       applicationId: submitted.id,
       property: submitted.property,
@@ -123,7 +124,9 @@ export function useRentalApplicationDraft(initialUnitId = "") {
       submittedAt,
       applicantFullName: submitted.applicantFullName,
       email: submitted.email,
-    });
+    };
+    writeSubmittedApplication(submission);
+    recordSubmittedApplicationStatus(submission);
     writeFullSubmittedApplication(submitted);
     clearRentalApplicationDraft();
     skipNextAutosave.current = true;

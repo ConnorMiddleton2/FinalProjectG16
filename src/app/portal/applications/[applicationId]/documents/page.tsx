@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { ApplicationDocumentsUpload } from "@/components/portal/ApplicationDocumentsUpload";
+import { readApplicationStatusRecord } from "@/lib/application-status";
 import {
-  readRentalApplicationDraft,
+  readApplicationForReview,
+  writeFullSubmittedApplication,
   writeRentalApplicationDraft,
   type RentalApplicationDraft,
 } from "@/lib/rental-application";
@@ -14,26 +16,34 @@ type Props = { params: Promise<{ applicationId: string }> };
 export default function DocumentsPage({ params }: Props) {
   const { applicationId } = use(params);
   const [draft, setDraft] = useState<RentalApplicationDraft | null>(null);
+  const [uploadsPermitted, setUploadsPermitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const existing = readRentalApplicationDraft();
-      if (!existing || existing.id !== applicationId) {
-        setError(
-          "No matching draft in this browser. Open Apply to continue your application."
+    const timer = window.setTimeout(() => {
+      try {
+        const existing = readApplicationForReview(applicationId);
+        if (!existing) {
+          setError("No matching application was found in this browser.");
+          setDraft(null);
+          return;
+        }
+        const publicStatus = readApplicationStatusRecord(applicationId);
+        setUploadsPermitted(
+          existing.status === "draft" ||
+            publicStatus?.currentStatus === "Documents Required" ||
+            publicStatus?.currentStatus === "Additional Information Requested"
         );
-        setDraft(null);
-        return;
+        setDraft(existing);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not load application documents."
+        );
       }
-      setDraft(existing);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not load application documents."
-      );
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [applicationId]);
 
   if (error) {
@@ -61,7 +71,7 @@ export default function DocumentsPage({ params }: Props) {
     <div className="mx-auto max-w-3xl rounded-3xl border border-[var(--harbor-deep)]/10 bg-white/70 p-6 sm:p-8">
       <ApplicationDocumentsUpload
         documents={draft.documents}
-        disabled={draft.status === "submitted"}
+        disabled={!uploadsPermitted}
         onChange={(updater) => {
           setDraft((current) => {
             if (!current) return current;
@@ -69,14 +79,18 @@ export default function DocumentsPage({ params }: Props) {
               ...current,
               documents: updater(current.documents),
             };
-            writeRentalApplicationDraft(next);
+            if (next.status === "submitted") {
+              writeFullSubmittedApplication(next);
+            } else {
+              writeRentalApplicationDraft(next);
+            }
             return next;
           });
         }}
       />
       <div className="mt-6">
-        <Link href="/portal/apply" className="btn btn-outline btn-sm">
-          Return to full application
+        <Link href="/portal/applications" className="btn btn-outline btn-sm">
+          Return to application status
         </Link>
       </div>
     </div>
