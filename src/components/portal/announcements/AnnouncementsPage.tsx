@@ -318,10 +318,10 @@ function AnnouncementCard({
 
   return (
     <article
-      className={`rounded-2xl border bg-white/85 p-4 shadow-sm sm:p-5 ${
+      className={`rounded-2xl bg-white/85 p-4 shadow-sm sm:p-5 ${
         isUrgent
-          ? "border-l-4 border-l-error border-[var(--harbor-deep)]/10"
-          : "border-[var(--harbor-deep)]/10"
+          ? "border border-[var(--harbor-deep)]/10 border-l-[3px] border-l-error"
+          : "border border-[var(--harbor-deep)]/10"
       } ${!item.read ? "bg-[var(--harbor-sand)]/25" : ""}`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
