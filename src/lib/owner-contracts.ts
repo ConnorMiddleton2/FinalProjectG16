@@ -82,15 +82,15 @@ export function contractStatusLabel(status: ContractStatus): string {
 export function contractStatusBadgeClass(status: ContractStatus): string {
   switch (status) {
     case "pending_terms":
-      return "badge-ghost";
+      return "border border-[var(--harbor-deep)]/20 bg-[var(--harbor-sand)] text-[var(--harbor-ink)]";
     case "upcoming":
-      return "badge-info";
+      return "border-0 bg-[var(--harbor-mist)] text-[var(--harbor-deep)]";
     case "active":
-      return "badge-success";
+      return "border-0 bg-[color-mix(in_srgb,var(--harbor-mid)_22%,white)] text-[var(--harbor-ink)]";
     case "expiring_soon":
-      return "badge-warning";
+      return "border-0 bg-[color-mix(in_srgb,var(--harbor-glow)_45%,white)] text-[var(--harbor-ink)]";
     case "expired":
-      return "badge-error";
+      return "border-0 bg-stone-200 text-stone-600";
     default:
       return "badge-outline";
   }

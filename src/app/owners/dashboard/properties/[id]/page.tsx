@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, LogOut, Wrench, Users } from "lucide-react";
-import { ownerLogout } from "@/app/owners/actions";
+import { ArrowLeft, Wrench, Users } from "lucide-react";
+import { OwnerEmptyState } from "@/components/OwnerEmptyState";
+import { OwnerPortalHeader } from "@/components/OwnerPortalHeader";
+import { OwnerShell } from "@/components/OwnerShell";
 import { getCurrentOwner } from "@/lib/owner-auth";
+import { getPendingApprovalsForOwner } from "@/lib/owner-approvals";
 import { categoryLabel, statusLabel } from "@/lib/maintenance";
 import {
   getOwnerPropertyById,
@@ -27,68 +30,63 @@ export default async function OwnerPropertyDetailPage({
     notFound();
   }
 
-  const [tenants, workOrders] = await Promise.all([
+  const [tenants, workOrders, pendingApprovals] = await Promise.all([
     getTenantsForProperty(property),
     getWorkOrdersForProperty(property),
+    getPendingApprovalsForOwner(owner.email),
   ]);
 
   const openOrders = workOrders.filter((w) => w.status !== "completed");
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f3efe6_0%,#e8f4f6_100%)]">
-      <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Owner property</p>
-          </div>
-          <form action={ownerLogout}>
-            <button
-              type="submit"
-              className="btn btn-sm btn-ghost gap-1 text-[var(--harbor-sand)]"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign out
-            </button>
-          </form>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl space-y-8 px-6 py-10">
+    <OwnerShell
+      header={
+        <OwnerPortalHeader
+          subtitle="Owner property"
+          pendingApprovals={pendingApprovals.length}
+        />
+      }
+    >
+      <main className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 sm:py-10">
         <Link
           href="/owners/dashboard"
-          className="inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
+          className="owner-muted inline-flex items-center gap-2 text-sm transition hover:text-[var(--harbor-ink)] welcome-rise"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to portfolio
         </Link>
 
-        <div>
-          <h1 className="font-display text-4xl tracking-tight text-[var(--harbor-ink)]">
+        <div className="welcome-rise-delay">
+          <h1 className="font-display text-3xl tracking-tight text-[var(--harbor-ink)] sm:text-4xl">
             {property.propertyName}
           </h1>
-          <p className="mt-2 text-[var(--harbor-ink)]/65">
+          <p className="owner-muted mt-2">
             {[property.streetAddress, property.city, property.state, property.zip]
               .filter(Boolean)
               .join(", ")}
           </p>
         </div>
 
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="owner-stagger grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
             ["Type", property.propertyType],
             ["Rentable SF", property.rentableSf || "—"],
             ["Units / suites", property.unitsSuites || "—"],
-            ["Occupancy", property.occupancyPercent ? `${property.occupancyPercent}%` : "—"],
+            [
+              "Occupancy",
+              property.occupancyPercent
+                ? `${property.occupancyPercent}%`
+                : "—",
+            ],
             ["Tenants", property.tenantCount || String(tenants.length) || "—"],
-            ["Monthly rent roll", property.monthlyRentRoll ? `$${property.monthlyRentRoll}` : "—"],
+            [
+              "Monthly rent roll",
+              property.monthlyRentRoll ? `$${property.monthlyRentRoll}` : "—",
+            ],
             ["AR balance", property.arBalance ? `$${property.arBalance}` : "—"],
             ["Mgmt fee", ownerFacingFeeSummary(property)],
           ].map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 p-4 shadow-sm"
-            >
+            <div key={label} className="owner-card p-4">
               <p className="text-xs uppercase tracking-wide opacity-55">{label}</p>
               <p className="mt-1 font-semibold capitalize text-[var(--harbor-ink)]">
                 {value}
@@ -97,41 +95,63 @@ export default async function OwnerPropertyDetailPage({
           ))}
         </section>
 
-        <section className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 p-5 shadow-sm">
-          <h2 className="font-semibold text-[var(--harbor-ink)]">Engagement</h2>
+        <section className="owner-card p-5">
+          <h2 className="owner-section-title">Engagement</h2>
           <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
             <div>
-              <dt className="opacity-55">Owner entity</dt>
-              <dd className="font-medium">{property.ownerLegalName || "—"}</dd>
+              <dt className="text-xs uppercase tracking-wide opacity-55">
+                Owner entity
+              </dt>
+              <dd className="mt-0.5 font-medium">
+                {property.ownerLegalName || "—"}
+              </dd>
             </div>
             <div>
-              <dt className="opacity-55">Assigned manager</dt>
-              <dd className="font-medium">{property.assignedManager || "—"}</dd>
+              <dt className="text-xs uppercase tracking-wide opacity-55">
+                Assigned manager
+              </dt>
+              <dd className="mt-0.5 font-medium">
+                {property.assignedManager || "—"}
+              </dd>
             </div>
             <div>
-              <dt className="opacity-55">Contract start</dt>
-              <dd className="font-medium">{property.contractStartDate || "—"}</dd>
+              <dt className="text-xs uppercase tracking-wide opacity-55">
+                Contract start
+              </dt>
+              <dd className="mt-0.5 font-medium">
+                {property.contractStartDate || "—"}
+              </dd>
             </div>
             <div>
-              <dt className="opacity-55">Contract end</dt>
-              <dd className="font-medium">{property.contractEndDate || "—"}</dd>
+              <dt className="text-xs uppercase tracking-wide opacity-55">
+                Contract end
+              </dt>
+              <dd className="mt-0.5 font-medium">
+                {property.contractEndDate || "—"}
+              </dd>
             </div>
           </dl>
+          <Link
+            href={`/owners/dashboard/contracts/${property.id}`}
+            className="owner-btn-secondary owner-btn-secondary-sm mt-4"
+          >
+            View full management contract
+          </Link>
         </section>
 
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-[var(--harbor-mid)]" />
-            <h2 className="text-lg font-semibold text-[var(--harbor-ink)]">
-              Tenant roster
-            </h2>
+            <h2 className="owner-section-title">Tenant roster</h2>
           </div>
           {tenants.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/60 p-5 text-sm opacity-60">
-              No tenant roster linked to this property yet.
-            </p>
+            <OwnerEmptyState
+              icon={Users}
+              title="No tenant roster yet"
+              description="Tenants linked to this property will appear here once Harborline adds them."
+            />
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 shadow-sm">
+            <div className="owner-card overflow-x-auto">
               <table className="table">
                 <thead>
                   <tr>
@@ -163,31 +183,30 @@ export default async function OwnerPropertyDetailPage({
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <Wrench className="h-5 w-5 text-[var(--harbor-mid)]" />
-            <h2 className="text-lg font-semibold text-[var(--harbor-ink)]">
+            <h2 className="owner-section-title">
               Maintenance ({openOrders.length} open)
             </h2>
           </div>
-          <p className="text-sm text-[var(--harbor-ink)]/55">
+          <p className="owner-muted text-sm">
             Read-only view of work orders at this property. Vendor contract terms
             and internal staff notes are not shown.
           </p>
           {workOrders.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/60 p-5 text-sm opacity-60">
-              No work orders matched to this property.
-            </p>
+            <OwnerEmptyState
+              icon={Wrench}
+              title="No work orders matched"
+              description="Maintenance activity for this property will show here when Harborline logs work orders against it."
+            />
           ) : (
-            <ul className="space-y-3">
+            <ul className="owner-stagger space-y-3">
               {workOrders.map((wo) => (
-                <li
-                  key={wo.id}
-                  className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 p-4 shadow-sm"
-                >
+                <li key={wo.id} className="owner-card p-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-semibold text-[var(--harbor-ink)]">
                         {wo.title}
                       </p>
-                      <p className="text-sm opacity-60">
+                      <p className="owner-muted text-sm">
                         {categoryLabel(wo.category)} · Unit {wo.unit || "—"}
                       </p>
                     </div>
@@ -217,6 +236,6 @@ export default async function OwnerPropertyDetailPage({
           )}
         </section>
       </main>
-    </div>
+    </OwnerShell>
   );
 }
