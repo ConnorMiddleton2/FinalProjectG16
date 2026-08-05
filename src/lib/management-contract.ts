@@ -99,6 +99,11 @@ export type ManagementContractDraft = {
 
   /** Optional tenant roster attached to a managed property (legacy nested field). */
   tenants?: PropertyTenant[];
+
+  /** Set when provisioned from an owner application awaiting signature. */
+  sourceApplicationId?: string;
+  ownerSignedAt?: string;
+  ownerSignatureName?: string;
 };
 
 /** Shared property-roster row keyed by managed property id. */

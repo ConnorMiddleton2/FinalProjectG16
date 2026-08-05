@@ -19,6 +19,14 @@ import { ALL_ROLES, ROLE_META, type UserRole } from "@/lib/types";
 
 type Mode = "login" | "signup";
 
+function emailNotConfirmedMessage(raw: string) {
+  const msg = raw.toLowerCase();
+  if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
+    return "Email not confirmed. Ask a FinalProjectG16 org admin to turn off Confirm email in Supabase (Authentication → Providers → Email), or confirm your user under Authentication → Users.";
+  }
+  return raw;
+}
+
 export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -113,51 +121,56 @@ export function AuthForm({ mode }: { mode: Mode }) {
           password,
         });
         if (signInError) {
-          setLoading(false);
-          setError(signInError.message);
+          setError(emailNotConfirmedMessage(signInError.message));
           return;
         }
         const destination = await resolvePostLoginPath();
-        setLoading(false);
         router.push(destination);
         router.refresh();
       } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not sign in.");
+      } finally {
         setLoading(false);
-        setError(
-          err instanceof Error ? err.message : "Could not sign in."
-        );
       }
       return;
     }
 
-    const supabase = createClient();
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName || email,
-          role,
+    try {
+      const supabase = createClient();
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName || email,
+            role,
+          },
         },
-      },
-    });
+      });
 
-    setLoading(false);
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
 
-    if (signUpError) {
-      setError(signUpError.message);
-      return;
+      if (data.session) {
+        router.push(ROLE_META[role].href);
+        router.refresh();
+        return;
+      }
+
+      setMessage(
+        "Account created, but this project still requires email confirmation. Check your inbox, or ask an org admin to disable Confirm email in Supabase for team demos."
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong during authentication."
+      );
+    } finally {
+      setLoading(false);
     }
-
-    if (data.session) {
-      router.push(ROLE_META[role].href);
-      router.refresh();
-      return;
-    }
-
-    setMessage(
-      "Account created. If email confirmation is required, confirm your email, then log in."
-    );
   }
 
   return (

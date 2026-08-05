@@ -4,9 +4,9 @@ import { useActionState, useState } from "react";
 import { Mail, Phone } from "lucide-react";
 import type { OwnerApplication } from "@/lib/owner-auth";
 import {
-  createAccountFromApplication,
   declineApplicationAction,
   requestMoreInfoAction,
+  sendContractForSignatureAction,
   type StaffApplicationState,
 } from "./actions";
 
@@ -18,8 +18,8 @@ export function PendingApplicationCard({
   application: OwnerApplication;
 }) {
   const [reviewNotes, setReviewNotes] = useState(application.reviewNotes ?? "");
-  const [createState, createAction, createPending] = useActionState(
-    createAccountFromApplication,
+  const [sendState, sendAction, sendPending] = useActionState(
+    sendContractForSignatureAction,
     initialState
   );
   const [declineState, declineAction, declinePending] = useActionState(
@@ -32,14 +32,14 @@ export function PendingApplicationCard({
   );
 
   const feedback =
-    createState.success ||
-    createState.error ||
+    sendState.success ||
+    sendState.error ||
     declineState.success ||
     declineState.error ||
     infoState.success ||
     infoState.error;
   const feedbackOk = Boolean(
-    createState.success || declineState.success || infoState.success
+    sendState.success || declineState.success || infoState.success
   );
 
   return (
@@ -123,9 +123,10 @@ export function PendingApplicationCard({
       <div className="space-y-3 rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/50 p-4">
         <p className="text-sm font-medium">Review decision</p>
         <p className="text-xs opacity-60">
-          Approving creates a hashed login, provisions draft managed properties
-          from the application, and records an audit trail. Leave password blank
-          to auto-generate a one-time temporary password.
+          Sending provisions draft management agreements and moves the
+          application to awaiting signature. The owner views and signs on Check
+          Application Status, then receives a temporary password there — no
+          email required.
         </p>
 
         <label className="form-control w-full">
@@ -139,25 +140,105 @@ export function PendingApplicationCard({
           />
         </label>
 
-        <form action={createAction} className="flex flex-wrap items-end gap-2">
+        <form action={sendAction} className="space-y-3">
           <input type="hidden" name="applicationId" value={application.id} />
           <input type="hidden" name="reviewNotes" value={reviewNotes} />
-          <label className="form-control">
-            <span className="mb-1 text-xs opacity-70">
-              Temporary password (optional)
-            </span>
-            <input
-              name="password"
-              className="input input-bordered input-sm"
-              placeholder="Auto-generate if blank"
-            />
-          </label>
+
+          <p className="text-xs font-medium opacity-70">
+            Optional contract terms (applied to each property)
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="form-control">
+              <span className="mb-1 text-xs opacity-70">Start date</span>
+              <input
+                name="contractStartDate"
+                type="date"
+                className="input input-bordered input-sm"
+              />
+            </label>
+            <label className="form-control">
+              <span className="mb-1 text-xs opacity-70">End date</span>
+              <input
+                name="contractEndDate"
+                type="date"
+                className="input input-bordered input-sm"
+              />
+            </label>
+            <label className="form-control">
+              <span className="mb-1 text-xs opacity-70">Fee structure</span>
+              <select
+                name="feeStructure"
+                className="select select-bordered select-sm"
+                defaultValue="percent_collections"
+              >
+                <option value="percent_collections">% of collections</option>
+                <option value="percent_gpr">% of GPR</option>
+                <option value="flat_monthly">Flat monthly</option>
+                <option value="flat_annual">Flat annual</option>
+                <option value="hybrid">Hybrid</option>
+              </select>
+            </label>
+            <label className="form-control">
+              <span className="mb-1 text-xs opacity-70">Fee %</span>
+              <input
+                name="feePercent"
+                className="input input-bordered input-sm"
+                placeholder="4"
+                defaultValue="4"
+              />
+            </label>
+            <label className="form-control">
+              <span className="mb-1 text-xs opacity-70">Flat fee amount</span>
+              <input
+                name="feeFlatAmount"
+                className="input input-bordered input-sm"
+                placeholder="If flat fee"
+              />
+            </label>
+            <label className="form-control">
+              <span className="mb-1 text-xs opacity-70">
+                Owner approval threshold ($)
+              </span>
+              <input
+                name="ownerApprovalThreshold"
+                className="input input-bordered input-sm"
+                defaultValue="2500"
+              />
+            </label>
+            <label className="form-control">
+              <span className="mb-1 text-xs opacity-70">
+                Termination notice (days)
+              </span>
+              <input
+                name="terminationNoticeDays"
+                className="input input-bordered input-sm"
+                defaultValue="30"
+              />
+            </label>
+            <label className="form-control">
+              <span className="mb-1 text-xs opacity-70">Assigned manager</span>
+              <input
+                name="assignedManager"
+                className="input input-bordered input-sm"
+                placeholder="Staff name"
+              />
+            </label>
+            <label className="form-control sm:col-span-2">
+              <span className="mb-1 text-xs opacity-70">Renewal options</span>
+              <input
+                name="renewalOptions"
+                className="input input-bordered input-sm"
+                placeholder="e.g. One 2-year renewal"
+              />
+            </label>
+          </div>
+
           <button
             type="submit"
             className="btn btn-neutral btn-sm"
-            disabled={createPending}
+            disabled={sendPending}
           >
-            {createPending ? "Creating…" : "Approve & create account"}
+            {sendPending ? "Sending…" : "Send contract for owner signature"}
           </button>
         </form>
 
@@ -195,12 +276,50 @@ export function PendingApplicationCard({
           }`}
         >
           <p>{feedback}</p>
-          {createState.temporaryPassword ? (
-            <p className="break-all rounded border border-emerald-200 bg-white/80 px-2 py-1 font-mono text-xs">
-              One-time temporary password: {createState.temporaryPassword}
-            </p>
-          ) : null}
         </div>
+      ) : null}
+    </article>
+  );
+}
+
+export function AwaitingSignatureCard({
+  application,
+}: {
+  application: OwnerApplication;
+}) {
+  return (
+    <article className="space-y-3 rounded-2xl border border-[var(--harbor-mid)]/25 bg-white/90 p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-[var(--harbor-ink)]">
+            {application.fullName}
+          </h2>
+          <p className="text-sm opacity-65">
+            {application.companyName || "No company listed"} · {application.email}
+          </p>
+        </div>
+        <span className="badge badge-info">Awaiting signature</span>
+      </div>
+      <p className="text-sm text-[var(--harbor-ink)]/70">
+        Contract sent for owner review. The applicant signs on{" "}
+        <span className="font-medium">Check Application Status</span>; login
+        credentials are issued there after they sign.
+      </p>
+      <p className="text-xs opacity-55">
+        Sent {application.reviewedAt
+          ? new Date(application.reviewedAt).toLocaleString()
+          : "—"}
+        {application.contractPropertyIds?.length
+          ? ` · ${application.contractPropertyIds.length} agreement${application.contractPropertyIds.length === 1 ? "" : "s"}`
+          : ""}
+        {" · "}
+        App ID: <span className="font-mono">{application.id}</span>
+      </p>
+      {application.loginRevealPassword ? (
+        <p className="break-all rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-mono text-xs text-emerald-900">
+          Status-page temporary password (until owner changes it):{" "}
+          {application.loginRevealPassword}
+        </p>
       ) : null}
     </article>
   );

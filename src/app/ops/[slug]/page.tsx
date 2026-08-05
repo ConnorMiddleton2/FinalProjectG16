@@ -5,7 +5,6 @@ import { teamLogout } from "@/app/team/actions";
 import { hasTeamAccess } from "@/lib/team-auth";
 
 const DASHBOARDS: Record<string, { title: string }> = {
-  ap: { title: "Accounts Payable" },
   ar: { title: "Accounts Receivable" },
   hr: { title: "Human Resources" },
 };
