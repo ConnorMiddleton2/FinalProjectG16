@@ -79,6 +79,22 @@ export type ManagementContractDraft = {
   knownIssues: string;
   specialTerms: string;
   notes: string;
+
+  /** Optional saved tenant roster for the managed asset */
+  tenants?: PropertyTenant[];
+};
+
+export type PropertyTenant = {
+  id: string;
+  unit: string;
+  name: string;
+  email: string;
+  phone: string;
+  leaseStart: string;
+  leaseEnd: string;
+  monthlyRent: string;
+  sqft: string;
+  status: "active" | "notice" | "vacant";
 };
 
 export const emptyManagementContract = (): Omit<
@@ -142,4 +158,107 @@ export const emptyManagementContract = (): Omit<
   knownIssues: "",
   specialTerms: "",
   notes: "",
+  tenants: [],
 });
+
+/** Build a tenant roster from saved data or synthesize one from intake metrics. */
+export function getPropertyTenants(
+  contract: ManagementContractDraft
+): PropertyTenant[] {
+  if (contract.tenants && contract.tenants.length > 0) {
+    return contract.tenants;
+  }
+
+  const count = Math.max(0, Number(contract.tenantCount) || 0);
+  const rentable = Number(contract.rentableSf) || 0;
+  const monthlyRoll = Number(contract.monthlyRentRoll) || 0;
+  const perTenantRent =
+    count > 0 && monthlyRoll > 0
+      ? Math.round(monthlyRoll / count)
+      : 0;
+  const perTenantSf =
+    count > 0 && rentable > 0 ? Math.round(rentable / count) : 0;
+
+  const demoNames = [
+    "Northwind Advisors LLC",
+    "Brightleaf Dental",
+    "Summit Legal Group",
+    "Harbor Cafe Co.",
+    "Lumen Creative Studio",
+    "Oak & Pine Wealth",
+    "Delta Logistics Desk",
+    "Vista Tech Partners",
+  ];
+
+  const tenants: PropertyTenant[] = [];
+  for (let i = 0; i < count; i++) {
+    const unitNum = 100 + (i + 1) * 10;
+    tenants.push({
+      id: `${contract.id}-tenant-${i + 1}`,
+      unit: `Suite ${unitNum}`,
+      name: demoNames[i % demoNames.length],
+      email: `leasing${i + 1}@example.com`,
+      phone: `(662) 555-01${String(20 + i).padStart(2, "0")}`,
+      leaseStart: contract.contractStartDate || "2025-01-01",
+      leaseEnd:
+        i === 0 && contract.majorLeaseExpirations
+          ? "2027-03-01"
+          : `202${6 + (i % 3)}-0${(i % 9) + 1}-15`,
+      monthlyRent: perTenantRent ? String(perTenantRent) : "",
+      sqft: perTenantSf ? String(perTenantSf) : "",
+      status: i === count - 1 && count > 2 ? "notice" : "active",
+    });
+  }
+
+  // Show vacant units if occupancy suggests vacancy
+  const occupancy = Number(contract.occupancyPercent);
+  const units = Number(contract.unitsSuites) || count;
+  if (units > count) {
+    for (let i = count; i < units && i < count + 3; i++) {
+      tenants.push({
+        id: `${contract.id}-vacant-${i + 1}`,
+        unit: `Suite ${100 + (i + 1) * 10}`,
+        name: "— Vacant —",
+        email: "",
+        phone: "",
+        leaseStart: "",
+        leaseEnd: "",
+        monthlyRent: "",
+        sqft: perTenantSf ? String(perTenantSf) : "",
+        status: "vacant",
+      });
+    }
+  } else if (!Number.isNaN(occupancy) && occupancy < 100 && count === 0) {
+    tenants.push({
+      id: `${contract.id}-vacant-1`,
+      unit: "Suite 100",
+      name: "— Vacant —",
+      email: "",
+      phone: "",
+      leaseStart: "",
+      leaseEnd: "",
+      monthlyRent: "",
+      sqft: "",
+      status: "vacant",
+    });
+  }
+
+  return tenants;
+}
+
+export function feeStructureLabel(value: FeeStructure) {
+  switch (value) {
+    case "percent_collections":
+      return "% of collections";
+    case "percent_gpr":
+      return "% of GPR";
+    case "flat_monthly":
+      return "Flat monthly";
+    case "flat_annual":
+      return "Flat annual";
+    case "hybrid":
+      return "Hybrid";
+    default:
+      return value;
+  }
+}
