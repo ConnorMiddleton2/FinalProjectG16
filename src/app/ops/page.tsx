@@ -13,6 +13,9 @@ const categories = [
   { label: "Human Resources", href: "/ops/hr" },
 ] as const;
 
+const tileClass =
+  "border border-[#8aa3b5]/55 bg-[#b7c9d6] text-[#2f4556] shadow-[0_1px_2px_rgba(47,69,86,0.10)] transition hover:-translate-y-0.5 hover:bg-[#a9bdcd] hover:border-[#7a95a9]/65";
+
 export default async function OpsPage() {
   if (!(await hasTeamAccess())) {
     redirect("/team");
@@ -48,24 +51,33 @@ export default async function OpsPage() {
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {categories.map((cat) => (
-            <Link
-              key={cat.href}
-              href={cat.href}
-              className="flex min-h-28 items-center justify-center rounded-2xl border border-[var(--harbor-deep)]/15 bg-white/85 px-5 py-6 text-center text-xl font-semibold text-[var(--harbor-ink)] shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]"
-            >
-              {cat.label}
-            </Link>
-          ))}
-        </div>
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {categories.map((cat) => (
+              <Link
+                key={cat.href}
+                href={cat.href}
+                className={`flex min-h-28 items-center justify-center rounded-2xl px-5 py-6 text-center text-xl font-semibold ${tileClass}`}
+              >
+                {cat.label}
+              </Link>
+            ))}
+          </div>
 
-        <Link
-          href="/ops/management"
-          className="flex w-full items-center justify-center rounded-xl border border-[var(--harbor-deep)]/15 bg-white/85 px-5 py-3 text-center text-base font-semibold text-[var(--harbor-ink)] shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]"
-        >
-          Management
-        </Link>
+          <Link
+            href="/ops/sales-marketing"
+            className={`flex w-full items-center justify-center rounded-xl px-5 py-3 text-center text-base font-semibold ${tileClass}`}
+          >
+            Sales & Marketing
+          </Link>
+
+          <Link
+            href="/ops/management"
+            className={`flex w-full items-center justify-center rounded-xl px-5 py-3 text-center text-base font-semibold ${tileClass}`}
+          >
+            Management
+          </Link>
+        </div>
       </main>
     </div>
   );
