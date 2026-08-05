@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Mail, Phone } from "lucide-react";
 import type { OwnerApplication } from "@/lib/owner-auth";
 import {
   createAccountFromApplication,
   declineApplicationAction,
+  requestMoreInfoAction,
   type StaffApplicationState,
 } from "./actions";
 
@@ -16,6 +17,7 @@ export function PendingApplicationCard({
 }: {
   application: OwnerApplication;
 }) {
+  const [reviewNotes, setReviewNotes] = useState(application.reviewNotes ?? "");
   const [createState, createAction, createPending] = useActionState(
     createAccountFromApplication,
     initialState
@@ -24,12 +26,24 @@ export function PendingApplicationCard({
     declineApplicationAction,
     initialState
   );
+  const [infoState, infoAction, infoPending] = useActionState(
+    requestMoreInfoAction,
+    initialState
+  );
 
-  const feedback = createState.success || createState.error || declineState.success || declineState.error;
-  const feedbackOk = Boolean(createState.success || declineState.success);
+  const feedback =
+    createState.success ||
+    createState.error ||
+    declineState.success ||
+    declineState.error ||
+    infoState.success ||
+    infoState.error;
+  const feedbackOk = Boolean(
+    createState.success || declineState.success || infoState.success
+  );
 
   return (
-    <article className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 p-5 shadow-sm space-y-4">
+    <article className="space-y-4 rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-[var(--harbor-ink)]">
@@ -40,7 +54,13 @@ export function PendingApplicationCard({
             {new Date(application.createdAt).toLocaleString()}
           </p>
         </div>
-        <span className="badge badge-warning">Pending</span>
+        <span
+          className={`badge ${
+            application.status === "needs_info" ? "badge-info" : "badge-warning"
+          }`}
+        >
+          {application.status === "needs_info" ? "Needs info" : "Pending"}
+        </span>
       </div>
 
       <div className="flex flex-wrap gap-3 text-sm">
@@ -63,7 +83,7 @@ export function PendingApplicationCard({
       </div>
 
       <div>
-        <p className="text-sm font-medium mb-2">Properties requested</p>
+        <p className="mb-2 text-sm font-medium">Properties requested</p>
         <ul className="space-y-2">
           {application.properties.map((property, index) => (
             <li
@@ -90,21 +110,46 @@ export function PendingApplicationCard({
         </p>
       ) : null}
 
-      <div className="rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/50 p-4 space-y-3">
-        <p className="text-sm font-medium">Create owner account</p>
-        <p className="text-xs opacity-60">
-          After you reach out and approve them, set a temporary password and
-          create their login.
+      {application.reviewedAt ? (
+        <p className="text-xs opacity-55">
+          Last review: {application.reviewedBy || "staff"} ·{" "}
+          {new Date(application.reviewedAt).toLocaleString()}
+          {application.reviewerDecision
+            ? ` · ${application.reviewerDecision}`
+            : ""}
         </p>
-        <form action={createAction} className="flex flex-wrap gap-2 items-end">
+      ) : null}
+
+      <div className="space-y-3 rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/50 p-4">
+        <p className="text-sm font-medium">Review decision</p>
+        <p className="text-xs opacity-60">
+          Approving creates a hashed login, provisions draft managed properties
+          from the application, and records an audit trail. Leave password blank
+          to auto-generate a one-time temporary password.
+        </p>
+
+        <label className="form-control w-full">
+          <span className="mb-1 text-xs opacity-70">Review notes (audit)</span>
+          <textarea
+            className="textarea textarea-bordered textarea-sm"
+            rows={2}
+            value={reviewNotes}
+            onChange={(e) => setReviewNotes(e.target.value)}
+            placeholder="Shown on applicant status page when requesting more info"
+          />
+        </label>
+
+        <form action={createAction} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="applicationId" value={application.id} />
+          <input type="hidden" name="reviewNotes" value={reviewNotes} />
           <label className="form-control">
-            <span className="mb-1 text-xs opacity-70">Temporary password</span>
+            <span className="mb-1 text-xs opacity-70">
+              Temporary password (optional)
+            </span>
             <input
               name="password"
               className="input input-bordered input-sm"
-              placeholder="e.g. Harborline2026"
-              required
+              placeholder="Auto-generate if blank"
             />
           </label>
           <button
@@ -112,12 +157,25 @@ export function PendingApplicationCard({
             className="btn btn-neutral btn-sm"
             disabled={createPending}
           >
-            {createPending ? "Creating…" : "Create account"}
+            {createPending ? "Creating…" : "Approve & create account"}
+          </button>
+        </form>
+
+        <form action={infoAction}>
+          <input type="hidden" name="applicationId" value={application.id} />
+          <input type="hidden" name="reviewNotes" value={reviewNotes} />
+          <button
+            type="submit"
+            className="btn btn-outline btn-sm"
+            disabled={infoPending}
+          >
+            {infoPending ? "Updating…" : "Request more info"}
           </button>
         </form>
 
         <form action={declineAction}>
           <input type="hidden" name="applicationId" value={application.id} />
+          <input type="hidden" name="reviewNotes" value={reviewNotes} />
           <button
             type="submit"
             className="btn btn-ghost btn-sm text-error"
@@ -128,17 +186,22 @@ export function PendingApplicationCard({
         </form>
       </div>
 
-      {feedback && (
-        <p
-          className={`rounded-lg px-3 py-2 text-sm ${
+      {feedback ? (
+        <div
+          className={`space-y-2 rounded-lg px-3 py-2 text-sm ${
             feedbackOk
               ? "bg-emerald-50 text-emerald-800"
               : "bg-red-50 text-red-700"
           }`}
         >
-          {feedback}
-        </p>
-      )}
+          <p>{feedback}</p>
+          {createState.temporaryPassword ? (
+            <p className="break-all rounded border border-emerald-200 bg-white/80 px-2 py-1 font-mono text-xs">
+              One-time temporary password: {createState.temporaryPassword}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   );
 }

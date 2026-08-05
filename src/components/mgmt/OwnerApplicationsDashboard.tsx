@@ -8,6 +8,7 @@ import {
 import type { OwnerApplication } from "@/lib/owner-auth";
 import { createClient } from "@/lib/supabase/client";
 import { listSharedRecords, upsertSharedRecord } from "@/lib/shared-store";
+import { hashPassword } from "@/lib/owner-password";
 import {
   draftManagementAgreement,
   sillyOwnerApplication,
@@ -219,9 +220,10 @@ export function OwnerApplicationsDashboard() {
       const account = {
         id: crypto.randomUUID(),
         email: draft.email.trim().toLowerCase(),
-        password,
+        password: hashPassword(password),
         fullName: draft.fullName,
         createdAt: new Date().toISOString(),
+        mustChangePassword: true,
       };
       const existing = await listSharedRecords<{
         id: string;
@@ -229,12 +231,18 @@ export function OwnerApplicationsDashboard() {
         password: string;
         fullName: string;
         createdAt: string;
+        mustChangePassword?: boolean;
       }>(supabase, COLLECTIONS.ownerAccounts);
       const prior = existing.find(
         (o) => o.email.toLowerCase() === account.email
       );
       const finalAccount = prior
-        ? { ...prior, password, fullName: draft.fullName }
+        ? {
+            ...prior,
+            password: hashPassword(password),
+            fullName: draft.fullName,
+            mustChangePassword: true,
+          }
         : account;
 
       await upsertSharedRecord(

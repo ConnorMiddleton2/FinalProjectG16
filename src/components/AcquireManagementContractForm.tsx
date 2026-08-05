@@ -86,15 +86,36 @@ export function AcquireManagementContractForm({ onCancel, onSaved }: Props) {
       return;
     }
 
-    const draft: ManagementContractDraft = {
-      ...form,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-    };
-
     setSaving(true);
     try {
       const supabase = createClient();
+      let ownerAccountId = form.ownerAccountId || "";
+      const email = form.ownerEmail.trim().toLowerCase();
+      if (email) {
+        try {
+          const accounts = await listSharedRecords<{ id: string; email: string }>(
+            supabase,
+            COLLECTIONS.ownerAccounts
+          );
+          const match = accounts.find(
+            (a) => a.email.trim().toLowerCase() === email
+          );
+          if (match) ownerAccountId = match.id;
+        } catch {
+          // Non-fatal: email match still works for owner scoping
+        }
+      }
+
+      const draft: ManagementContractDraft = {
+        ...form,
+        ownerEmail: email,
+        ownerAccountId,
+        ownerApprovalThreshold:
+          form.ownerApprovalThreshold.trim() || "2500",
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+      };
+
       await upsertSharedRecord(
         supabase,
         COLLECTIONS.managedProperties,
@@ -371,6 +392,17 @@ export function AcquireManagementContractForm({ onCancel, onSaved }: Props) {
             Exclusive management agreement
           </label>
         </div>
+        <Field
+          label="Owner spend-approval threshold ($)"
+          hint="Expenditures at or above this amount require owner approval in the owner portal."
+        >
+          <input
+            className={inputClass}
+            value={form.ownerApprovalThreshold}
+            onChange={(e) => update("ownerApprovalThreshold", e.target.value)}
+            placeholder="2500"
+          />
+        </Field>
       </Section>
 
       <Section

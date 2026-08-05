@@ -4,6 +4,7 @@ export const COLLECTIONS = {
   managedProperties: "managed_properties",
   ownerApplications: "owner_applications",
   ownerAccounts: "owner_accounts",
+  ownerApprovals: "owner_approvals",
   workOrders: "work_orders",
   vendors: "vendors",
   budgetLines: "budget_lines",
