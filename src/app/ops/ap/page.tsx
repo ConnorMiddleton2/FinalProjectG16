@@ -1,11 +1,8 @@
-import { redirect } from "next/navigation";
 import { AccountsPayableDashboard } from "@/components/AccountsPayableShell";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { requireOpsModule } from "@/lib/team-auth";
 
 export default async function AccountsPayablePage() {
-  if (!(await hasTeamAccess())) {
-    redirect("/team");
-  }
+  await requireOpsModule("ap");
 
   return <AccountsPayableDashboard />;
 }

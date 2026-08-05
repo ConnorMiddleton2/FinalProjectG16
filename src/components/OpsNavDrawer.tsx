@@ -3,97 +3,29 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  Building2,
-  ClipboardList,
-  Home,
-  LayoutGrid,
-  LogOut,
-  Megaphone,
-  PanelLeftOpen,
-  Receipt,
-  Users,
-  Wallet,
-  Wrench,
-  X,
-} from "lucide-react";
+import { LogOut, PanelLeftOpen, X } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
-
-const NAV_ITEMS: {
-  href: string;
-  label: string;
-  hint: string;
-  icon: typeof Home;
-}[] = [
-  {
-    href: "/ops",
-    label: "Operations home",
-    hint: "All team member windows",
-    icon: LayoutGrid,
-  },
-  {
-    href: "/ops/properties",
-    label: "Properties",
-    hint: "Portfolio, owners, and applications",
-    icon: Building2,
-  },
-  {
-    href: "/ops/maintenance",
-    label: "Maintenance",
-    hint: "Work orders, vendors, and budget",
-    icon: Wrench,
-  },
-  {
-    href: "/ops/tenant",
-    label: "Tenant",
-    hint: "Leases and tenant records",
-    icon: Users,
-  },
-  {
-    href: "/ops/ap",
-    label: "Accounts payable",
-    hint: "Vendor bills and owner payments",
-    icon: Wallet,
-  },
-  {
-    href: "/ops/ar",
-    label: "Accounts receivable",
-    hint: "Rent and miscellaneous billing",
-    icon: Receipt,
-  },
-  {
-    href: "/ops/hr",
-    label: "Human resources",
-    hint: "Staffing and payroll",
-    icon: ClipboardList,
-  },
-  {
-    href: "/ops/sales-marketing",
-    label: "Sales & marketing",
-    hint: "Leasing pipeline and campaigns",
-    icon: Megaphone,
-  },
-  {
-    href: "/ops/management",
-    label: "Management",
-    hint: "Executive summary views",
-    icon: Home,
-  },
-];
-
-function isActive(pathname: string, href: string) {
-  if (href === "/ops") return pathname === "/ops";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
+import type { HrOpsModule } from "@/lib/hr";
+import {
+  filterOpsWindows,
+  isOpsWindowActive,
+  OPS_WINDOWS,
+} from "@/lib/ops-windows";
 
 /**
  * Shared navigation for every team member window so switching dashboards does
  * not require returning to the operations console first.
  */
-export function OpsNavDrawer() {
+export function OpsNavDrawer({
+  allowedModules,
+}: {
+  /** null = admin (all modules); array = employee grants */
+  allowedModules: HrOpsModule[] | null;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [shownPath, setShownPath] = useState(pathname);
+  const windows = filterOpsWindows(OPS_WINDOWS, allowedModules);
 
   // Close once navigation actually commits, so the menu stays up while a slower
   // window is still loading instead of leaving the user on the old page.
@@ -113,7 +45,9 @@ export function OpsNavDrawer() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  const current = NAV_ITEMS.find((item) => isActive(pathname, item.href));
+  const current = windows.find((item) =>
+    isOpsWindowActive(pathname, item.href)
+  );
 
   return (
     <>
@@ -162,8 +96,8 @@ export function OpsNavDrawer() {
             </div>
 
             <ul className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-              {NAV_ITEMS.map(({ href, label, hint, icon: Icon }) => {
-                const active = isActive(pathname, href);
+              {windows.map(({ href, label, hint, icon: Icon }) => {
+                const active = isOpsWindowActive(pathname, href);
                 return (
                   <li key={href}>
                     <Link

@@ -1,11 +1,20 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const TEAM_COOKIE = "harborline_team";
+
+function hasTeamSessionCookie(request: NextRequest) {
+  const value = request.cookies.get(TEAM_COOKIE)?.value;
+  if (!value) return false;
+  // Legacy shared login used "1"; admin uses "admin"; employees use record ids.
+  return value === "1" || value === "admin" || value.length > 0;
+}
+
 export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const path = request.nextUrl.pathname;
-  const hasTeamCookie = request.cookies.get("harborline_team")?.value === "1";
+  const hasTeamCookie = hasTeamSessionCookie(request);
 
   const isPublic =
     path === "/" ||

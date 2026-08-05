@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import {
   CalendarDays,
   ClipboardList,
   Megaphone,
   Wallet,
 } from "lucide-react";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { requireOpsModule } from "@/lib/team-auth";
 import { SmShell, tileClass } from "@/components/sm/SmShell";
 
 const categories = [
@@ -41,9 +40,7 @@ const categories = [
 ] as const;
 
 export default async function SalesMarketingHubPage() {
-  if (!(await hasTeamAccess())) {
-    redirect("/team");
-  }
+  await requireOpsModule("sales-marketing");
 
   return (
     <SmShell

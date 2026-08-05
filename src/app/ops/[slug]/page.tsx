@@ -1,26 +1,24 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { requireOpsModule } from "@/lib/team-auth";
 
-const DASHBOARDS: Record<string, { title: string }> = {
-  ar: { title: "Accounts Receivable" },
-  hr: { title: "Human Resources" },
+const DASHBOARDS: Record<string, { title: string; module: "ar" }> = {
+  ar: { title: "Accounts Receivable", module: "ar" },
 };
+
 
 type Props = {
   params: Promise<{ slug: string }>;
 };
 
 export default async function OpsDashboardPage({ params }: Props) {
-  if (!(await hasTeamAccess())) {
-    redirect("/team");
-  }
-
   const { slug } = await params;
   const dash = DASHBOARDS[slug];
   if (!dash) notFound();
+
+  await requireOpsModule(dash.module);
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">

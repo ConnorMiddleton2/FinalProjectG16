@@ -1,3 +1,6 @@
+import type { PayableCategory } from "@/lib/accounts-payable";
+import { round2, todayIso } from "@/lib/money";
+
 export type WorkOrderStatus = "pending" | "in_progress" | "completed";
 export type WorkOrderSource = "tenant_submitted" | "management_submitted";
 export type WorkOrderLabor = "in_house" | "third_party";
@@ -61,13 +64,27 @@ export type DocumentKind = "invoice" | "receipt";
 
 export type DocumentApprovalStatus = "pending" | "approved" | "rejected";
 
+/**
+ * Maintenance invoice/receipt. Field shape is AP-compatible for a future merge,
+ * but rows stay in maintenance_documents only (never auto-written to AP).
+ */
 export type MaintenanceDocument = {
   id: string;
   kind: DocumentKind;
   vendorName: string;
   property: string;
-  amount: string;
+  /** Numeric amount (legacy string amounts coerced in normalizeMaintenanceDocument). */
+  amount: number;
+  /** Alias of invoice date for older UI; keep in sync with invoiceDate. */
   documentDate: string;
+  invoiceDate: string;
+  dueDate: string;
+  invoiceNumber: string;
+  vendorId: string;
+  amountPaid: number;
+  disputed: boolean;
+  /** AP-aligned category for future toPayableInvoiceDraft mapping. */
+  payableCategory: PayableCategory | "";
   workOrderId: string;
   category: WorkOrderCategory | "";
   fileName: string;
@@ -82,6 +99,101 @@ export type MaintenanceDocument = {
   approvedBy?: string;
   rejectionReason?: string;
 };
+
+/** Form state uses string amount fields for inputs; parsed on save. */
+export type MaintenanceDocumentForm = Omit<
+  MaintenanceDocument,
+  "id" | "submittedAt" | "amount" | "amountPaid"
+> & {
+  amount: string;
+  amountPaid: string;
+};
+
+export function workOrderCategoryToPayableCategory(
+  category: WorkOrderCategory | ""
+): PayableCategory {
+  switch (category) {
+    case "janitorial":
+      return "janitorial";
+    case "landscaping":
+      return "lawncare";
+    case "security":
+      return "security";
+    case "structural":
+      return "repairs";
+    case "appliance":
+      return "supplies";
+    case "hvac":
+    case "plumbing":
+    case "electrical":
+    case "general":
+      return "maintenance";
+    case "other":
+    case "":
+    default:
+      return "other";
+  }
+}
+
+function coerceAmount(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw)) return round2(raw);
+  if (typeof raw === "string") {
+    const cleaned = raw.replace(/[$,\s]/g, "");
+    const n = Number(cleaned);
+    if (Number.isFinite(n)) return round2(n);
+  }
+  return 0;
+}
+
+/** Coerce legacy + new fields into a full MaintenanceDocument. */
+export function normalizeMaintenanceDocument(
+  raw: MaintenanceDocument | Record<string, unknown>
+): MaintenanceDocument {
+  const doc = raw as MaintenanceDocument & { amount?: unknown };
+  const amount = coerceAmount(doc.amount);
+  const amountPaid = coerceAmount(
+    (doc as { amountPaid?: unknown }).amountPaid ?? 0
+  );
+  const documentDate =
+    (doc.documentDate as string) ||
+    (doc.invoiceDate as string) ||
+    todayIso();
+  const invoiceDate = (doc.invoiceDate as string) || documentDate;
+  const category = (doc.category as WorkOrderCategory | "") || "";
+  const payableCategory =
+    (doc.payableCategory as PayableCategory | "") ||
+    (category ? workOrderCategoryToPayableCategory(category) : "");
+
+  const withFinance: MaintenanceDocument = {
+    id: String(doc.id ?? ""),
+    kind: doc.kind === "receipt" ? "receipt" : "invoice",
+    vendorName: String(doc.vendorName ?? ""),
+    property: String(doc.property ?? ""),
+    amount,
+    documentDate,
+    invoiceDate,
+    dueDate: String(doc.dueDate ?? ""),
+    invoiceNumber: String(doc.invoiceNumber ?? ""),
+    vendorId: String(doc.vendorId ?? ""),
+    amountPaid,
+    disputed: Boolean(doc.disputed),
+    payableCategory,
+    workOrderId: String(doc.workOrderId ?? ""),
+    category,
+    fileName: String(doc.fileName ?? ""),
+    notes: String(doc.notes ?? ""),
+    submittedAt: String(doc.submittedAt ?? ""),
+    applyToBudget: Boolean(doc.applyToBudget),
+    budgetLineId: String(doc.budgetLineId ?? ""),
+    approvalStatus: doc.approvalStatus,
+    submittedForApprovalAt: doc.submittedForApprovalAt,
+    approvedAt: doc.approvedAt,
+    approvedBy: doc.approvedBy,
+    rejectionReason: doc.rejectionReason,
+  };
+
+  return normalizeDocumentApproval(withFinance);
+}
 
 /** Legacy docs without approval fields count as already approved. */
 export function normalizeDocumentApproval(
@@ -103,13 +215,18 @@ export function normalizeDocumentApproval(
 }
 
 export function isDocumentApproved(doc: MaintenanceDocument): boolean {
-  return normalizeDocumentApproval(doc).approvalStatus === "approved";
+  return normalizeMaintenanceDocument(doc).approvalStatus === "approved";
 }
 
 export function approvalStatusLabel(status: DocumentApprovalStatus): string {
   if (status === "approved") return "Approved";
   if (status === "rejected") return "Rejected";
   return "Pending approval";
+}
+
+export function generateMaintenanceInvoiceNumber(id: string) {
+  const short = id.replace(/-/g, "").slice(0, 8).toUpperCase();
+  return `MNT-${short}`;
 }
 
 export const WORK_ORDER_STORAGE_KEY = "harborline_work_orders";
@@ -348,14 +465,22 @@ export function seedBudget(): BudgetLine[] {
 
 export function seedDocuments(): MaintenanceDocument[] {
   const now = new Date().toISOString();
+  const day = now.slice(0, 10);
   return [
     {
       id: "doc-1",
       kind: "invoice",
       vendorName: "Oxford HVAC Pros",
       property: "Riverbend Commerce Center",
-      amount: "850",
-      documentDate: new Date().toISOString().slice(0, 10),
+      amount: 850,
+      documentDate: day,
+      invoiceDate: day,
+      dueDate: "",
+      invoiceNumber: "MNT-DOC00001",
+      vendorId: "",
+      amountPaid: 0,
+      disputed: false,
+      payableCategory: "maintenance",
       workOrderId: "wo-1",
       category: "hvac",
       fileName: "oxford-hvac-invoice-4412.pdf",
@@ -372,16 +497,21 @@ export function seedDocuments(): MaintenanceDocument[] {
   ];
 }
 
-export function emptyDocument(): Omit<
-  MaintenanceDocument,
-  "id" | "submittedAt"
-> {
+export function emptyDocument(): MaintenanceDocumentForm {
+  const day = todayIso();
   return {
     kind: "invoice",
     vendorName: "",
     property: "",
     amount: "",
-    documentDate: new Date().toISOString().slice(0, 10),
+    amountPaid: "",
+    documentDate: day,
+    invoiceDate: day,
+    dueDate: "",
+    invoiceNumber: "",
+    vendorId: "",
+    disputed: false,
+    payableCategory: "",
     workOrderId: "",
     category: "",
     fileName: "",
@@ -393,5 +523,34 @@ export function emptyDocument(): Omit<
     approvedAt: "",
     approvedBy: "",
     rejectionReason: "",
+  };
+}
+
+export function documentToForm(doc: MaintenanceDocument): MaintenanceDocumentForm {
+  const n = normalizeMaintenanceDocument(doc);
+  return {
+    kind: n.kind,
+    vendorName: n.vendorName,
+    property: n.property,
+    amount: n.amount ? String(n.amount) : "",
+    amountPaid: n.amountPaid ? String(n.amountPaid) : "",
+    documentDate: n.documentDate,
+    invoiceDate: n.invoiceDate,
+    dueDate: n.dueDate,
+    invoiceNumber: n.invoiceNumber,
+    vendorId: n.vendorId,
+    disputed: n.disputed,
+    payableCategory: n.payableCategory,
+    workOrderId: n.workOrderId,
+    category: n.category,
+    fileName: n.fileName,
+    notes: n.notes,
+    applyToBudget: n.applyToBudget,
+    budgetLineId: n.budgetLineId,
+    approvalStatus: n.approvalStatus,
+    submittedForApprovalAt: n.submittedForApprovalAt,
+    approvedAt: n.approvedAt,
+    approvedBy: n.approvedBy,
+    rejectionReason: n.rejectionReason,
   };
 }

@@ -28,6 +28,7 @@ export const COLLECTIONS = {
   apPayables: "ap_payables",
   missedPayments: "missed_payments",
   capitalExpenditures: "capital_expenditures",
+  hrEmployees: "hr_employees",
 } as const;
 
 export type SharedCollection =
