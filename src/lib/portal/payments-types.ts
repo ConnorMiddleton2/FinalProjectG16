@@ -1,5 +1,7 @@
 import type { PaymentStatus } from "@/lib/portal/dashboard-types";
 
+export type { PaymentStatus };
+
 export type PaymentType =
   | "Rent"
   | "Late fee"
