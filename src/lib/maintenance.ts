@@ -1,6 +1,7 @@
 export type WorkOrderStatus = "pending" | "in_progress" | "completed";
 export type WorkOrderSource = "tenant_submitted" | "management_submitted";
 export type WorkOrderLabor = "in_house" | "third_party";
+export type WorkOrderPriority = "low" | "normal" | "high" | "emergency";
 
 export type WorkOrderCategory =
   | "hvac"
@@ -22,11 +23,16 @@ export type WorkOrder = {
   unit: string;
   description: string;
   status: WorkOrderStatus;
+  priority: WorkOrderPriority;
   source: WorkOrderSource;
   labor: WorkOrderLabor;
   vendorName: string;
   estimatedCost: string;
   actualCost: string;
+  /** Last cost amount pushed into budget_lines from this WO (for delta sync). */
+  budgetAppliedAmount?: string;
+  /** Budget line last used for that sync. */
+  budgetAppliedLineId?: string;
   requestedBy: string;
   createdAt: string;
   dueDate: string;
@@ -53,6 +59,8 @@ export type BudgetLine = {
 
 export type DocumentKind = "invoice" | "receipt";
 
+export type DocumentApprovalStatus = "pending" | "approved" | "rejected";
+
 export type MaintenanceDocument = {
   id: string;
   kind: DocumentKind;
@@ -67,7 +75,42 @@ export type MaintenanceDocument = {
   submittedAt: string;
   applyToBudget: boolean;
   budgetLineId: string;
+  /** Management approval — missing on legacy rows; treat as approved via normalize. */
+  approvalStatus?: DocumentApprovalStatus;
+  submittedForApprovalAt?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  rejectionReason?: string;
 };
+
+/** Legacy docs without approval fields count as already approved. */
+export function normalizeDocumentApproval(
+  doc: MaintenanceDocument
+): MaintenanceDocument {
+  const status = doc.approvalStatus ?? "approved";
+  return {
+    ...doc,
+    approvalStatus: status,
+    submittedForApprovalAt:
+      doc.submittedForApprovalAt ?? doc.submittedAt ?? "",
+    approvedAt:
+      doc.approvedAt ??
+      (status === "approved" ? doc.submittedAt || "" : ""),
+    approvedBy:
+      doc.approvedBy ?? (status === "approved" ? "legacy" : ""),
+    rejectionReason: doc.rejectionReason ?? "",
+  };
+}
+
+export function isDocumentApproved(doc: MaintenanceDocument): boolean {
+  return normalizeDocumentApproval(doc).approvalStatus === "approved";
+}
+
+export function approvalStatusLabel(status: DocumentApprovalStatus): string {
+  if (status === "approved") return "Approved";
+  if (status === "rejected") return "Rejected";
+  return "Pending approval";
+}
 
 export const WORK_ORDER_STORAGE_KEY = "harborline_work_orders";
 export const VENDOR_STORAGE_KEY = "harborline_vendors";
@@ -96,6 +139,16 @@ export const WORK_ORDER_STATUSES: { value: WorkOrderStatus; label: string }[] = 
   { value: "completed", label: "Completed" },
 ];
 
+export const WORK_ORDER_PRIORITIES: {
+  value: WorkOrderPriority;
+  label: string;
+}[] = [
+  { value: "low", label: "Low" },
+  { value: "normal", label: "Normal" },
+  { value: "high", label: "High" },
+  { value: "emergency", label: "Emergency" },
+];
+
 export function categoryLabel(value: string) {
   return (
     WORK_ORDER_CATEGORIES.find((c) => c.value === value)?.label ??
@@ -105,6 +158,27 @@ export function categoryLabel(value: string) {
 
 export function statusLabel(value: WorkOrderStatus) {
   return WORK_ORDER_STATUSES.find((s) => s.value === value)?.label ?? value;
+}
+
+export function priorityLabel(value?: WorkOrderPriority | string) {
+  const key = (value as WorkOrderPriority) || "normal";
+  return (
+    WORK_ORDER_PRIORITIES.find((p) => p.value === key)?.label ?? "Normal"
+  );
+}
+
+export function normalizePriority(
+  value?: WorkOrderPriority | string | null
+): WorkOrderPriority {
+  if (
+    value === "low" ||
+    value === "normal" ||
+    value === "high" ||
+    value === "emergency"
+  ) {
+    return value;
+  }
+  return "normal";
 }
 
 export function sourceLabel(value: WorkOrderSource) {
@@ -125,6 +199,7 @@ export function emptyWorkOrder(): Omit<WorkOrder, "id" | "createdAt"> {
     unit: "",
     description: "",
     status: "pending",
+    priority: "normal",
     source: "management_submitted",
     labor: "in_house",
     vendorName: "",
@@ -153,6 +228,7 @@ export function seedWorkOrders(): WorkOrder[] {
       unit: "210",
       description: "Tenant reports warm air from vents since Monday.",
       status: "in_progress",
+      priority: "high",
       source: "tenant_submitted",
       labor: "third_party",
       vendorName: "Oxford HVAC Pros",
@@ -171,6 +247,7 @@ export function seedWorkOrders(): WorkOrder[] {
       unit: "Lobby",
       description: "Flickering lobby fixtures on east wall.",
       status: "pending",
+      priority: "normal",
       source: "management_submitted",
       labor: "in_house",
       vendorName: "",
@@ -189,6 +266,7 @@ export function seedWorkOrders(): WorkOrder[] {
       unit: "Common",
       description: "Slow drip under vanity; mop bucket in place.",
       status: "completed",
+      priority: "normal",
       source: "management_submitted",
       labor: "in_house",
       vendorName: "",
@@ -269,6 +347,7 @@ export function seedBudget(): BudgetLine[] {
 }
 
 export function seedDocuments(): MaintenanceDocument[] {
+  const now = new Date().toISOString();
   return [
     {
       id: "doc-1",
@@ -281,9 +360,14 @@ export function seedDocuments(): MaintenanceDocument[] {
       category: "hvac",
       fileName: "oxford-hvac-invoice-4412.pdf",
       notes: "Service call + refrigerant top-off",
-      submittedAt: new Date().toISOString(),
+      submittedAt: now,
       applyToBudget: false,
       budgetLineId: "",
+      approvalStatus: "approved",
+      submittedForApprovalAt: now,
+      approvedAt: now,
+      approvedBy: "system-auto",
+      rejectionReason: "",
     },
   ];
 }
@@ -304,5 +388,10 @@ export function emptyDocument(): Omit<
     notes: "",
     applyToBudget: true,
     budgetLineId: "",
+    approvalStatus: "pending",
+    submittedForApprovalAt: "",
+    approvedAt: "",
+    approvedBy: "",
+    rejectionReason: "",
   };
 }
