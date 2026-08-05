@@ -47,7 +47,7 @@ export default function WelcomePage() {
 
         <div className="mt-10 grid gap-4 max-w-3xl sm:grid-cols-2 lg:grid-cols-3 welcome-rise-delay">
           <Link
-            href="/login?next=%2Fportal"
+            href="/portal/start"
             className="group rounded-2xl bg-[var(--harbor-ink)] text-[var(--harbor-sand)] px-6 py-5 shadow-lg transition hover:-translate-y-0.5 hover:bg-[var(--harbor-deep)]"
           >
             <div className="flex items-start gap-3">

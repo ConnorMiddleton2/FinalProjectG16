@@ -1,45 +1,22 @@
-import { PortalShell } from "@/components/portal/PortalShell";
-import { createClient } from "@/lib/supabase/server";
+import { headers } from "next/headers";
+import { PortalPublicShell } from "@/components/portal/PortalPublicShell";
 
 /**
  * Public portal routes (future-tenant apply, unauthorized).
- * No current-tenant role required for apply; unauthorized may still show
- * the signed-in identity for clarity.
+ * Uses lightweight public chrome — not the current-tenant nav shell.
  */
 export default async function PortalPublicLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  let email = "Guest";
-  let displayName = "Guest";
-  let isSignedIn = false;
-
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
-      isSignedIn = true;
-      email = user.email ?? "Signed in";
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user.id)
-        .maybeSingle();
-      displayName =
-        (profile as { full_name?: string | null } | null)?.full_name?.trim() ||
-        email.split("@")[0] ||
-        "User";
-    }
-  } catch {
-    /* guests / missing env */
-  }
+  const headerList = await headers();
+  const pathname =
+    headerList.get("x-portal-pathname") ??
+    headerList.get("next-url") ??
+    "/portal/apply";
 
   return (
-    <PortalShell email={email} displayName={displayName} isSignedIn={isSignedIn}>
-      {children}
-    </PortalShell>
+    <PortalPublicShell pathname={pathname}>{children}</PortalPublicShell>
   );
 }

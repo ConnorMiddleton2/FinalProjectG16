@@ -162,6 +162,16 @@ export const PORTAL_PAGE_META: Record<string, PortalPageMeta> = {
     description:
       "Future tenants can submit an application, review contracts, and check billing.",
   },
+  "/portal/start": {
+    title: "Choose your path",
+    description:
+      "Select current tenant or future tenant to open the matching Harborline experience.",
+  },
+  "/portal/unauthorized": {
+    title: "Unauthorized",
+    description:
+      "This area is only for authenticated current tenants. Choose another path if you need to apply or sign in.",
+  },
 };
 
 export const PORTAL_HELP_HREF = "/portal/messages";

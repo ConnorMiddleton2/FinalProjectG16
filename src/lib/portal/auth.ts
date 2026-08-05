@@ -12,6 +12,8 @@ export const PORTAL_HOME_PATH = "/portal";
 export const PORTAL_LOGIN_PATH = "/login";
 export const PORTAL_UNAUTHORIZED_PATH = "/portal/unauthorized";
 export const PORTAL_APPLY_PATH = "/portal/apply";
+/** Public chooser: current tenant vs future tenant after welcome CTA. */
+export const PORTAL_START_PATH = "/portal/start";
 
 export type PortalTenantSession = {
   userId: string;
@@ -28,6 +30,8 @@ export type PortalTenantSession = {
 
 export function isPortalPublicPath(pathname: string): boolean {
   return (
+    pathname === PORTAL_START_PATH ||
+    pathname.startsWith(`${PORTAL_START_PATH}/`) ||
     pathname === PORTAL_APPLY_PATH ||
     pathname.startsWith(`${PORTAL_APPLY_PATH}/`) ||
     pathname === PORTAL_UNAUTHORIZED_PATH
