@@ -1,10 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
-  Building2,
   FileText,
   PlusCircle,
   Receipt,
@@ -38,7 +35,7 @@ type Application = {
   createdAt: string;
 };
 
-export default function TenantPortalPage() {
+export function FutureTenantWorkspace() {
   const [tab, setTab] = useState<Tab>("apply");
   const {
     items: applications,
@@ -175,36 +172,7 @@ export default function TenantPortalPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f3efe6_0%,#e8f4f6_100%)]">
-      <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/80 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-[var(--harbor-ink)] p-2 text-[var(--harbor-sand)]">
-              <Building2 className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="font-display text-xl leading-tight">Harborline</p>
-              <p className="text-xs opacity-60">Tenant portal</p>
-            </div>
-          </div>
-          <Link href="/" className="btn btn-ghost btn-sm gap-1">
-            <ArrowLeft className="h-4 w-4" />
-            Welcome
-          </Link>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-6 py-8 sm:py-10 space-y-8">
-        <div>
-          <h1 className="font-display text-4xl tracking-tight text-[var(--harbor-ink)]">
-            Your space, your paperwork, your balance.
-          </h1>
-          <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/70">
-            Applications, contracts, and billing sync to the shared team
-            database so every classmate sees the same entries.
-          </p>
-        </div>
-
+    <div className="space-y-8">
         <div className="flex flex-wrap gap-2">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
@@ -514,7 +482,6 @@ export default function TenantPortalPage() {
             )}
           </section>
         )}
-      </main>
     </div>
   );
 }
