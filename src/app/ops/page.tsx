@@ -8,10 +8,13 @@ const categories = [
   { label: "Properties", href: "/ops/properties" },
   { label: "Maintenance", href: "/ops/maintenance" },
   { label: "Tenant", href: "/ops/tenant" },
-  { label: "", href: "/ops/slot-1", blank: true },
-  { label: "", href: "/ops/slot-2", blank: true },
-  { label: "", href: "/ops/slot-3", blank: true },
+  { label: "Accounts Payable", href: "/ops/ap" },
+  { label: "Accounts Receivable", href: "/ops/ar" },
+  { label: "Human Resources", href: "/ops/hr" },
 ] as const;
+
+const tileClass =
+  "border border-[#8aa3b5]/55 bg-[#b7c9d6] text-[#2f4556] shadow-[0_1px_2px_rgba(47,69,86,0.10)] transition hover:-translate-y-0.5 hover:bg-[#a9bdcd] hover:border-[#7a95a9]/65";
 
 export default async function OpsPage() {
   if (!(await hasTeamAccess())) {
@@ -44,25 +47,36 @@ export default async function OpsPage() {
             Operations console
           </h1>
           <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/70">
-            Choose a dashboard category. Blank slots are reserved for modules we
-            add later.
+            Choose a dashboard category to open its workspace.
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {categories.map((cat) => (
-            <Link
-              key={cat.href}
-              href={cat.href}
-              className="flex min-h-28 items-center justify-center rounded-2xl border border-[var(--harbor-deep)]/15 bg-white/85 px-5 py-6 text-center text-xl font-semibold text-[var(--harbor-ink)] shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]"
-            >
-              {"blank" in cat && cat.blank ? (
-                <span className="text-base font-medium opacity-35">Blank category</span>
-              ) : (
-                cat.label
-              )}
-            </Link>
-          ))}
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {categories.map((cat) => (
+              <Link
+                key={cat.href}
+                href={cat.href}
+                className={`flex min-h-28 items-center justify-center rounded-2xl px-5 py-6 text-center text-xl font-semibold ${tileClass}`}
+              >
+                {cat.label}
+              </Link>
+            ))}
+          </div>
+
+          <Link
+            href="/ops/sales-marketing"
+            className={`flex w-full items-center justify-center rounded-xl px-5 py-3 text-center text-base font-semibold ${tileClass}`}
+          >
+            Sales & Marketing
+          </Link>
+
+          <Link
+            href="/ops/management"
+            className={`flex w-full items-center justify-center rounded-xl px-5 py-3 text-center text-base font-semibold ${tileClass}`}
+          >
+            Management
+          </Link>
         </div>
       </main>
     </div>
