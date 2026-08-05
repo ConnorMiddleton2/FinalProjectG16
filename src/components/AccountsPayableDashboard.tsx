@@ -1,22 +1,23 @@
 "use client";
 
-import Link from "next/link";
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
   Eye,
   FileText,
-  LogOut,
   Plus,
   TriangleAlert,
   Upload,
-  X,
 } from "lucide-react";
-import { teamLogout } from "@/app/team/actions";
 import {
   COLLECTIONS,
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
+import {
+  CurrencyInput,
+  DetailRow,
+  ModalShell,
+  apCardClass,
+} from "@/components/ApSharedUi";
 import {
   balanceOf,
   daysLate,
@@ -45,10 +46,8 @@ const STATUS_BADGE: Record<PayableStatus, string> = {
   disputed: "badge-error",
 };
 
-const cardClass =
-  "rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 shadow-sm";
-
-export function AccountsPayableDashboard() {
+/** Operating-expense vendor invoices (one tab inside Accounts Payable). */
+export function OperatingExpensesPayable() {
   const {
     items: invoices,
     saveOne,
@@ -280,34 +279,8 @@ export function AccountsPayableDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
-      <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Accounts payable</p>
-          </div>
-          <form action={teamLogout}>
-            <button
-              type="submit"
-              className="btn btn-sm btn-ghost gap-1 text-[var(--harbor-sand)]"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign out
-            </button>
-          </form>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-6 py-10 space-y-6">
-        <Link
-          href="/ops"
-          className="inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to operations
-        </Link>
-
+    <>
+      <div className="space-y-6">
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
@@ -320,17 +293,17 @@ export function AccountsPayableDashboard() {
           </div>
         )}
 
-        <section className={`${cardClass} p-6`}>
+        <section className={`${apCardClass} p-6`}>
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
               <p className="text-sm font-medium uppercase tracking-wide text-[var(--harbor-ink)]/55">
-                Total accounts payable
+                Total operating expenses payable
               </p>
               <p className="font-display mt-1 text-5xl leading-none tracking-tight text-[var(--harbor-ink)] sm:text-6xl">
                 {money(totals.outstanding)}
               </p>
               <p className="mt-2 text-sm text-[var(--harbor-ink)]/60">
-                Unpaid balance owed to vendors across {totals.openCount} open{" "}
+                Unpaid vendor invoices across {totals.openCount} open{" "}
                 {totals.openCount === 1 ? "invoice" : "invoices"} ·{" "}
                 {money(totals.billed)} billed to date · {money(totals.paid)}{" "}
                 paid to date
@@ -392,7 +365,7 @@ export function AccountsPayableDashboard() {
           </div>
         ) : null}
 
-        <section className={`overflow-x-auto ${cardClass}`}>
+        <section className={`overflow-x-auto ${apCardClass}`}>
           <table className="table">
             <thead>
               <tr>
@@ -513,7 +486,7 @@ export function AccountsPayableDashboard() {
             ) : null}
           </table>
         </section>
-      </main>
+      </div>
 
       {showAddForm ? (
         <ModalShell
@@ -836,100 +809,6 @@ export function AccountsPayableDashboard() {
           </div>
         </ModalShell>
       ) : null}
-    </div>
-  );
-}
-
-function DetailRow({
-  label,
-  value,
-  emphasize,
-}: {
-  label: string;
-  value: string;
-  emphasize?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 px-4 py-2">
-      <dt className="opacity-55">{label}</dt>
-      <dd
-        className={`text-right ${
-          emphasize ? "font-semibold tabular-nums" : ""
-        }`}
-      >
-        {value}
-      </dd>
-    </div>
-  );
-}
-
-function CurrencyInput({
-  value,
-  onChange,
-  placeholder,
-  required,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  required?: boolean;
-}) {
-  return (
-    <div className="flex h-12 w-full items-center rounded-lg border border-base-300 bg-white transition focus-within:border-[var(--harbor-mid)] focus-within:ring-2 focus-within:ring-[var(--harbor-mid)]/25">
-      <span className="pl-3 pr-1 text-base font-medium opacity-60">$</span>
-      <input
-        type="number"
-        min="0.01"
-        step="0.01"
-        inputMode="decimal"
-        className="h-full w-full flex-1 rounded-r-lg bg-transparent pr-3 text-base tabular-nums outline-none"
-        value={value}
-        placeholder={placeholder}
-        required={required}
-        onChange={(e) => onChange(e.target.value.replace(/-/g, ""))}
-        onKeyDown={(e) => {
-          if (e.key === "-" || e.key === "e" || e.key === "E") {
-            e.preventDefault();
-          }
-        }}
-      />
-    </div>
-  );
-}
-
-function ModalShell({
-  title,
-  onClose,
-  children,
-  wide,
-}: {
-  title: string;
-  onClose: () => void;
-  children: ReactNode;
-  wide?: boolean;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--harbor-ink)]/55 p-4 sm:p-8">
-      <div
-        className={`w-full ${
-          wide ? "max-w-5xl" : "max-w-3xl"
-        } rounded-2xl border border-[var(--harbor-deep)]/15 bg-[var(--harbor-sand)] shadow-2xl`}
-      >
-        <div className="flex items-center justify-between gap-4 border-b border-[var(--harbor-deep)]/15 px-6 py-4">
-          <h2 className="font-display text-2xl leading-tight text-[var(--harbor-ink)]">
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn btn-sm btn-ghost btn-circle"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="px-6 py-5">{children}</div>
-      </div>
-    </div>
+    </>
   );
 }

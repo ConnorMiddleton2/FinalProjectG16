@@ -14,6 +14,9 @@ export const COLLECTIONS = {
   tenantContracts: "tenant_contracts",
   tenantInvoices: "tenant_invoices",
   payableInvoices: "payable_invoices",
+  ownerPayables: "owner_payables",
+  rentalReceivables: "rental_receivables",
+  miscellaneousReceivables: "miscellaneous_receivables",
 } as const;
 
 export type SharedCollection =

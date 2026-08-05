@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { AccountsPayableDashboard } from "@/components/AccountsPayableDashboard";
+import { AccountsPayableDashboard } from "@/components/AccountsPayableShell";
 import { hasTeamAccess } from "@/lib/team-auth";
 
 export default async function AccountsPayablePage() {
