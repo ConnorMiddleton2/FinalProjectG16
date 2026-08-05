@@ -1,5 +1,6 @@
 import { RoleWorkspace } from "@/components/RoleWorkspace";
 
+/** Staff “View as Tenant” role shell — not the main-dash tenant portal. */
 export default function TenantPage() {
   return (
     <RoleWorkspace
