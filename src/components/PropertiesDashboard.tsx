@@ -13,6 +13,7 @@ import {
   AcquireManagementContractForm,
   useSavedContracts,
 } from "@/components/AcquireManagementContractForm";
+import { PropertyDetailView } from "@/components/PropertyDetailView";
 import { teamLogout } from "@/app/team/actions";
 import type { ManagementContractDraft } from "@/lib/management-contract";
 
@@ -21,9 +22,12 @@ type Props = {
 };
 
 export function PropertiesDashboard({ pendingApplicationCount }: Props) {
-  const [mode, setMode] = useState<"list" | "acquire">("list");
+  const [mode, setMode] = useState<"list" | "acquire" | "detail">("list");
   const { contracts, refresh } = useSavedContracts();
   const [justSaved, setJustSaved] = useState<ManagementContractDraft | null>(
+    null
+  );
+  const [selected, setSelected] = useState<ManagementContractDraft | null>(
     null
   );
 
@@ -48,15 +52,25 @@ export function PropertiesDashboard({ pendingApplicationCount }: Props) {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-10 space-y-6">
-        <Link
-          href="/ops"
-          className="inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to operations
-        </Link>
+        {mode !== "detail" && (
+          <Link
+            href="/ops"
+            className="inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to operations
+          </Link>
+        )}
 
-        {mode === "list" ? (
+        {mode === "detail" && selected ? (
+          <PropertyDetailView
+            contract={selected}
+            onBack={() => {
+              setSelected(null);
+              setMode("list");
+            }}
+          />
+        ) : mode === "list" ? (
           <>
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
@@ -64,8 +78,8 @@ export function PropertiesDashboard({ pendingApplicationCount }: Props) {
                   Properties
                 </h1>
                 <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/65">
-                  Track managed assets and bring new owner engagements onto the
-                  Harborline platform.
+                  Track managed assets and open any property for full occupancy,
+                  tenant, and performance details.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -114,9 +128,14 @@ export function PropertiesDashboard({ pendingApplicationCount }: Props) {
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
                 {contracts.map((c) => (
-                  <article
+                  <button
                     key={c.id}
-                    className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-5 shadow-sm"
+                    type="button"
+                    onClick={() => {
+                      setSelected(c);
+                      setMode("detail");
+                    }}
+                    className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]"
                   >
                     <h2 className="text-lg font-semibold text-[var(--harbor-ink)]">
                       {c.propertyName}
@@ -140,6 +159,11 @@ export function PropertiesDashboard({ pendingApplicationCount }: Props) {
                           {c.occupancyPercent}% occupied
                         </span>
                       )}
+                      {c.tenantCount && (
+                        <span className="badge badge-ghost">
+                          {c.tenantCount} tenants
+                        </span>
+                      )}
                       {c.feePercent && (
                         <span className="badge badge-ghost">
                           {c.feePercent}% mgmt fee
@@ -150,7 +174,10 @@ export function PropertiesDashboard({ pendingApplicationCount }: Props) {
                       Owner: {c.ownerLegalName || "—"} · Start:{" "}
                       {c.contractStartDate || "—"}
                     </p>
-                  </article>
+                    <p className="mt-3 text-sm font-medium text-[var(--harbor-mid)]">
+                      Open full property details →
+                    </p>
+                  </button>
                 ))}
               </div>
             )}
