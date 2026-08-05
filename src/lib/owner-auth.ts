@@ -1,10 +1,15 @@
+import { createClient } from "@/lib/supabase/server";
+import {
+  COLLECTIONS,
+  listSharedRecords,
+  upsertSharedRecord,
+} from "@/lib/shared-store";
 import { cookies } from "next/headers";
-import { promises as fs } from "fs";
-import path from "path";
 
 export const OWNER_COOKIE = "harborline_owner";
 
 export type OwnerAccount = {
+  id: string;
   email: string;
   password: string;
   fullName: string;
@@ -29,12 +34,9 @@ export type OwnerApplication = {
   createdAt: string;
 };
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const OWNERS_FILE = path.join(DATA_DIR, "owners.json");
-const APPLICATIONS_FILE = path.join(DATA_DIR, "owner-applications.json");
-
 const SEED_OWNERS: OwnerAccount[] = [
   {
+    id: "00000000-0000-4000-8000-0000000000b0",
     email: "bobowner@building.com",
     password: "12345",
     fullName: "Bob Owner",
@@ -42,130 +44,39 @@ const SEED_OWNERS: OwnerAccount[] = [
   },
 ];
 
-async function ensureOwnersFile() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  try {
-    await fs.access(OWNERS_FILE);
-  } catch {
-    await fs.writeFile(OWNERS_FILE, JSON.stringify(SEED_OWNERS, null, 2), "utf8");
-  }
-}
-
-async function ensureApplicationsFile() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  try {
-    await fs.access(APPLICATIONS_FILE);
-  } catch {
-    await fs.writeFile(APPLICATIONS_FILE, "[]", "utf8");
+async function ensureSeedOwners() {
+  const client = await createClient();
+  const owners = await listSharedRecords<OwnerAccount>(
+    client,
+    COLLECTIONS.ownerAccounts
+  );
+  const hasBob = owners.some(
+    (o) => o.email.toLowerCase() === "bobowner@building.com"
+  );
+  if (!hasBob) {
+    for (const owner of SEED_OWNERS) {
+      await upsertSharedRecord(
+        client,
+        COLLECTIONS.ownerAccounts,
+        owner.id,
+        owner as unknown as Record<string, unknown>
+      );
+    }
   }
 }
 
 export async function readOwners(): Promise<OwnerAccount[]> {
-  await ensureOwnersFile();
-  const raw = await fs.readFile(OWNERS_FILE, "utf8");
-  const parsed = JSON.parse(raw) as OwnerAccount[];
-
-  const hasBob = parsed.some(
-    (o) => o.email.toLowerCase() === "bobowner@building.com"
-  );
-  if (!hasBob) {
-    const next = [...SEED_OWNERS, ...parsed];
-    await fs.writeFile(OWNERS_FILE, JSON.stringify(next, null, 2), "utf8");
-    return next;
-  }
-  return parsed;
-}
-
-async function writeOwners(owners: OwnerAccount[]) {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(OWNERS_FILE, JSON.stringify(owners, null, 2), "utf8");
+  await ensureSeedOwners();
+  const client = await createClient();
+  return listSharedRecords<OwnerAccount>(client, COLLECTIONS.ownerAccounts);
 }
 
 export async function readOwnerApplications(): Promise<OwnerApplication[]> {
-  await ensureApplicationsFile();
-  const raw = await fs.readFile(APPLICATIONS_FILE, "utf8");
-  return JSON.parse(raw) as OwnerApplication[];
-}
-
-export async function getPendingOwnerApplications() {
-  const apps = await readOwnerApplications();
-  return apps.filter((a) => a.status === "pending");
-}
-
-export async function countPendingOwnerApplications() {
-  const pending = await getPendingOwnerApplications();
-  return pending.length;
-}
-
-export async function getOwnerApplicationById(id: string) {
-  const apps = await readOwnerApplications();
-  return apps.find((a) => a.id === id) ?? null;
-}
-
-export async function updateOwnerApplicationStatus(
-  id: string,
-  status: OwnerApplication["status"]
-) {
-  const apps = await readOwnerApplications();
-  const index = apps.findIndex((a) => a.id === id);
-  if (index < 0) {
-    return { error: "Application not found." as const };
-  }
-  apps[index] = { ...apps[index], status };
-  await writeOwnerApplications(apps);
-  return { ok: true as const, application: apps[index] };
-}
-
-/**
- * Staff review action: create login credentials and mark the application approved.
- */
-export async function approveOwnerApplication(input: {
-  applicationId: string;
-  password: string;
-}) {
-  const app = await getOwnerApplicationById(input.applicationId);
-  if (!app) {
-    return { error: "Application not found." as const };
-  }
-  if (app.status !== "pending") {
-    return { error: "This application is no longer pending." as const };
-  }
-  if (!input.password.trim()) {
-    return { error: "Choose a temporary password for the owner." as const };
-  }
-
-  const created = await createOwnerAccount({
-    email: app.email,
-    password: input.password.trim(),
-    fullName: app.fullName,
-  });
-  if ("error" in created) {
-    return { error: created.error };
-  }
-
-  await updateOwnerApplicationStatus(app.id, "approved");
-  return {
-    ok: true as const,
-    email: created.email,
-    password: input.password.trim(),
-    fullName: app.fullName,
-  };
-}
-
-export async function declineOwnerApplication(applicationId: string) {
-  const app = await getOwnerApplicationById(applicationId);
-  if (!app) {
-    return { error: "Application not found." as const };
-  }
-  if (app.status !== "pending") {
-    return { error: "This application is no longer pending." as const };
-  }
-  return updateOwnerApplicationStatus(applicationId, "declined");
-}
-
-async function writeOwnerApplications(apps: OwnerApplication[]) {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(APPLICATIONS_FILE, JSON.stringify(apps, null, 2), "utf8");
+  const client = await createClient();
+  return listSharedRecords<OwnerApplication>(
+    client,
+    COLLECTIONS.ownerApplications
+  );
 }
 
 export async function findOwner(email: string) {
@@ -176,7 +87,6 @@ export async function findOwner(email: string) {
   );
 }
 
-/** Staff-only: create an owner account after reviewing an application */
 export async function createOwnerAccount(input: {
   email: string;
   password: string;
@@ -191,14 +101,21 @@ export async function createOwnerAccount(input: {
     return { error: "Email and password are required." as const };
   }
 
-  const owners = await readOwners();
-  owners.push({
+  const account: OwnerAccount = {
+    id: crypto.randomUUID(),
     email,
     password: input.password,
     fullName: input.fullName.trim() || "Property Owner",
     createdAt: new Date().toISOString(),
-  });
-  await writeOwners(owners);
+  };
+
+  const client = await createClient();
+  await upsertSharedRecord(
+    client,
+    COLLECTIONS.ownerAccounts,
+    account.id,
+    account as unknown as Record<string, unknown>
+  );
   return { ok: true as const, email };
 }
 
@@ -256,9 +173,92 @@ export async function submitOwnerApplication(input: {
     createdAt: new Date().toISOString(),
   };
 
-  apps.unshift(application);
-  await writeOwnerApplications(apps);
+  const client = await createClient();
+  await upsertSharedRecord(
+    client,
+    COLLECTIONS.ownerApplications,
+    application.id,
+    application as unknown as Record<string, unknown>
+  );
   return { ok: true as const, application };
+}
+
+export async function getPendingOwnerApplications() {
+  const apps = await readOwnerApplications();
+  return apps.filter((a) => a.status === "pending");
+}
+
+export async function countPendingOwnerApplications() {
+  const pending = await getPendingOwnerApplications();
+  return pending.length;
+}
+
+export async function getOwnerApplicationById(id: string) {
+  const apps = await readOwnerApplications();
+  return apps.find((a) => a.id === id) ?? null;
+}
+
+export async function updateOwnerApplicationStatus(
+  id: string,
+  status: OwnerApplication["status"]
+) {
+  const app = await getOwnerApplicationById(id);
+  if (!app) {
+    return { error: "Application not found." as const };
+  }
+  const updated = { ...app, status };
+  const client = await createClient();
+  await upsertSharedRecord(
+    client,
+    COLLECTIONS.ownerApplications,
+    id,
+    updated as unknown as Record<string, unknown>
+  );
+  return { ok: true as const, application: updated };
+}
+
+export async function approveOwnerApplication(input: {
+  applicationId: string;
+  password: string;
+}) {
+  const app = await getOwnerApplicationById(input.applicationId);
+  if (!app) {
+    return { error: "Application not found." as const };
+  }
+  if (app.status !== "pending") {
+    return { error: "This application is no longer pending." as const };
+  }
+  if (!input.password.trim()) {
+    return { error: "Choose a temporary password for the owner." as const };
+  }
+
+  const created = await createOwnerAccount({
+    email: app.email,
+    password: input.password.trim(),
+    fullName: app.fullName,
+  });
+  if ("error" in created) {
+    return { error: created.error };
+  }
+
+  await updateOwnerApplicationStatus(app.id, "approved");
+  return {
+    ok: true as const,
+    email: created.email,
+    password: input.password.trim(),
+    fullName: app.fullName,
+  };
+}
+
+export async function declineOwnerApplication(applicationId: string) {
+  const app = await getOwnerApplicationById(applicationId);
+  if (!app) {
+    return { error: "Application not found." as const };
+  }
+  if (app.status !== "pending") {
+    return { error: "This application is no longer pending." as const };
+  }
+  return updateOwnerApplicationStatus(applicationId, "declined");
 }
 
 export async function verifyOwnerLogin(email: string, password: string) {

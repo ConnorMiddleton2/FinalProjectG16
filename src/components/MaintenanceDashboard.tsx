@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ClipboardList,
@@ -14,9 +14,11 @@ import {
 } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
 import {
-  BUDGET_STORAGE_KEY,
+  COLLECTIONS,
+  useSharedCollection,
+} from "@/hooks/useSharedCollection";
+import {
   categoryLabel,
-  DOCUMENT_STORAGE_KEY,
   emptyDocument,
   emptyWorkOrder,
   laborLabel,
@@ -26,10 +28,8 @@ import {
   seedWorkOrders,
   sourceLabel,
   statusLabel,
-  VENDOR_STORAGE_KEY,
   WORK_ORDER_CATEGORIES,
   WORK_ORDER_STATUSES,
-  WORK_ORDER_STORAGE_KEY,
   type BudgetLine,
   type DocumentKind,
   type MaintenanceDocument,
@@ -63,16 +63,6 @@ const defaultFilters: Filters = {
   dateTo: "",
 };
 
-function loadJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 function money(n: number) {
   return n.toLocaleString(undefined, {
     style: "currency",
@@ -83,10 +73,29 @@ function money(n: number) {
 
 export function MaintenanceDashboard() {
   const [panel, setPanel] = useState<Panel>("ledger");
-  const [orders, setOrders] = useState<WorkOrder[]>([]);
-  const [vendors, setVendors] = useState<VendorRecord[]>([]);
-  const [budget, setBudget] = useState<BudgetLine[]>([]);
-  const [documents, setDocuments] = useState<MaintenanceDocument[]>([]);
+  const {
+    items: orders,
+    saveOne: saveOrder,
+    loading: ordersLoading,
+    error: ordersError,
+  } = useSharedCollection<WorkOrder>(COLLECTIONS.workOrders, seedWorkOrders);
+  const {
+    items: vendors,
+    saveOne: saveVendor,
+  } = useSharedCollection<VendorRecord>(COLLECTIONS.vendors, seedVendors);
+  const {
+    items: budget,
+    setItems: setBudget,
+    saveOne: saveBudgetLine,
+    saveAll: saveBudgetAll,
+  } = useSharedCollection<BudgetLine>(COLLECTIONS.budgetLines, seedBudget);
+  const {
+    items: documents,
+    saveOne: saveDocument,
+  } = useSharedCollection<MaintenanceDocument>(
+    COLLECTIONS.maintenanceDocuments,
+    seedDocuments
+  );
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [form, setForm] = useState(emptyWorkOrder);
   const [docForm, setDocForm] = useState(emptyDocument);
@@ -96,54 +105,6 @@ export function MaintenanceDashboard() {
     amount: "",
     note: "",
   });
-
-  useEffect(() => {
-    const existingOrders = loadJson<WorkOrder[] | null>(
-      WORK_ORDER_STORAGE_KEY,
-      null
-    );
-    const existingVendors = loadJson<VendorRecord[] | null>(
-      VENDOR_STORAGE_KEY,
-      null
-    );
-    const existingBudget = loadJson<BudgetLine[] | null>(
-      BUDGET_STORAGE_KEY,
-      null
-    );
-    const existingDocs = loadJson<MaintenanceDocument[] | null>(
-      DOCUMENT_STORAGE_KEY,
-      null
-    );
-
-    setOrders(existingOrders ?? seedWorkOrders());
-    setVendors(existingVendors ?? seedVendors());
-    setBudget(existingBudget ?? seedBudget());
-    setDocuments(existingDocs ?? seedDocuments());
-  }, []);
-
-  useEffect(() => {
-    if (orders.length) {
-      localStorage.setItem(WORK_ORDER_STORAGE_KEY, JSON.stringify(orders));
-    }
-  }, [orders]);
-
-  useEffect(() => {
-    if (vendors.length) {
-      localStorage.setItem(VENDOR_STORAGE_KEY, JSON.stringify(vendors));
-    }
-  }, [vendors]);
-
-  useEffect(() => {
-    if (budget.length) {
-      localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(budget));
-    }
-  }, [budget]);
-
-  useEffect(() => {
-    if (documents.length) {
-      localStorage.setItem(DOCUMENT_STORAGE_KEY, JSON.stringify(documents));
-    }
-  }, [documents]);
 
   const properties = useMemo(() => {
     return Array.from(new Set(orders.map((o) => o.property).filter(Boolean))).sort();
@@ -198,7 +159,7 @@ export function MaintenanceDashboard() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleCreateWorkOrder(e: FormEvent) {
+  async function handleCreateWorkOrder(e: FormEvent) {
     e.preventDefault();
     if (!form.title.trim() || !form.property.trim()) {
       setSavedMsg("Title and property are required.");
@@ -215,31 +176,34 @@ export function MaintenanceDashboard() {
           : "",
     };
 
-    setOrders((prev) => [next, ...prev]);
-    setForm(emptyWorkOrder());
-    setSavedMsg("Work order created.");
-    setPanel("ledger");
-    setTimeout(() => setSavedMsg(null), 3000);
+    try {
+      await saveOrder(next);
+      setForm(emptyWorkOrder());
+      setSavedMsg("Work order saved to shared team database.");
+      setPanel("ledger");
+      setTimeout(() => setSavedMsg(null), 3000);
+    } catch (err) {
+      setSavedMsg(
+        err instanceof Error ? err.message : "Could not save work order."
+      );
+    }
   }
 
   function updateOrderStatus(id: string, status: WorkOrderStatus) {
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              status,
-              completedAt:
-                status === "completed"
-                  ? o.completedAt || new Date().toISOString().slice(0, 10)
-                  : "",
-            }
-          : o
-      )
-    );
+    const current = orders.find((o) => o.id === id);
+    if (!current) return;
+    const updated: WorkOrder = {
+      ...current,
+      status,
+      completedAt:
+        status === "completed"
+          ? current.completedAt || new Date().toISOString().slice(0, 10)
+          : "",
+    };
+    void saveOrder(updated);
   }
 
-  function addVendor(e: FormEvent<HTMLFormElement>) {
+  async function addVendor(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     const next: VendorRecord = {
@@ -251,35 +215,34 @@ export function MaintenanceDashboard() {
       notes: String(data.get("notes") ?? "").trim(),
     };
     if (!next.name) return;
-    setVendors((prev) => [next, ...prev]);
+    await saveVendor(next);
     e.currentTarget.reset();
   }
 
-  function recordExpense(e: FormEvent) {
+  async function recordExpense(e: FormEvent) {
     e.preventDefault();
     const amount = Number(expenseForm.amount);
     if (!expenseForm.lineId || Number.isNaN(amount) || amount <= 0) return;
 
-    setBudget((prev) =>
-      prev.map((line) => {
-        if (line.id !== expenseForm.lineId && line.category !== "all") {
-          return line;
-        }
-        if (line.id === expenseForm.lineId) {
-          return {
-            ...line,
-            spentAmount: line.spentAmount + amount,
-            notes: expenseForm.note
-              ? `${line.notes ? `${line.notes} · ` : ""}${expenseForm.note}`
-              : line.notes,
-          };
-        }
-        if (line.category === "all") {
-          return { ...line, spentAmount: line.spentAmount + amount };
-        }
+    const next = budget.map((line) => {
+      if (line.id !== expenseForm.lineId && line.category !== "all") {
         return line;
-      })
-    );
+      }
+      if (line.id === expenseForm.lineId) {
+        return {
+          ...line,
+          spentAmount: line.spentAmount + amount,
+          notes: expenseForm.note
+            ? `${line.notes ? `${line.notes} · ` : ""}${expenseForm.note}`
+            : line.notes,
+        };
+      }
+      if (line.category === "all") {
+        return { ...line, spentAmount: line.spentAmount + amount };
+      }
+      return line;
+    });
+    await saveBudgetAll(next);
     setExpenseForm({ lineId: "", amount: "", note: "" });
   }
 
@@ -290,7 +253,7 @@ export function MaintenanceDashboard() {
     setDocForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSubmitDocument(e: FormEvent) {
+  async function handleSubmitDocument(e: FormEvent) {
     e.preventDefault();
     if (!docForm.vendorName.trim() || !docForm.amount.trim()) {
       setSavedMsg("Vendor and amount are required for invoices/receipts.");
@@ -308,11 +271,16 @@ export function MaintenanceDashboard() {
       submittedAt: new Date().toISOString(),
     };
 
-    setDocuments((prev) => [next, ...prev]);
+    try {
+      await saveDocument(next);
 
-    if (docForm.applyToBudget && docForm.budgetLineId && !Number.isNaN(amount) && amount > 0) {
-      setBudget((prev) =>
-        prev.map((line) => {
+      if (
+        docForm.applyToBudget &&
+        docForm.budgetLineId &&
+        !Number.isNaN(amount) &&
+        amount > 0
+      ) {
+        const nextBudget = budget.map((line) => {
           if (line.id === docForm.budgetLineId) {
             return {
               ...line,
@@ -324,17 +292,28 @@ export function MaintenanceDashboard() {
             return { ...line, spentAmount: line.spentAmount + amount };
           }
           return line;
-        })
+        });
+        await saveBudgetAll(nextBudget);
+      }
+
+      setDocForm(emptyDocument());
+      setSavedMsg(
+        `${docForm.kind === "invoice" ? "Invoice" : "Receipt"} saved to shared team database${
+          docForm.applyToBudget ? " and applied to budget" : ""
+        }.`
+      );
+      setTimeout(() => setSavedMsg(null), 3500);
+    } catch (err) {
+      setSavedMsg(
+        err instanceof Error ? err.message : "Could not save document."
       );
     }
+  }
 
-    setDocForm(emptyDocument());
-    setSavedMsg(
-      `${docForm.kind === "invoice" ? "Invoice" : "Receipt"} submitted${
-        docForm.applyToBudget ? " and applied to budget" : ""
-      }.`
+  function patchBudgetLine(id: string, patch: Partial<BudgetLine>) {
+    setBudget((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, ...patch } : b))
     );
-    setTimeout(() => setSavedMsg(null), 3500);
   }
 
   const panels: { id: Panel; label: string; icon: typeof Wrench }[] = [
@@ -380,9 +359,22 @@ export function MaintenanceDashboard() {
           </h1>
           <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/65">
             Enter work orders, track the ledger, manage third-party vendors,
-            compare spend to budget, and submit invoices or receipts.
+            compare spend to budget, and submit invoices or receipts. All entries
+            sync to the shared team database.
           </p>
         </div>
+
+        {ordersError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {ordersError}
+          </div>
+        )}
+
+        {ordersLoading && (
+          <div className="rounded-xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/50 px-4 py-3 text-sm opacity-70">
+            Loading shared maintenance data…
+          </div>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {panels.map(({ id, label, icon: Icon }) => (
@@ -933,13 +925,15 @@ export function MaintenanceDashboard() {
                                 className="w-full bg-[#e2efda] px-1 py-1 outline-none focus:ring-1 focus:ring-[#217346]"
                                 value={line.label}
                                 onChange={(e) =>
-                                  setBudget((prev) =>
-                                    prev.map((b) =>
-                                      b.id === line.id
-                                        ? { ...b, label: e.target.value }
-                                        : b
-                                    )
-                                  )
+                                  patchBudgetLine(line.id, {
+                                    label: e.target.value,
+                                  })
+                                }
+                                onBlur={(e) =>
+                                  void saveBudgetLine({
+                                    ...line,
+                                    label: e.target.value,
+                                  })
                                 }
                               />
                             )}
@@ -961,13 +955,17 @@ export function MaintenanceDashboard() {
                                 onChange={(e) => {
                                   const value = Number(e.target.value);
                                   if (Number.isNaN(value)) return;
-                                  setBudget((prev) =>
-                                    prev.map((b) =>
-                                      b.id === line.id
-                                        ? { ...b, budgetAmount: value }
-                                        : b
-                                    )
-                                  );
+                                  patchBudgetLine(line.id, {
+                                    budgetAmount: value,
+                                  });
+                                }}
+                                onBlur={(e) => {
+                                  const value = Number(e.target.value);
+                                  if (Number.isNaN(value)) return;
+                                  void saveBudgetLine({
+                                    ...line,
+                                    budgetAmount: value,
+                                  });
                                 }}
                               />
                             )}
@@ -984,13 +982,17 @@ export function MaintenanceDashboard() {
                                 onChange={(e) => {
                                   const value = Number(e.target.value);
                                   if (Number.isNaN(value)) return;
-                                  setBudget((prev) =>
-                                    prev.map((b) =>
-                                      b.id === line.id
-                                        ? { ...b, spentAmount: value }
-                                        : b
-                                    )
-                                  );
+                                  patchBudgetLine(line.id, {
+                                    spentAmount: value,
+                                  });
+                                }}
+                                onBlur={(e) => {
+                                  const value = Number(e.target.value);
+                                  if (Number.isNaN(value)) return;
+                                  void saveBudgetLine({
+                                    ...line,
+                                    spentAmount: value,
+                                  });
                                 }}
                               />
                             )}
@@ -1014,13 +1016,15 @@ export function MaintenanceDashboard() {
                               className="w-full bg-[#e2efda] px-1 py-1 outline-none focus:ring-1 focus:ring-[#217346]"
                               value={line.notes}
                               onChange={(e) =>
-                                setBudget((prev) =>
-                                  prev.map((b) =>
-                                    b.id === line.id
-                                      ? { ...b, notes: e.target.value }
-                                      : b
-                                  )
-                                )
+                                patchBudgetLine(line.id, {
+                                  notes: e.target.value,
+                                })
+                              }
+                              onBlur={(e) =>
+                                void saveBudgetLine({
+                                  ...line,
+                                  notes: e.target.value,
+                                })
                               }
                             />
                           </td>
