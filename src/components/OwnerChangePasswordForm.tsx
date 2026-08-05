@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { OwnerAlert } from "@/components/OwnerAlert";
 import {
   ownerChangePassword,
   type OwnerDashState,
@@ -13,39 +14,38 @@ export function OwnerChangePasswordForm() {
 
   return (
     <form action={action} className="flex max-w-md flex-col gap-3">
-      <label className="form-control">
-        <span className="mb-1 text-xs opacity-70">Current password</span>
+      <label className="block w-full">
+        <span className="owner-label">Current password</span>
         <input
           type="password"
           name="currentPassword"
-          className="input input-bordered input-sm"
+          className="owner-input"
           required
           autoComplete="current-password"
         />
       </label>
-      <label className="form-control">
-        <span className="mb-1 text-xs opacity-70">New password (min 8)</span>
+      <label className="block w-full">
+        <span className="owner-label">New password (min 8)</span>
         <input
           type="password"
           name="newPassword"
-          className="input input-bordered input-sm"
+          className="owner-input"
           required
           minLength={8}
           autoComplete="new-password"
         />
       </label>
-      <button type="submit" className="btn btn-neutral btn-sm w-fit" disabled={pending}>
+      <button
+        type="submit"
+        className="owner-btn-primary owner-btn-primary-sm w-fit"
+        disabled={pending}
+        aria-busy={pending}
+      >
         {pending ? "Saving…" : "Update password"}
       </button>
-      {state.error ? (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <OwnerAlert variant="error">{state.error}</OwnerAlert> : null}
       {state.success ? (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {state.success}
-        </p>
+        <OwnerAlert variant="success">{state.success}</OwnerAlert>
       ) : null}
     </form>
   );

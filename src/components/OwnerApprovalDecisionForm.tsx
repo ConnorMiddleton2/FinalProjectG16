@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { OwnerAlert } from "@/components/OwnerAlert";
 import {
   ownerDecideApproval,
   type OwnerDashState,
@@ -16,13 +17,16 @@ export function OwnerApprovalDecisionForm({
   const [state, action, pending] = useActionState(ownerDecideApproval, initial);
 
   return (
-    <form action={action} className="space-y-3 border-t border-base-300 pt-3">
+    <form
+      action={action}
+      className="space-y-3 border-t border-[var(--harbor-deep)]/10 pt-3"
+    >
       <input type="hidden" name="approvalId" value={approvalId} />
-      <label className="form-control">
-        <span className="mb-1 text-xs opacity-70">Comment (optional)</span>
+      <label className="block w-full">
+        <span className="owner-label">Comment (optional)</span>
         <textarea
           name="comment"
-          className="textarea textarea-bordered textarea-sm"
+          className="owner-input min-h-20 py-3"
           rows={2}
           placeholder="Optional note for Harborline"
         />
@@ -32,8 +36,9 @@ export function OwnerApprovalDecisionForm({
           type="submit"
           name="decision"
           value="approved"
-          className="btn btn-neutral btn-sm"
+          className="owner-btn-primary owner-btn-primary-sm"
           disabled={pending}
+          aria-busy={pending}
         >
           Approve
         </button>
@@ -41,21 +46,15 @@ export function OwnerApprovalDecisionForm({
           type="submit"
           name="decision"
           value="rejected"
-          className="btn btn-outline btn-error btn-sm"
+          className="owner-btn-danger"
           disabled={pending}
         >
           Reject
         </button>
       </div>
-      {state.error ? (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <OwnerAlert variant="error">{state.error}</OwnerAlert> : null}
       {state.success ? (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {state.success}
-        </p>
+        <OwnerAlert variant="success">{state.success}</OwnerAlert>
       ) : null}
     </form>
   );

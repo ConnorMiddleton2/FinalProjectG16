@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { ArrowLeft, Building2 } from "lucide-react";
+import { OwnerAlert } from "@/components/OwnerAlert";
+import { OwnerShell } from "@/components/OwnerShell";
 import {
   lookupApplicationStatus,
   type StatusLookupState,
@@ -47,78 +49,72 @@ export default function OwnerApplicationStatusPage() {
   );
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(165deg,#f3efe6_0%,#d7eef2_55%,#e8f4f6_100%)]">
+    <OwnerShell variant="auth">
       <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-12">
         <Link
           href="/owners"
-          className="mb-8 inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
+          className="owner-muted mb-8 inline-flex items-center gap-2 text-sm transition hover:text-[var(--harbor-ink)] welcome-rise"
         >
           <ArrowLeft className="h-4 w-4" />
           Owner access
         </Link>
 
-        <div className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 p-7 shadow-xl space-y-5">
+        <div className="owner-card welcome-rise-delay space-y-5 p-7 shadow-xl">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-[var(--harbor-ink)] p-2 text-[var(--harbor-sand)]">
+            <div className="rounded-xl bg-[var(--harbor-ink)] p-2.5 text-[var(--harbor-sand)]">
               <Building2 className="h-5 w-5" />
             </div>
             <div>
               <p className="font-display text-2xl leading-tight text-[var(--harbor-ink)]">
                 Application status
               </p>
-              <p className="text-sm opacity-60">
+              <p className="owner-muted text-sm">
                 Look up your Harborline owner access request
               </p>
             </div>
           </div>
 
           <form action={action} className="space-y-3">
-            <label className="form-control">
-              <span className="mb-1 text-xs opacity-70">Email used on application</span>
-              <input
-                name="email"
-                type="email"
-                className="input input-bordered"
-                required
-              />
+            <label className="block w-full">
+              <span className="owner-label">Email used on application</span>
+              <input name="email" type="email" className="owner-input" required />
             </label>
-            <label className="form-control">
-              <span className="mb-1 text-xs opacity-70">
-                Application ID (optional)
-              </span>
+            <label className="block w-full">
+              <span className="owner-label">Application ID (optional)</span>
               <input
                 name="applicationId"
-                className="input input-bordered"
+                className="owner-input"
                 placeholder="Paste if you saved it after submitting"
               />
             </label>
             <button
               type="submit"
-              className="btn btn-neutral w-full"
+              className="owner-btn-primary w-full"
               disabled={pending}
+              aria-busy={pending}
             >
               {pending ? "Looking up…" : "Check status"}
             </button>
           </form>
 
           {state.error ? (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-              {state.error}
-            </p>
+            <OwnerAlert variant="error">{state.error}</OwnerAlert>
           ) : null}
 
           {state.applications?.map((app) => (
             <article
               key={app.id}
-              className="rounded-xl border border-base-300 bg-base-100 p-4 space-y-2"
+              className="space-y-2 rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/40 p-4"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold">{app.fullName}</p>
+                <p className="font-semibold text-[var(--harbor-ink)]">
+                  {app.fullName}
+                </p>
                 <span className={`badge ${statusBadge(app.status)}`}>
                   {app.status.replace("_", " ")}
                 </span>
               </div>
-              <p className="text-sm opacity-70">{statusLabel(app.status)}</p>
+              <p className="owner-muted text-sm">{statusLabel(app.status)}</p>
               <p className="text-xs opacity-55">
                 Submitted {new Date(app.createdAt).toLocaleString()} ·{" "}
                 {app.propertyCount} propert
@@ -127,13 +123,15 @@ export default function OwnerApplicationStatusPage() {
               </p>
               <p className="text-xs font-mono opacity-50">ID: {app.id}</p>
               {app.reviewNotes ? (
-                <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">
-                  <span className="font-medium">Harborline note: </span>
+                <OwnerAlert variant="info" title="Harborline note">
                   {app.reviewNotes}
-                </p>
+                </OwnerAlert>
               ) : null}
               {app.status === "approved" ? (
-                <Link href="/owners" className="btn btn-sm btn-neutral mt-1">
+                <Link
+                  href="/owners"
+                  className="owner-btn-primary owner-btn-primary-sm mt-1"
+                >
                   Go to owner login
                 </Link>
               ) : null}
@@ -141,6 +139,6 @@ export default function OwnerApplicationStatusPage() {
           ))}
         </div>
       </div>
-    </main>
+    </OwnerShell>
   );
 }

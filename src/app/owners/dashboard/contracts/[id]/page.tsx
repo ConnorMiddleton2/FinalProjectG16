@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { ContractPrintButton } from "@/components/ContractPrintButton";
 import { OwnerPortalHeader } from "@/components/OwnerPortalHeader";
+import { OwnerShell } from "@/components/OwnerShell";
 import { getCurrentOwner } from "@/lib/owner-auth";
 import { getPendingApprovalsForOwner } from "@/lib/owner-approvals";
 import {
@@ -42,17 +43,20 @@ export default async function OwnerContractDetailPage({
   const sections = buildAgreementSections(contract);
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f3efe6_0%,#e8f4f6_100%)] print:bg-white">
-      <OwnerPortalHeader
-        subtitle="Management contract"
-        pendingApprovals={pendingApprovals.length}
-      />
-
-      <main className="mx-auto max-w-6xl space-y-8 px-6 py-10 print:max-w-none print:px-8 print:py-6">
+    <OwnerShell
+      className="print:bg-white"
+      header={
+        <OwnerPortalHeader
+          subtitle="Management contract"
+          pendingApprovals={pendingApprovals.length}
+        />
+      }
+    >
+      <main className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6 sm:py-10 print:max-w-none print:px-8 print:py-6">
         <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
           <Link
             href="/owners/dashboard/contracts"
-            className="inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
+            className="owner-muted inline-flex min-h-11 items-center gap-2 text-sm transition hover:text-[var(--harbor-ink)]"
           >
             <ArrowLeft className="h-4 w-4" />
             All contracts
@@ -60,24 +64,26 @@ export default async function OwnerContractDetailPage({
           <ContractPrintButton />
         </div>
 
-        <div className="print:mb-6">
+        <div className="welcome-rise print:mb-6">
           <p className="hidden text-sm font-medium uppercase tracking-wide opacity-60 print:block">
             Harborline Management — Property Management Agreement
           </p>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h1 className="font-display text-4xl tracking-tight text-[var(--harbor-ink)] print:text-3xl">
+              <h1 className="font-display text-3xl tracking-tight text-[var(--harbor-ink)] sm:text-4xl print:text-3xl">
                 {contract.propertyName || "Management agreement"}
               </h1>
-              <p className="mt-2 text-[var(--harbor-ink)]/65">
+              <p className="owner-muted mt-2">
                 {formatContractAddress(contract) || "Address pending"}
               </p>
             </div>
-            <span className={`badge ${contractStatusBadgeClass(status)} print:border print:border-black`}>
+            <span
+              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold print:border print:border-black ${contractStatusBadgeClass(status)}`}
+            >
               {contractStatusLabel(status)}
             </span>
           </div>
-          <p className="mt-3 text-xs text-[var(--harbor-ink)]/50">
+          <p className="mt-3 text-xs opacity-50">
             Record created{" "}
             {contract.createdAt
               ? new Date(contract.createdAt).toLocaleString()
@@ -87,11 +93,9 @@ export default async function OwnerContractDetailPage({
           </p>
         </div>
 
-        <section className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 p-5 shadow-sm print:border print:border-black print:shadow-none">
-          <h2 className="text-lg font-semibold text-[var(--harbor-ink)]">
-            Key terms at a glance
-          </h2>
-          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+        <section className="owner-card welcome-rise-delay p-5 print:border print:border-black print:shadow-none">
+          <h2 className="owner-section-title">Key terms at a glance</h2>
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
             <Term label="Contract term" value={formatTermRange(contract)} />
             <Term
               label="Renewal"
@@ -156,13 +160,13 @@ export default async function OwnerContractDetailPage({
 
         <section
           id="contract-document"
-          className="space-y-6 rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/95 p-6 shadow-sm print:border-0 print:p-0 print:shadow-none"
+          className="owner-card space-y-6 p-6 print:border-0 print:p-0 print:shadow-none"
         >
           <div className="border-b border-[var(--harbor-deep)]/10 pb-4 print:border-black">
             <h2 className="font-display text-2xl text-[var(--harbor-ink)]">
               Full agreement
             </h2>
-            <p className="mt-1 text-sm text-[var(--harbor-ink)]/60">
+            <p className="owner-muted mt-1 text-sm">
               Generated from the management contract record Harborline staff
               maintain for this property. Not a separately uploaded legal PDF.
             </p>
@@ -184,19 +188,19 @@ export default async function OwnerContractDetailPage({
             </article>
           ))}
 
-          <footer className="border-t border-[var(--harbor-deep)]/10 pt-4 text-xs text-[var(--harbor-ink)]/50 print:border-black">
+          <footer className="border-t border-[var(--harbor-deep)]/10 pt-4 text-xs opacity-50 print:border-black">
             Owner: {contract.ownerLegalName || "—"} · Manager: Harborline
             Management · Property ID: {contract.id}
           </footer>
         </section>
       </main>
-    </div>
+    </OwnerShell>
   );
 }
 
 function Term({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-h-[4.5rem] rounded-xl border border-[var(--harbor-deep)]/8 bg-[var(--harbor-sand)]/35 px-3 py-3">
       <dt className="text-xs uppercase tracking-wide opacity-55">{label}</dt>
       <dd className="mt-1 font-medium capitalize text-[var(--harbor-ink)]">
         {value}
