@@ -349,13 +349,20 @@ export function LeaseOfferReview({ offerId }: { offerId: string }) {
               </button>
             </>
           ) : (
-            <p className="text-sm text-[var(--harbor-ink)]/60">
-              {offer.status === "accepted-pending-signature"
-                ? "You accepted this offer. Watch for the signing package from leasing — the lease is not complete until signatures and processing finish."
-                : offer.status === "declined"
-                  ? "You declined this offer."
-                  : "This offer is no longer available to accept or decline."}
-            </p>
+            <>
+              <p className="text-sm text-[var(--harbor-ink)]/60">
+                {offer.status === "accepted-pending-signature"
+                  ? "You accepted this offer. Watch for the signing package from leasing — the lease is not complete until signatures and processing finish."
+                  : offer.status === "declined"
+                    ? "You declined this offer."
+                    : "This offer is no longer available to accept or decline."}
+              </p>
+              {offer.status === "accepted-pending-signature" ? (
+                <Link href="/portal/move-in" className="btn btn-neutral btn-sm gap-1">
+                  Open move-in checklist
+                </Link>
+              ) : null}
+            </>
           )}
           <Link
             href={`/portal/messages?intent=lease-offer&application=${encodeURIComponent(offer.applicationId)}`}

@@ -10,6 +10,8 @@ const PRIMARY_LINKS = [
   { href: "/portal/tours", label: "Schedule a Tour" },
   { href: "/portal/apply", label: "Apply" },
   { href: "/portal/applications", label: "Application Status" },
+  { href: "/portal/offers", label: "Lease Offers" },
+  { href: "/portal/move-in", label: "Move-In" },
   { href: "/portal/messages", label: "Messages" },
   { href: "/portal/profile", label: "Applicant Profile" },
 ] as const;

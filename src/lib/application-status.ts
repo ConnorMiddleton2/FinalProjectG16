@@ -156,7 +156,8 @@ export const APPLICATION_STATUS_DEFINITIONS: ApplicationStatusMeta[] = [
     status: "Lease Accepted",
     explanation:
       "Your lease offer has been accepted. Leasing will provide move-in instructions.",
-    nextRequiredAction: "Follow the move-in instructions from the leasing team.",
+    nextRequiredAction:
+      "Start the move-in checklist and complete required signatures when leasing sends them.",
     actions: ["contact-leasing"],
     tone: "success",
   },
