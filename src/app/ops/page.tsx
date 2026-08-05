@@ -8,9 +8,9 @@ const categories = [
   { label: "Properties", href: "/ops/properties" },
   { label: "Maintenance", href: "/ops/maintenance" },
   { label: "Tenant", href: "/ops/tenant" },
-  { label: "", href: "/ops/slot-1", blank: true },
-  { label: "", href: "/ops/slot-2", blank: true },
-  { label: "", href: "/ops/slot-3", blank: true },
+  { label: "Accounts Payable", href: "/ops/ap" },
+  { label: "Accounts Receivable", href: "/ops/ar" },
+  { label: "Human Resources", href: "/ops/hr" },
 ] as const;
 
 export default async function OpsPage() {
@@ -44,8 +44,7 @@ export default async function OpsPage() {
             Operations console
           </h1>
           <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/70">
-            Choose a dashboard category. Blank slots are reserved for modules we
-            add later.
+            Choose a dashboard category to open its workspace.
           </p>
         </div>
 
@@ -56,14 +55,17 @@ export default async function OpsPage() {
               href={cat.href}
               className="flex min-h-28 items-center justify-center rounded-2xl border border-[var(--harbor-deep)]/15 bg-white/85 px-5 py-6 text-center text-xl font-semibold text-[var(--harbor-ink)] shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]"
             >
-              {"blank" in cat && cat.blank ? (
-                <span className="text-base font-medium opacity-35">Blank category</span>
-              ) : (
-                cat.label
-              )}
+              {cat.label}
             </Link>
           ))}
         </div>
+
+        <Link
+          href="/ops/management"
+          className="flex w-full items-center justify-center rounded-xl border border-[var(--harbor-deep)]/15 bg-white/85 px-5 py-3 text-center text-base font-semibold text-[var(--harbor-ink)] shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]"
+        >
+          Management
+        </Link>
       </main>
     </div>
   );
