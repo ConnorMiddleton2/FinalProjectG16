@@ -14,6 +14,14 @@ export const COLLECTIONS = {
   propertyTenants: "property_tenants",
   tenantContracts: "tenant_contracts",
   tenantInvoices: "tenant_invoices",
+  smCampaigns: "sm_campaigns",
+  smCalendarEvents: "sm_calendar_events",
+  smBudgetConfig: "sm_budget_config",
+  smReceipts: "sm_receipts",
+  ownerContracts: "owner_contracts",
+  departmentExpenses: "department_expenses",
+  missedPayments: "missed_payments",
+  capitalExpenditures: "capital_expenditures",
 } as const;
 
 export type SharedCollection =

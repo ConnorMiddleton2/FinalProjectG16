@@ -47,6 +47,43 @@ export type OwnerApplication = {
   message: string;
   status: OwnerApplicationStatus;
   createdAt: string;
+  /** Management outreach / diligence (optional, filled by ops). */
+  mgmtStatus?:
+    | "new"
+    | "contacted"
+    | "meeting_requested"
+    | "inspection_scheduled"
+    | "diligence"
+    | "contract_drafted"
+    | "contract_sent"
+    | "owner_signed"
+    | "account_provisioned"
+    | "closed";
+  communicated?: boolean;
+  lastContactAt?: string;
+  lastContactMethod?: "call" | "text" | "email";
+  accountMessage?: string;
+  meetingRequestSentAt?: string;
+  inspected?: boolean;
+  inspectionDate?: string;
+  inspectionDocuments?: string[];
+  assetDetails?: string;
+  metWithOwner?: boolean;
+  meetingsCount?: number;
+  ownerDesiredTerms?: string;
+  negotiationTerms?: string;
+  paymentTerms?: string;
+  meetingMinutesFiles?: string[];
+  meetingMinutesNotes?: string;
+  inspectionNotes?: string;
+  marketResearch?: string;
+  proposedFeePercent?: string;
+  proposedTermYears?: string;
+  exclusiveManagement?: boolean;
+  draftContract?: string;
+  contractSentAt?: string;
+  contractId?: string;
+  tempPasswordIssuedAt?: string;
   /** Staff review audit */
   reviewedBy?: string;
   reviewedAt?: string;

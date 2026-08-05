@@ -53,7 +53,7 @@ export default async function OwnerDashboardPage() {
           </h1>
           <p className="owner-muted mt-2 max-w-2xl text-sm leading-relaxed sm:text-base">
             Portfolio overview for properties Harborline manages on your behalf.
-            Data is scoped to your owner account only.
+            Review contracts, CapEx approvals, and account security here.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
