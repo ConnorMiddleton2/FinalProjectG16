@@ -23,7 +23,7 @@ type Props = {
 
 export function PropertiesDashboard({ pendingApplicationCount }: Props) {
   const [mode, setMode] = useState<"list" | "acquire" | "detail">("list");
-  const { contracts, refresh } = useSavedContracts();
+  const { contracts, refresh, loading, error } = useSavedContracts();
   const [justSaved, setJustSaved] = useState<ManagementContractDraft | null>(
     null
   );
@@ -109,12 +109,22 @@ export function PropertiesDashboard({ pendingApplicationCount }: Props) {
 
             {justSaved && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                Saved <strong>{justSaved.propertyName}</strong> as a new managed
-                asset.
+                Saved <strong>{justSaved.propertyName}</strong> to the shared team
+                database — classmates will see it after refresh.
               </div>
             )}
 
-            {contracts.length === 0 ? (
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                {error}
+              </div>
+            )}
+
+            {loading ? (
+              <div className="rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/50 px-6 py-16 text-center text-sm opacity-70">
+                Loading shared properties…
+              </div>
+            ) : contracts.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/50 px-6 py-16 text-center">
                 <Building2 className="mx-auto h-8 w-8 text-[var(--harbor-mid)] opacity-70" />
                 <p className="mt-3 font-medium text-[var(--harbor-ink)]">
@@ -187,7 +197,7 @@ export function PropertiesDashboard({ pendingApplicationCount }: Props) {
             onCancel={() => setMode("list")}
             onSaved={(draft) => {
               setJustSaved(draft);
-              refresh();
+              void refresh();
               setMode("list");
             }}
           />

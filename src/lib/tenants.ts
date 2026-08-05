@@ -26,6 +26,22 @@ export function tenantCategoryLabel(value: TenantCategory): string {
   return TENANT_CATEGORIES.find((c) => c.value === value)?.label ?? value;
 }
 
+export function emptyTenant(): Omit<TenantRecord, "id"> {
+  return {
+    name: "",
+    unit: "",
+    propertyLeased: "",
+    category: "active",
+    pendingDue: 0,
+    ageYears: 0,
+    dateLeased: new Date().toISOString().slice(0, 10),
+  };
+}
+
+export function seedTenants(): TenantRecord[] {
+  return SEED_TENANTS.map((t) => ({ ...t }));
+}
+
 export const SEED_TENANTS: TenantRecord[] = [
   {
     id: "t-1001",

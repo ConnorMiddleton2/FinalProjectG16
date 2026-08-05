@@ -1,14 +1,14 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import {
   emptyManagementContract,
   type FeeStructure,
   type ManagementContractDraft,
   type PropertyType,
 } from "@/lib/management-contract";
-
-const STORAGE_KEY = "harborline_management_contracts";
+import { COLLECTIONS, listSharedRecords, upsertSharedRecord } from "@/lib/shared-store";
 
 type FieldProps = {
   label: string;
@@ -63,12 +63,13 @@ type Props = {
 export function AcquireManagementContractForm({ onCancel, onSaved }: Props) {
   const [form, setForm] = useState(emptyManagementContract);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
 
@@ -91,15 +92,25 @@ export function AcquireManagementContractForm({ onCancel, onSaved }: Props) {
       createdAt: new Date().toISOString(),
     };
 
+    setSaving(true);
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const existing = raw ? (JSON.parse(raw) as ManagementContractDraft[]) : [];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([draft, ...existing]));
-    } catch {
-      /* ignore storage errors in demo */
+      const supabase = createClient();
+      await upsertSharedRecord(
+        supabase,
+        COLLECTIONS.managedProperties,
+        draft.id,
+        draft as unknown as Record<string, unknown>
+      );
+      onSaved(draft);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not save property to the shared team database."
+      );
+    } finally {
+      setSaving(false);
     }
-
-    onSaved(draft);
   }
 
   return (
@@ -573,8 +584,8 @@ export function AcquireManagementContractForm({ onCancel, onSaved }: Props) {
       )}
 
       <div className="flex flex-wrap gap-3">
-        <button type="submit" className="btn btn-neutral">
-          Save management contract
+        <button type="submit" className="btn btn-neutral" disabled={saving}>
+          {saving ? "Saving to team database…" : "Save management contract"}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
           Cancel
@@ -586,24 +597,30 @@ export function AcquireManagementContractForm({ onCancel, onSaved }: Props) {
 
 export function useSavedContracts() {
   const [contracts, setContracts] = useState<ManagementContractDraft[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const refresh = useCallback(async () => {
+    setError(null);
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setContracts(JSON.parse(raw) as ManagementContractDraft[]);
-    } catch {
-      /* ignore */
+      const supabase = createClient();
+      const rows = await listSharedRecords<ManagementContractDraft>(
+        supabase,
+        COLLECTIONS.managedProperties
+      );
+      setContracts(rows);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not load shared properties."
+      );
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  function refresh() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      setContracts(raw ? (JSON.parse(raw) as ManagementContractDraft[]) : []);
-    } catch {
-      setContracts([]);
-    }
-  }
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
-  return { contracts, refresh, setContracts };
+  return { contracts, refresh, setContracts, loading, error };
 }

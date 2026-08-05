@@ -1,15 +1,22 @@
 "use client";
 
+import { FormEvent, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Building2,
   Percent,
+  PlusCircle,
   Users,
 } from "lucide-react";
 import {
+  COLLECTIONS,
+  useSharedCollection,
+} from "@/hooks/useSharedCollection";
+import {
+  emptyPropertyTenant,
   feeStructureLabel,
-  getPropertyTenants,
   type ManagementContractDraft,
+  type SharedPropertyTenant,
 } from "@/lib/management-contract";
 
 function Metric({
@@ -59,7 +66,24 @@ type Props = {
 };
 
 export function PropertyDetailView({ contract, onBack }: Props) {
-  const tenants = getPropertyTenants(contract);
+  const {
+    items: allTenants,
+    saveOne: saveTenant,
+    loading,
+    error,
+  } = useSharedCollection<SharedPropertyTenant>(COLLECTIONS.propertyTenants);
+
+  const tenants = useMemo(
+    () => allTenants.filter((t) => t.propertyId === contract.id),
+    [allTenants, contract.id]
+  );
+
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(() =>
+    emptyPropertyTenant(contract.id, contract.propertyName)
+  );
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
   const activeTenants = tenants.filter((t) => t.status !== "vacant").length;
   const vacantTenants = tenants.filter((t) => t.status === "vacant").length;
   const address = [
@@ -69,6 +93,32 @@ export function PropertyDetailView({ contract, onBack }: Props) {
   ]
     .filter(Boolean)
     .join(" · ");
+
+  async function handleAddTenant(e: FormEvent) {
+    e.preventDefault();
+    if (!form.unit.trim() || !form.name.trim()) {
+      setSavedMsg("Unit and tenant name are required.");
+      return;
+    }
+    try {
+      await saveTenant({
+        ...form,
+        id: crypto.randomUUID(),
+        propertyId: contract.id,
+        propertyName: contract.propertyName,
+        unit: form.unit.trim(),
+        name: form.name.trim(),
+      });
+      setForm(emptyPropertyTenant(contract.id, contract.propertyName));
+      setShowForm(false);
+      setSavedMsg("Tenant saved to the shared team database.");
+      setTimeout(() => setSavedMsg(null), 3000);
+    } catch (err) {
+      setSavedMsg(
+        err instanceof Error ? err.message : "Could not save tenant."
+      );
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -113,8 +163,7 @@ export function PropertyDetailView({ contract, onBack }: Props) {
         <Metric
           label="Tenants"
           value={
-            contract.tenantCount ||
-            (activeTenants ? String(activeTenants) : "—")
+            String(activeTenants || contract.tenantCount || "—")
           }
         />
         <Metric
@@ -248,14 +297,14 @@ export function PropertyDetailView({ contract, onBack }: Props) {
       </DetailBlock>
 
       <DetailBlock title="Tenant roster">
-        <div className="mb-3 flex flex-wrap gap-3 text-sm">
+        <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
           <span className="inline-flex items-center gap-1 opacity-70">
             <Users className="h-4 w-4" />
             {activeTenants} occupied
           </span>
           <span className="inline-flex items-center gap-1 opacity-70">
             <Building2 className="h-4 w-4" />
-            {vacantTenants} vacant shown
+            {vacantTenants} vacant
           </span>
           <span className="inline-flex items-center gap-1 opacity-70">
             <Percent className="h-4 w-4" />
@@ -263,12 +312,108 @@ export function PropertyDetailView({ contract, onBack }: Props) {
               ? `${contract.occupancyPercent}% occupancy`
               : "Occupancy not set"}
           </span>
+          <button
+            type="button"
+            className="btn btn-neutral btn-xs gap-1 ml-auto"
+            onClick={() => setShowForm((v) => !v)}
+          >
+            <PlusCircle className="h-3.5 w-3.5" />
+            {showForm ? "Hide" : "Add tenant"}
+          </button>
         </div>
+
+        {error && <p className="mb-2 text-sm text-red-700">{error}</p>}
+        {savedMsg && (
+          <p className="mb-2 text-sm text-emerald-800">{savedMsg}</p>
+        )}
+        {loading && (
+          <p className="mb-2 text-sm opacity-60">Loading shared roster…</p>
+        )}
+
+        {showForm && (
+          <form
+            onSubmit={handleAddTenant}
+            className="mb-4 grid gap-2 rounded-xl border border-base-300 bg-base-100 p-3 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            <input
+              className="input input-bordered input-sm"
+              placeholder="Unit"
+              value={form.unit}
+              onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+              required
+            />
+            <input
+              className="input input-bordered input-sm"
+              placeholder="Tenant name"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              required
+            />
+            <input
+              className="input input-bordered input-sm"
+              placeholder="Email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            />
+            <input
+              className="input input-bordered input-sm"
+              placeholder="Phone"
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+            />
+            <input
+              type="date"
+              className="input input-bordered input-sm"
+              value={form.leaseStart}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, leaseStart: e.target.value }))
+              }
+            />
+            <input
+              type="date"
+              className="input input-bordered input-sm"
+              value={form.leaseEnd}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, leaseEnd: e.target.value }))
+              }
+            />
+            <input
+              className="input input-bordered input-sm"
+              placeholder="SF"
+              value={form.sqft}
+              onChange={(e) => setForm((f) => ({ ...f, sqft: e.target.value }))}
+            />
+            <input
+              className="input input-bordered input-sm"
+              placeholder="Rent / mo"
+              value={form.monthlyRent}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, monthlyRent: e.target.value }))
+              }
+            />
+            <select
+              className="select select-bordered select-sm"
+              value={form.status}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  status: e.target.value as SharedPropertyTenant["status"],
+                }))
+              }
+            >
+              <option value="active">active</option>
+              <option value="notice">notice</option>
+              <option value="vacant">vacant</option>
+            </select>
+            <button type="submit" className="btn btn-neutral btn-sm">
+              Save to shared database
+            </button>
+          </form>
+        )}
 
         {tenants.length === 0 ? (
           <p className="text-sm opacity-60">
-            No tenants on file yet. Add tenant count and occupancy on intake to
-            generate a starter roster, or save tenants with the property later.
+            No tenants on the shared roster yet. Add one so classmates see it.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-base-300">

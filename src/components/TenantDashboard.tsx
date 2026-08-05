@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowLeft, LogOut, Users } from "lucide-react";
+import { FormEvent, useMemo, useState } from "react";
+import { ArrowLeft, LogOut, PlusCircle, Users } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
 import {
+  COLLECTIONS,
+  useSharedCollection,
+} from "@/hooks/useSharedCollection";
+import {
+  emptyTenant,
   formatCurrency,
   formatLeaseDate,
-  SEED_TENANTS,
+  seedTenants,
   TENANT_CATEGORIES,
-  tenantCategoryLabel,
   type TenantCategory,
   type TenantRecord,
 } from "@/lib/tenants";
@@ -48,8 +52,16 @@ function categoryBadgeClass(category: TenantCategory): string {
 }
 
 export function TenantDashboard() {
-  const [tenants] = useState<TenantRecord[]>(SEED_TENANTS);
+  const {
+    items: tenants,
+    saveOne: saveTenant,
+    loading,
+    error,
+  } = useSharedCollection<TenantRecord>(COLLECTIONS.tenants, seedTenants);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
+  const [form, setForm] = useState(emptyTenant());
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
 
   const properties = useMemo(() => {
     return Array.from(
@@ -82,6 +94,37 @@ export function TenantDashboard() {
     (sum, t) => sum + t.pendingDue,
     0
   );
+
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim() || !form.propertyLeased.trim()) {
+      setSavedMsg("Tenant name and property are required.");
+      return;
+    }
+    try {
+      await saveTenant({
+        ...form,
+        id: crypto.randomUUID(),
+        name: form.name.trim(),
+        unit: form.unit.trim(),
+        propertyLeased: form.propertyLeased.trim(),
+      });
+      setForm(emptyTenant());
+      setShowForm(false);
+      setSavedMsg("Tenant saved to the shared team database.");
+      setTimeout(() => setSavedMsg(null), 3000);
+    } catch (err) {
+      setSavedMsg(
+        err instanceof Error ? err.message : "Could not save tenant."
+      );
+    }
+  }
+
+  async function updateCategory(id: string, category: TenantCategory) {
+    const current = tenants.find((t) => t.id === id);
+    if (!current) return;
+    await saveTenant({ ...current, category });
+  }
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
@@ -118,11 +161,18 @@ export function TenantDashboard() {
               Tenant master list
             </h1>
             <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/65">
-              Ledger of leased tenants with property, pending due, age, and lease
-              date. Filter the ledger to focus collections and renewals.
+              Shared ledger of leased tenants. Entries sync for the whole team.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 text-sm">
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm gap-1"
+              onClick={() => setShowForm((v) => !v)}
+            >
+              <PlusCircle className="h-4 w-4" />
+              {showForm ? "Hide form" : "Add tenant"}
+            </button>
             <span className="badge badge-outline gap-1 px-3 py-3">
               <Users className="h-3.5 w-3.5" />
               {filteredTenants.length} shown
@@ -132,6 +182,101 @@ export function TenantDashboard() {
             </span>
           </div>
         </div>
+
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {error}
+          </div>
+        )}
+        {savedMsg && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            {savedMsg}
+          </div>
+        )}
+        {loading && (
+          <p className="text-sm opacity-60">Loading shared tenants…</p>
+        )}
+
+        {showForm && (
+          <form
+            onSubmit={handleCreate}
+            className="grid gap-3 rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3"
+          >
+            <input
+              className="input input-bordered input-sm w-full bg-white"
+              placeholder="Tenant name"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              required
+            />
+            <input
+              className="input input-bordered input-sm w-full bg-white"
+              placeholder="Unit / suite"
+              value={form.unit}
+              onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+            />
+            <input
+              className="input input-bordered input-sm w-full bg-white"
+              placeholder="Property leased"
+              value={form.propertyLeased}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, propertyLeased: e.target.value }))
+              }
+              required
+            />
+            <select
+              className="select select-bordered select-sm w-full bg-white"
+              value={form.category}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  category: e.target.value as TenantCategory,
+                }))
+              }
+            >
+              {TENANT_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              className="input input-bordered input-sm w-full bg-white"
+              placeholder="Pending due"
+              value={form.pendingDue || ""}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  pendingDue: Number(e.target.value) || 0,
+                }))
+              }
+            />
+            <input
+              type="number"
+              className="input input-bordered input-sm w-full bg-white"
+              placeholder="Age (years)"
+              value={form.ageYears || ""}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  ageYears: Number(e.target.value) || 0,
+                }))
+              }
+            />
+            <input
+              type="date"
+              className="input input-bordered input-sm w-full bg-white"
+              value={form.dateLeased}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, dateLeased: e.target.value }))
+              }
+            />
+            <button type="submit" className="btn btn-neutral btn-sm">
+              Save to shared database
+            </button>
+          </form>
+        )}
 
         <section className="space-y-4">
           <div className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 p-4 shadow-sm">
@@ -255,11 +400,23 @@ export function TenantDashboard() {
                         <p className="text-xs opacity-60">{t.unit}</p>
                       </td>
                       <td>
-                        <span
-                          className={`badge badge-sm ${categoryBadgeClass(t.category)}`}
+                        <select
+                          className={`select select-bordered select-xs ${categoryBadgeClass(t.category)}`}
+                          value={t.category}
+                          onChange={(e) =>
+                            void updateCategory(
+                              t.id,
+                              e.target.value as TenantCategory
+                            )
+                          }
+                          aria-label={`Category for ${t.name}`}
                         >
-                          {tenantCategoryLabel(t.category)}
-                        </span>
+                          {TENANT_CATEGORIES.map((c) => (
+                            <option key={c.value} value={c.value}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td>{t.propertyLeased}</td>
                       <td
