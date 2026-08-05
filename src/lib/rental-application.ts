@@ -28,6 +28,9 @@ export type { DocumentMeta } from "@/lib/application-documents";
 export const RENTAL_APPLICATION_DRAFT_KEY = "harborline_rental_application_draft";
 export const RENTAL_APPLICATION_SUBMISSIONS_KEY =
   "harborline_rental_application_submissions";
+/** Full submitted application snapshots for locked post-submit review. */
+export const RENTAL_APPLICATION_FULL_SUBMISSIONS_KEY =
+  "harborline_rental_application_full_submissions";
 
 export const APPLICATION_STEPS = [
   { id: "unit", title: "Unit selection", short: "Unit" },
@@ -165,7 +168,11 @@ export type RentalApplicationDraft = {
 
   certifyAccuracy: boolean;
   certifyAuthorization: boolean;
+  /** Applicant acknowledges typed name is an electronic signature. */
+  certifyElectronicSignature: boolean;
   signatureName: string;
+  /** When true, management has unlocked edits after submission. */
+  managementEditsPermitted: boolean;
 
   status: "draft" | "submitted";
   confirmationNumber: string;
@@ -292,7 +299,9 @@ export function emptyRentalApplicationDraft(
 
     certifyAccuracy: false,
     certifyAuthorization: false,
+    certifyElectronicSignature: false,
     signatureName: "",
+    managementEditsPermitted: false,
 
     status: "draft",
     confirmationNumber: "",
@@ -372,6 +381,8 @@ export function readRentalApplicationDraft(): RentalApplicationDraft | null {
     feePaidAt: rest.feePaidAt ?? "",
     feeReceiptId: rest.feeReceiptId ?? "",
     feeIdempotencyKey,
+    certifyElectronicSignature: Boolean(rest.certifyElectronicSignature),
+    managementEditsPermitted: Boolean(rest.managementEditsPermitted),
   };
 }
 
@@ -405,6 +416,85 @@ export function writeSubmittedApplication(submission: SubmittedApplication) {
     RENTAL_APPLICATION_SUBMISSIONS_KEY,
     JSON.stringify([submission, ...existing])
   );
+}
+
+export function readFullSubmittedApplications(): RentalApplicationDraft[] {
+  if (typeof window === "undefined") return [];
+  const raw = window.localStorage.getItem(
+    RENTAL_APPLICATION_FULL_SUBMISSIONS_KEY
+  );
+  if (!raw) return [];
+  const parsed = JSON.parse(raw) as unknown;
+  if (!Array.isArray(parsed)) return [];
+  return parsed as RentalApplicationDraft[];
+}
+
+export function writeFullSubmittedApplication(draft: RentalApplicationDraft) {
+  if (typeof window === "undefined") return;
+  const existing = readFullSubmittedApplications().filter(
+    (item) => item.id !== draft.id
+  );
+  window.localStorage.setItem(
+    RENTAL_APPLICATION_FULL_SUBMISSIONS_KEY,
+    JSON.stringify([draft, ...existing])
+  );
+}
+
+export function readFullSubmittedApplication(
+  applicationId: string
+): RentalApplicationDraft | null {
+  return (
+    readFullSubmittedApplications().find((item) => item.id === applicationId) ??
+    null
+  );
+}
+
+/**
+ * Resolve an application for review: active draft first, then locked submission.
+ */
+export function readApplicationForReview(
+  applicationId: string
+): RentalApplicationDraft | null {
+  const draft = readRentalApplicationDraft();
+  if (draft && draft.id === applicationId) return draft;
+  return readFullSubmittedApplication(applicationId);
+}
+
+export function getApplicationStepIndex(stepId: ApplicationStepId): number {
+  return APPLICATION_STEPS.findIndex((step) => step.id === stepId);
+}
+
+export type ApplicationReviewIssue = {
+  stepId: ApplicationStepId;
+  stepTitle: string;
+  message: string;
+};
+
+/** Steps that must be complete before final submission (excludes review/done). */
+export const APPLICATION_REVIEW_CONTENT_STEPS: ApplicationStepId[] =
+  APPLICATION_STEPS.filter(
+    (step) => step.id !== "review" && step.id !== "confirmation"
+  ).map((step) => step.id);
+
+export function collectApplicationReviewIssues(
+  draft: RentalApplicationDraft
+): ApplicationReviewIssue[] {
+  const issues: ApplicationReviewIssue[] = [];
+  for (const stepId of APPLICATION_REVIEW_CONTENT_STEPS) {
+    const message = validateApplicationStep(draft, stepId);
+    if (!message) continue;
+    const step = APPLICATION_STEPS.find((item) => item.id === stepId);
+    issues.push({
+      stepId,
+      stepTitle: step?.title ?? stepId,
+      message,
+    });
+  }
+  return issues;
+}
+
+export function isApplicationLocked(draft: RentalApplicationDraft): boolean {
+  return draft.status === "submitted" && !draft.managementEditsPermitted;
 }
 
 function requireText(value: string, label: string): string | null {
@@ -576,12 +666,18 @@ export function validateApplicationStep(
         draft.feeRefundPolicyAcknowledged
         ? null
         : "Complete the application fee payment to continue.";
-    case "review":
+    case "review": {
+      const missing = collectApplicationReviewIssues(draft);
+      if (missing.length > 0) {
+        return `Resolve ${missing.length} missing item${missing.length === 1 ? "" : "s"} before submitting.`;
+      }
       return draft.certifyAccuracy &&
         draft.certifyAuthorization &&
+        draft.certifyElectronicSignature &&
         draft.signatureName.trim()
         ? null
-        : "Complete certification and type your full name to submit.";
+        : "Complete certifications and your electronic signature to submit.";
+    }
     case "confirmation":
       return null;
     default:
@@ -619,7 +715,12 @@ export function requiredFieldsHint(stepId: ApplicationStepId): string[] {
       "Optional supporting files",
     ],
     fee: ["Fee policy", "Billing details", "Mock payment", "Receipt"],
-    review: ["Certification and signature name"],
+    review: [
+      "Review all sections",
+      "Disclosures",
+      "Certifications",
+      "Electronic signature",
+    ],
     confirmation: [],
   };
   return map[stepId];

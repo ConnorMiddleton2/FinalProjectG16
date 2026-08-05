@@ -8,6 +8,7 @@ import {
   emptyRentalApplicationDraft,
   prefillFromProfile,
   readRentalApplicationDraft,
+  writeFullSubmittedApplication,
   writeRentalApplicationDraft,
   writeSubmittedApplication,
   type RentalApplicationDraft,
@@ -123,6 +124,7 @@ export function useRentalApplicationDraft(initialUnitId = "") {
       applicantFullName: submitted.applicantFullName,
       email: submitted.email,
     });
+    writeFullSubmittedApplication(submitted);
     clearRentalApplicationDraft();
     skipNextAutosave.current = true;
     setDraft(submitted);

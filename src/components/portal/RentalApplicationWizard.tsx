@@ -15,24 +15,23 @@ import { useRentalApplicationDraft } from "@/hooks/useRentalApplicationDraft";
 import { ApplicationPartiesStep } from "@/components/portal/ApplicationPartiesStep";
 import { ApplicationDocumentsUpload } from "@/components/portal/ApplicationDocumentsUpload";
 import { ApplicationFeeStep } from "@/components/portal/ApplicationFeeStep";
+import { ApplicationReviewStep } from "@/components/portal/ApplicationReviewStep";
 import { AVAILABLE_UNIT_DETAILS } from "@/lib/available-unit-details";
-import {
-  formatFeeAmount,
-  feePaymentMethodLabel,
-} from "@/lib/application-fee";
 import {
   APPLICATION_STEPS,
   createApplicationId,
+  getApplicationStepIndex,
   getMaximumDateOfBirth,
+  isApplicationLocked,
   MINIMUM_RENTAL_AGE,
   requiredFieldsHint,
   validateApplicationStep,
+  type ApplicationStepId,
   type Pet,
   type Reference,
   type RentalApplicationDraft,
   type Vehicle,
 } from "@/lib/rental-application";
-import { getPartyRoleMeta } from "@/lib/application-parties";
 
 function RequiredMark() {
   return (
@@ -187,6 +186,7 @@ function WizardInner() {
 
   const step = APPLICATION_STEPS[draft.stepIndex] ?? APPLICATION_STEPS[0];
   const isSubmitted = draft.status === "submitted";
+  const locked = isApplicationLocked(draft);
   const hints = requiredFieldsHint(step.id);
 
   const properties = useMemo(
@@ -206,12 +206,20 @@ function WizardInner() {
   );
 
   function patch(partial: Partial<RentalApplicationDraft>) {
+    if (locked) return;
     updateDraft((current) => ({ ...current, ...partial }));
     setValidationError(null);
   }
 
+  function goToStep(stepId: ApplicationStepId) {
+    if (locked) return;
+    const index = getApplicationStepIndex(stepId);
+    if (index < 0) return;
+    patch({ stepIndex: index });
+  }
+
   function goNext() {
-    if (isSubmitted) return;
+    if (locked || isSubmitted) return;
     const message = validateApplicationStep(draft, step.id);
     if (message) {
       setValidationError(message);
@@ -227,7 +235,7 @@ function WizardInner() {
   }
 
   function goBack() {
-    if (draft.stepIndex === 0 || isSubmitted) return;
+    if (draft.stepIndex === 0 || locked || isSubmitted) return;
     patch({ stepIndex: draft.stepIndex - 1 });
   }
 
@@ -843,7 +851,7 @@ function WizardInner() {
             primaryApplicantFullName={draft.applicantFullName}
             parties={draft.parties}
             onChange={(parties) => patch({ parties })}
-            disabled={isSubmitted}
+            disabled={locked}
           />
         ) : null}
 
@@ -1168,8 +1176,9 @@ function WizardInner() {
         {step.id === "documents" ? (
           <ApplicationDocumentsUpload
             documents={draft.documents}
-            disabled={isSubmitted}
+            disabled={locked}
             onChange={(updater) => {
+              if (locked) return;
               setValidationError(null);
               updateDraft((current) => ({
                 ...current,
@@ -1186,7 +1195,7 @@ function WizardInner() {
             floorPlan={draft.floorPlan}
             applicantFullName={draft.applicantFullName}
             applicantEmail={draft.email}
-            disabled={isSubmitted}
+            disabled={locked}
             fee={{
               feeAcknowledged: draft.feeAcknowledged,
               feeRefundPolicyAcknowledged: draft.feeRefundPolicyAcknowledged,
@@ -1208,93 +1217,20 @@ function WizardInner() {
         ) : null}
 
         {step.id === "review" ? (
-          <div className="space-y-5">
-            <h2 className="font-display text-3xl">Review and certification</h2>
-            <dl className="grid gap-3 sm:grid-cols-2">
-              {[
-                ["Property", draft.property],
-                ["Unit", draft.floorPlan],
-                ["Move-in", draft.desiredMoveInDate],
-                ["Applicant", draft.applicantFullName],
-                ["Email", draft.email],
-                ["Phone", draft.phone],
-                ["Income / mo", draft.monthlyIncome],
-                [
-                  "Household / parties",
-                  draft.parties.length === 0
-                    ? "Primary only"
-                    : draft.parties
-                        .map((party) => {
-                          const label = getPartyRoleMeta(party.role).shortLabel;
-                          return `${party.fullName || "Unnamed"} (${label})`;
-                        })
-                        .join("; "),
-                ],
-                ["Pets", draft.hasPets ? String(draft.pets.length) : "None"],
-                [
-                  "Documents",
-                  draft.documents
-                    .filter((doc) => doc.status === "success")
-                    .map((doc) => doc.fileName)
-                    .join(", ") || "None",
-                ],
-                [
-                  "Fee",
-                  draft.feeStatus === "paid"
-                    ? `${formatFeeAmount()} · ${feePaymentMethodLabel(draft.feePaymentMethod)} · ${draft.feeReceiptId}`
-                    : "Not paid",
-                ],
-              ].map(([label, value]) => (
-                <div
-                  key={label}
-                  className="rounded-2xl bg-[var(--harbor-sand)]/55 p-4"
-                >
-                  <dt className="text-xs uppercase tracking-wide opacity-50">
-                    {label}
-                  </dt>
-                  <dd className="mt-1 text-sm font-semibold">{value || "—"}</dd>
-                </div>
-              ))}
-            </dl>
-            <label className="flex items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-sm mt-0.5"
-                checked={draft.certifyAccuracy}
-                onChange={(event) =>
-                  patch({ certifyAccuracy: event.target.checked })
-                }
-              />
-              <span>
-                <RequiredMark /> I certify the information in this application is
-                true and complete.
-              </span>
-            </label>
-            <label className="flex items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-sm mt-0.5"
-                checked={draft.certifyAuthorization}
-                onChange={(event) =>
-                  patch({ certifyAuthorization: event.target.checked })
-                }
-              />
-              <span>
-                <RequiredMark /> I authorize Harborline to process this
-                application and related screening.
-              </span>
-            </label>
-            <label className="block max-w-md">
-              <FieldLabel required>Type your full name to sign</FieldLabel>
-              <input
-                className="input input-bordered w-full"
-                value={draft.signatureName}
-                onChange={(event) =>
-                  patch({ signatureName: event.target.value })
-                }
-              />
-            </label>
-          </div>
+          <ApplicationReviewStep
+            draft={draft}
+            onChange={(partial) => patch(partial)}
+            onEditStep={goToStep}
+            onSubmit={() => {
+              const message = validateApplicationStep(draft, "review");
+              if (message) {
+                setValidationError(message);
+                return;
+              }
+              submit();
+            }}
+            showSubmitButton={false}
+          />
         ) : null}
 
         {step.id === "confirmation" || isSubmitted ? (
@@ -1316,7 +1252,13 @@ function WizardInner() {
               <Link href="/portal/applications" className="btn btn-neutral">
                 View application status
               </Link>
-              <Link href="/portal/profile" className="btn btn-outline">
+              <Link
+                href={`/portal/applications/${draft.id}/review`}
+                className="btn btn-outline"
+              >
+                View locked review
+              </Link>
+              <Link href="/portal/profile" className="btn btn-ghost">
                 Applicant profile
               </Link>
               <button type="button" className="btn btn-ghost" onClick={startNew}>

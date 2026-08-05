@@ -117,6 +117,14 @@ export default function ApplicationStatusPage() {
                     </div>
                     <span className="badge badge-info">In review</span>
                   </div>
+                  <div className="mt-4">
+                    <Link
+                      href={`/portal/applications/${submission.applicationId}/review`}
+                      className="btn btn-outline btn-sm"
+                    >
+                      View submitted review
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>
