@@ -144,7 +144,7 @@ export function BudgetDashboard() {
             {config.label}
           </h2>
           <p className="text-[11px] opacity-60">
-            Budgets set by Management · code receipts SM001–SM009
+            Budgets set by Management · code receipts SM001–SM005
           </p>
         </div>
         <div className="rounded-lg border border-[#8aa3b5]/45 bg-[#d5dee5] px-3 py-1 text-right">

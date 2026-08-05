@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   Landmark,
   ScrollText,
+  Wallet,
 } from "lucide-react";
 import { hasTeamAccess } from "@/lib/team-auth";
 import { MgShell, tileClass } from "@/components/mgmt/MgShell";
@@ -18,6 +19,13 @@ const categories = [
     icon: ScrollText,
     blurb:
       "Diligence, manager-signed contracts to the owner portal, and temp passwords.",
+  },
+  {
+    title: "Department budgets",
+    href: "/ops/management/budgets",
+    icon: Wallet,
+    blurb:
+      "Set category budgets for Maintenance, Sales & Marketing, and Executive.",
   },
   {
     title: "Capital expenditures",
@@ -51,7 +59,7 @@ const categories = [
     href: "/ops/management/approvals",
     icon: ClipboardCheck,
     blurb:
-      "Approve department expenses so they solidify against budgets.",
+      "Review expense details, approve, and send to Accounts Payable.",
   },
 ] as const;
 

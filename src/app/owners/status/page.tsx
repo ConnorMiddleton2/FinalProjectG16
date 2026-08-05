@@ -102,9 +102,10 @@ export default function OwnerApplicationStatusPage() {
           ) : null}
 
           {state.applications?.map((app) => (
-            <article
+            <Link
               key={app.id}
-              className="space-y-2 rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/40 p-4"
+              href={`/owners/status/${app.id}?email=${encodeURIComponent(state.email || "")}`}
+              className="owner-card-interactive block space-y-2 rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/40 p-4 transition hover:border-[var(--harbor-mid)]/40"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-semibold text-[var(--harbor-ink)]">
@@ -121,21 +122,26 @@ export default function OwnerApplicationStatusPage() {
                 {app.propertyCount === 1 ? "y" : "ies"}
                 {app.companyName ? ` · ${app.companyName}` : ""}
               </p>
-              <p className="text-xs font-mono opacity-50">ID: {app.id}</p>
+              {app.contractSent ? (
+                <p className="text-xs font-medium text-[var(--harbor-mid)]">
+                  Contract available — open to review &amp; sign
+                </p>
+              ) : (
+                <p className="text-xs font-medium text-[var(--harbor-ink)]/70">
+                  Click to view the details you submitted
+                </p>
+              )}
               {app.reviewNotes ? (
                 <OwnerAlert variant="info" title="Harborline note">
                   {app.reviewNotes}
                 </OwnerAlert>
               ) : null}
               {app.status === "approved" ? (
-                <Link
-                  href="/owners"
-                  className="owner-btn-primary owner-btn-primary-sm mt-1"
-                >
-                  Go to owner login
-                </Link>
+                <span className="owner-btn-primary owner-btn-primary-sm mt-1 inline-flex">
+                  Approved — open for login link
+                </span>
               ) : null}
-            </article>
+            </Link>
           ))}
         </div>
       </div>

@@ -20,6 +20,8 @@ export const COLLECTIONS = {
   smReceipts: "sm_receipts",
   ownerContracts: "owner_contracts",
   departmentExpenses: "department_expenses",
+  departmentBudgets: "department_budgets",
+  apPayables: "ap_payables",
   missedPayments: "missed_payments",
   capitalExpenditures: "capital_expenditures",
 } as const;

@@ -296,6 +296,9 @@ export async function lookupOwnerApplications(input: {
       reviewNotes: a.reviewNotes ?? "",
       reviewedAt: a.reviewedAt ?? "",
       propertyCount: a.properties.length,
+      mgmtStatus: a.mgmtStatus ?? "new",
+      contractSent: Boolean(a.contractId || a.contractSentAt),
+      accountMessage: a.accountMessage ?? "",
     })),
   };
 }
