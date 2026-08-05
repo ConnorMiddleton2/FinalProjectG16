@@ -358,7 +358,11 @@ export function MaintenanceRequestDetail({ requestId }: Props) {
           </p>
 
           {actionError ? (
-            <div className="alert alert-error mt-4" role="alert">
+            <div
+              id={`${updateFieldId}-error`}
+              className="alert alert-error mt-4"
+              role="alert"
+            >
               <span>{actionError}</span>
             </div>
           ) : null}
@@ -380,6 +384,10 @@ export function MaintenanceRequestDetail({ requestId }: Props) {
                 placeholder="Share new details, availability, or questions…"
                 maxLength={1000}
                 disabled={busy}
+                aria-invalid={Boolean(actionError)}
+                aria-describedby={
+                  actionError ? `${updateFieldId}-error` : undefined
+                }
               />
               <div className="label">
                 <span className="label-text-alt text-[var(--harbor-muted)]">
