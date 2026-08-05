@@ -107,7 +107,11 @@ export function useRentalApplicationDraft(initialUnitId = "") {
       confirmationNumber,
       submittedAt,
       stepIndex: 15,
-      feePaymentReference: draft.feePaymentReference || `MOCK-${confirmationNumber}`,
+      feePaymentReference:
+        draft.feePaymentReference ||
+        (draft.feeReceiptId
+          ? `MOCK-PAY-${draft.feeReceiptId}`
+          : `MOCK-${confirmationNumber}`),
     };
 
     writeSubmittedApplication({

@@ -16,6 +16,12 @@ import {
   validateRequiredDocuments,
   type DocumentMeta,
 } from "@/lib/application-documents";
+import {
+  createFeeIdempotencyKey,
+  normalizeLegacyFeePaymentMethod,
+  type FeePaymentMethod,
+  type FeePaymentStatus,
+} from "@/lib/application-fee";
 
 export type { DocumentMeta } from "@/lib/application-documents";
 
@@ -141,9 +147,21 @@ export type RentalApplicationDraft = {
   documents: DocumentMeta[];
 
   feeAcknowledged: boolean;
-  feePaymentMethod: "" | "card" | "ach-placeholder";
+  feeRefundPolicyAcknowledged: boolean;
+  feePaymentMethod: FeePaymentMethod;
+  feeBillingName: string;
+  feeBillingEmail: string;
+  feeBillingStreet: string;
+  feeBillingCity: string;
+  feeBillingState: string;
+  feeBillingZip: string;
+  feeStatus: FeePaymentStatus;
   /** Mock payment reference only — never real card/bank numbers. */
   feePaymentReference: string;
+  feePaidAt: string;
+  feeReceiptId: string;
+  /** Stable key used to block duplicate fee charges for this application. */
+  feeIdempotencyKey: string;
 
   certifyAccuracy: boolean;
   certifyAuthorization: boolean;
@@ -258,8 +276,19 @@ export function emptyRentalApplicationDraft(
     documents: [],
 
     feeAcknowledged: false,
+    feeRefundPolicyAcknowledged: false,
     feePaymentMethod: "",
+    feeBillingName: "",
+    feeBillingEmail: "",
+    feeBillingStreet: "",
+    feeBillingCity: "",
+    feeBillingState: "",
+    feeBillingZip: "",
+    feeStatus: "unpaid",
     feePaymentReference: "",
+    feePaidAt: "",
+    feeReceiptId: "",
+    feeIdempotencyKey: "",
 
     certifyAccuracy: false,
     certifyAuthorization: false,
@@ -321,7 +350,29 @@ export function readRentalApplicationDraft(): RentalApplicationDraft | null {
   const documents = Array.isArray(rest.documents)
     ? rest.documents.map((doc) => normalizeDocumentMeta(doc))
     : [];
-  return { ...base, ...rest, parties: syncedParties, documents };
+  const feePaymentMethod = normalizeLegacyFeePaymentMethod(
+    rest.feePaymentMethod as string | undefined
+  );
+  const feeIdempotencyKey =
+    rest.feeIdempotencyKey || createFeeIdempotencyKey(rest.id);
+  return {
+    ...base,
+    ...rest,
+    parties: syncedParties,
+    documents,
+    feePaymentMethod,
+    feeRefundPolicyAcknowledged: Boolean(rest.feeRefundPolicyAcknowledged),
+    feeBillingName: rest.feeBillingName ?? "",
+    feeBillingEmail: rest.feeBillingEmail ?? "",
+    feeBillingStreet: rest.feeBillingStreet ?? "",
+    feeBillingCity: rest.feeBillingCity ?? "",
+    feeBillingState: rest.feeBillingState ?? "",
+    feeBillingZip: rest.feeBillingZip ?? "",
+    feeStatus: rest.feeStatus ?? (rest.feePaymentReference ? "paid" : "unpaid"),
+    feePaidAt: rest.feePaidAt ?? "",
+    feeReceiptId: rest.feeReceiptId ?? "",
+    feeIdempotencyKey,
+  };
 }
 
 export function writeRentalApplicationDraft(draft: RentalApplicationDraft) {
@@ -519,9 +570,12 @@ export function validateApplicationStep(
     case "documents":
       return validateRequiredDocuments(draft.documents);
     case "fee":
-      return draft.feeAcknowledged && draft.feePaymentMethod
+      return draft.feeStatus === "paid" &&
+        draft.feeReceiptId &&
+        draft.feeAcknowledged &&
+        draft.feeRefundPolicyAcknowledged
         ? null
-        : "Acknowledge the fee and choose a payment method.";
+        : "Complete the application fee payment to continue.";
     case "review":
       return draft.certifyAccuracy &&
         draft.certifyAuthorization &&
@@ -564,7 +618,7 @@ export function requiredFieldsHint(stepId: ApplicationStepId): string[] {
       "Proof of income",
       "Optional supporting files",
     ],
-    fee: ["Fee acknowledgment and method"],
+    fee: ["Fee policy", "Billing details", "Mock payment", "Receipt"],
     review: ["Certification and signature name"],
     confirmation: [],
   };

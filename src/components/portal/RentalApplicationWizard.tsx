@@ -14,7 +14,12 @@ import {
 import { useRentalApplicationDraft } from "@/hooks/useRentalApplicationDraft";
 import { ApplicationPartiesStep } from "@/components/portal/ApplicationPartiesStep";
 import { ApplicationDocumentsUpload } from "@/components/portal/ApplicationDocumentsUpload";
+import { ApplicationFeeStep } from "@/components/portal/ApplicationFeeStep";
 import { AVAILABLE_UNIT_DETAILS } from "@/lib/available-unit-details";
+import {
+  formatFeeAmount,
+  feePaymentMethodLabel,
+} from "@/lib/application-fee";
 import {
   APPLICATION_STEPS,
   createApplicationId,
@@ -1175,51 +1180,31 @@ function WizardInner() {
         ) : null}
 
         {step.id === "fee" ? (
-          <div className="space-y-4">
-            <h2 className="font-display text-3xl">Application fee</h2>
-            <div className="rounded-2xl bg-[var(--harbor-sand)]/70 p-4 text-sm">
-              <p className="font-semibold">$55 per adult applicant</p>
-              <p className="mt-1 text-[var(--harbor-ink)]/65">
-                Non-refundable once screening begins. This demo records
-                acknowledgment only — no real card or bank numbers are collected.
-              </p>
-            </div>
-            <label className="flex items-start gap-3 text-sm">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-sm mt-0.5"
-                checked={draft.feeAcknowledged}
-                onChange={(event) =>
-                  patch({ feeAcknowledged: event.target.checked })
-                }
-              />
-              <span>
-                <RequiredMark /> I understand the application fee amount and
-                terms.
-              </span>
-            </label>
-            <label className="block max-w-md">
-              <FieldLabel required>Payment method</FieldLabel>
-              <select
-                className="select select-bordered w-full"
-                value={draft.feePaymentMethod}
-                onChange={(event) =>
-                  patch({
-                    feePaymentMethod: event.target.value as
-                      | ""
-                      | "card"
-                      | "ach-placeholder",
-                  })
-                }
-              >
-                <option value="">Select method</option>
-                <option value="card">Card (processed offline / mock)</option>
-                <option value="ach-placeholder">
-                  Bank transfer (details collected securely offline)
-                </option>
-              </select>
-            </label>
-          </div>
+          <ApplicationFeeStep
+            applicationId={draft.id}
+            property={draft.property}
+            floorPlan={draft.floorPlan}
+            applicantFullName={draft.applicantFullName}
+            applicantEmail={draft.email}
+            disabled={isSubmitted}
+            fee={{
+              feeAcknowledged: draft.feeAcknowledged,
+              feeRefundPolicyAcknowledged: draft.feeRefundPolicyAcknowledged,
+              feePaymentMethod: draft.feePaymentMethod,
+              feeBillingName: draft.feeBillingName,
+              feeBillingEmail: draft.feeBillingEmail,
+              feeBillingStreet: draft.feeBillingStreet,
+              feeBillingCity: draft.feeBillingCity,
+              feeBillingState: draft.feeBillingState,
+              feeBillingZip: draft.feeBillingZip,
+              feeStatus: draft.feeStatus,
+              feePaymentReference: draft.feePaymentReference,
+              feePaidAt: draft.feePaidAt,
+              feeReceiptId: draft.feeReceiptId,
+              feeIdempotencyKey: draft.feeIdempotencyKey,
+            }}
+            onChange={(partial) => patch(partial)}
+          />
         ) : null}
 
         {step.id === "review" ? (
@@ -1253,7 +1238,12 @@ function WizardInner() {
                     .map((doc) => doc.fileName)
                     .join(", ") || "None",
                 ],
-                ["Fee method", draft.feePaymentMethod || "Not selected"],
+                [
+                  "Fee",
+                  draft.feeStatus === "paid"
+                    ? `${formatFeeAmount()} · ${feePaymentMethodLabel(draft.feePaymentMethod)} · ${draft.feeReceiptId}`
+                    : "Not paid",
+                ],
               ].map(([label, value]) => (
                 <div
                   key={label}
