@@ -4,6 +4,13 @@ import {
   listSharedRecords,
   upsertSharedRecord,
 } from "@/lib/shared-store";
+import {
+  generateTemporaryPassword,
+  hashPassword,
+  isHashedPassword,
+  verifyPassword,
+} from "@/lib/owner-password";
+import { provisionPropertiesFromApplication } from "@/lib/owner-properties";
 import { cookies } from "next/headers";
 
 export const OWNER_COOKIE = "harborline_owner";
@@ -11,9 +18,11 @@ export const OWNER_COOKIE = "harborline_owner";
 export type OwnerAccount = {
   id: string;
   email: string;
+  /** scrypt hash (salt:hash) or legacy plaintext during migration */
   password: string;
   fullName: string;
   createdAt: string;
+  mustChangePassword?: boolean;
 };
 
 export type OwnerApplicationProperty = {
@@ -21,6 +30,12 @@ export type OwnerApplicationProperty = {
   location: string;
   squareFeet: string;
 };
+
+export type OwnerApplicationStatus =
+  | "pending"
+  | "approved"
+  | "declined"
+  | "needs_info";
 
 export type OwnerApplication = {
   id: string;
@@ -30,17 +45,23 @@ export type OwnerApplication = {
   companyName: string;
   properties: OwnerApplicationProperty[];
   message: string;
-  status: "pending" | "approved" | "declined";
+  status: OwnerApplicationStatus;
   createdAt: string;
+  /** Staff review audit */
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNotes?: string;
+  reviewerDecision?: OwnerApplicationStatus;
 };
 
 const SEED_OWNERS: OwnerAccount[] = [
   {
     id: "00000000-0000-4000-8000-0000000000b0",
     email: "bobowner@building.com",
-    password: "12345",
+    password: hashPassword("12345"),
     fullName: "Bob Owner",
     createdAt: new Date().toISOString(),
+    mustChangePassword: false,
   },
 ];
 
@@ -50,10 +71,10 @@ async function ensureSeedOwners() {
     client,
     COLLECTIONS.ownerAccounts
   );
-  const hasBob = owners.some(
+  const bob = owners.find(
     (o) => o.email.toLowerCase() === "bobowner@building.com"
   );
-  if (!hasBob) {
+  if (!bob) {
     for (const owner of SEED_OWNERS) {
       await upsertSharedRecord(
         client,
@@ -62,6 +83,18 @@ async function ensureSeedOwners() {
         owner as unknown as Record<string, unknown>
       );
     }
+    return;
+  }
+
+  // Migrate legacy plaintext seed password to hash when still "12345"
+  if (!isHashedPassword(bob.password) && bob.password === "12345") {
+    const updated = { ...bob, password: hashPassword("12345") };
+    await upsertSharedRecord(
+      client,
+      COLLECTIONS.ownerAccounts,
+      bob.id,
+      updated as unknown as Record<string, unknown>
+    );
   }
 }
 
@@ -87,10 +120,21 @@ export async function findOwner(email: string) {
   );
 }
 
+export async function saveOwnerAccount(account: OwnerAccount) {
+  const client = await createClient();
+  await upsertSharedRecord(
+    client,
+    COLLECTIONS.ownerAccounts,
+    account.id,
+    account as unknown as Record<string, unknown>
+  );
+}
+
 export async function createOwnerAccount(input: {
   email: string;
   password: string;
   fullName: string;
+  mustChangePassword?: boolean;
 }) {
   const email = input.email.trim().toLowerCase();
   const existing = await findOwner(email);
@@ -104,19 +148,14 @@ export async function createOwnerAccount(input: {
   const account: OwnerAccount = {
     id: crypto.randomUUID(),
     email,
-    password: input.password,
+    password: hashPassword(input.password),
     fullName: input.fullName.trim() || "Property Owner",
     createdAt: new Date().toISOString(),
+    mustChangePassword: input.mustChangePassword ?? true,
   };
 
-  const client = await createClient();
-  await upsertSharedRecord(
-    client,
-    COLLECTIONS.ownerAccounts,
-    account.id,
-    account as unknown as Record<string, unknown>
-  );
-  return { ok: true as const, email };
+  await saveOwnerAccount(account);
+  return { ok: true as const, email, account };
 }
 
 export async function submitOwnerApplication(input: {
@@ -152,12 +191,15 @@ export async function submitOwnerApplication(input: {
   }
 
   const apps = await readOwnerApplications();
-  const pendingSameEmail = apps.find(
-    (a) => a.email === email && a.status === "pending"
+  const openSameEmail = apps.find(
+    (a) =>
+      a.email === email &&
+      (a.status === "pending" || a.status === "needs_info")
   );
-  if (pendingSameEmail) {
+  if (openSameEmail) {
     return {
-      error: "You already have a pending application with this email." as const,
+      error: "You already have an open application with this email." as const,
+      applicationId: openSameEmail.id,
     };
   }
 
@@ -183,13 +225,57 @@ export async function submitOwnerApplication(input: {
   return { ok: true as const, application };
 }
 
-export async function getPendingOwnerApplications() {
+/** Public status lookup — returns only the caller's application by email (+ optional id). */
+export async function lookupOwnerApplications(input: {
+  email: string;
+  applicationId?: string;
+}) {
+  const email = input.email.trim().toLowerCase();
+  if (!email) {
+    return { error: "Email is required." as const };
+  }
+
   const apps = await readOwnerApplications();
-  return apps.filter((a) => a.status === "pending");
+  let matches = apps.filter((a) => a.email === email);
+
+  if (input.applicationId?.trim()) {
+    matches = matches.filter((a) => a.id === input.applicationId!.trim());
+  }
+
+  // Newest first
+  matches.sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  return {
+    ok: true as const,
+    applications: matches.map((a) => ({
+      id: a.id,
+      status: a.status,
+      fullName: a.fullName,
+      companyName: a.companyName,
+      createdAt: a.createdAt,
+      reviewNotes: a.reviewNotes ?? "",
+      reviewedAt: a.reviewedAt ?? "",
+      propertyCount: a.properties.length,
+    })),
+  };
+}
+
+export async function getOpenOwnerApplications() {
+  const apps = await readOwnerApplications();
+  return apps.filter(
+    (a) => a.status === "pending" || a.status === "needs_info"
+  );
+}
+
+export async function getPendingOwnerApplications() {
+  return getOpenOwnerApplications();
 }
 
 export async function countPendingOwnerApplications() {
-  const pending = await getPendingOwnerApplications();
+  const pending = await getOpenOwnerApplications();
   return pending.length;
 }
 
@@ -198,75 +284,165 @@ export async function getOwnerApplicationById(id: string) {
   return apps.find((a) => a.id === id) ?? null;
 }
 
+async function writeApplication(updated: OwnerApplication) {
+  const client = await createClient();
+  await upsertSharedRecord(
+    client,
+    COLLECTIONS.ownerApplications,
+    updated.id,
+    updated as unknown as Record<string, unknown>
+  );
+}
+
 export async function updateOwnerApplicationStatus(
   id: string,
-  status: OwnerApplication["status"]
+  status: OwnerApplicationStatus,
+  audit?: { reviewedBy: string; reviewNotes?: string }
 ) {
   const app = await getOwnerApplicationById(id);
   if (!app) {
     return { error: "Application not found." as const };
   }
-  const updated = { ...app, status };
-  const client = await createClient();
-  await upsertSharedRecord(
-    client,
-    COLLECTIONS.ownerApplications,
-    id,
-    updated as unknown as Record<string, unknown>
-  );
+  const updated: OwnerApplication = {
+    ...app,
+    status,
+    reviewedBy: audit?.reviewedBy ?? app.reviewedBy,
+    reviewedAt: audit ? new Date().toISOString() : app.reviewedAt,
+    reviewNotes: audit?.reviewNotes ?? app.reviewNotes,
+    reviewerDecision: status,
+  };
+  await writeApplication(updated);
   return { ok: true as const, application: updated };
 }
 
 export async function approveOwnerApplication(input: {
   applicationId: string;
-  password: string;
+  password?: string;
+  reviewedBy: string;
+  reviewNotes?: string;
 }) {
   const app = await getOwnerApplicationById(input.applicationId);
   if (!app) {
     return { error: "Application not found." as const };
   }
-  if (app.status !== "pending") {
-    return { error: "This application is no longer pending." as const };
+  if (app.status !== "pending" && app.status !== "needs_info") {
+    return { error: "This application is no longer open." as const };
   }
-  if (!input.password.trim()) {
-    return { error: "Choose a temporary password for the owner." as const };
-  }
+
+  const temporaryPassword =
+    input.password?.trim() || generateTemporaryPassword();
 
   const created = await createOwnerAccount({
     email: app.email,
-    password: input.password.trim(),
+    password: temporaryPassword,
     fullName: app.fullName,
+    mustChangePassword: true,
   });
   if ("error" in created) {
     return { error: created.error };
   }
 
-  await updateOwnerApplicationStatus(app.id, "approved");
+  await provisionPropertiesFromApplication(app, created.account);
+
+  const updated: OwnerApplication = {
+    ...app,
+    status: "approved",
+    reviewedBy: input.reviewedBy,
+    reviewedAt: new Date().toISOString(),
+    reviewNotes: input.reviewNotes?.trim() || app.reviewNotes || "",
+    reviewerDecision: "approved",
+  };
+  await writeApplication(updated);
+
   return {
     ok: true as const,
     email: created.email,
-    password: input.password.trim(),
+    /** One-time plaintext for secure out-of-band handoff — never stored. */
+    temporaryPassword,
     fullName: app.fullName,
+    propertiesProvisioned: app.properties.length,
   };
 }
 
-export async function declineOwnerApplication(applicationId: string) {
-  const app = await getOwnerApplicationById(applicationId);
+export async function declineOwnerApplication(input: {
+  applicationId: string;
+  reviewedBy: string;
+  reviewNotes?: string;
+}) {
+  const app = await getOwnerApplicationById(input.applicationId);
   if (!app) {
     return { error: "Application not found." as const };
   }
-  if (app.status !== "pending") {
-    return { error: "This application is no longer pending." as const };
+  if (app.status !== "pending" && app.status !== "needs_info") {
+    return { error: "This application is no longer open." as const };
   }
-  return updateOwnerApplicationStatus(applicationId, "declined");
+  return updateOwnerApplicationStatus(input.applicationId, "declined", {
+    reviewedBy: input.reviewedBy,
+    reviewNotes: input.reviewNotes,
+  });
+}
+
+export async function requestOwnerApplicationInfo(input: {
+  applicationId: string;
+  reviewedBy: string;
+  reviewNotes: string;
+}) {
+  const notes = input.reviewNotes.trim();
+  if (!notes) {
+    return { error: "Add a note describing what information is needed." as const };
+  }
+  const app = await getOwnerApplicationById(input.applicationId);
+  if (!app) {
+    return { error: "Application not found." as const };
+  }
+  if (app.status !== "pending" && app.status !== "needs_info") {
+    return { error: "This application is no longer open." as const };
+  }
+  return updateOwnerApplicationStatus(input.applicationId, "needs_info", {
+    reviewedBy: input.reviewedBy,
+    reviewNotes: notes,
+  });
 }
 
 export async function verifyOwnerLogin(email: string, password: string) {
   const owner = await findOwner(email);
-  if (!owner || owner.password !== password) {
+  if (!owner || !verifyPassword(password, owner.password)) {
     return null;
   }
+
+  // Migrate legacy plaintext to hash on successful login
+  if (!isHashedPassword(owner.password)) {
+    const migrated = {
+      ...owner,
+      password: hashPassword(password),
+    };
+    await saveOwnerAccount(migrated);
+    return migrated;
+  }
+
   return owner;
+}
+
+export async function changeOwnerPassword(input: {
+  email: string;
+  currentPassword: string;
+  newPassword: string;
+}) {
+  const owner = await findOwner(input.email);
+  if (!owner || !verifyPassword(input.currentPassword, owner.password)) {
+    return { error: "Current password is incorrect." as const };
+  }
+  if (input.newPassword.trim().length < 8) {
+    return { error: "New password must be at least 8 characters." as const };
+  }
+
+  const updated: OwnerAccount = {
+    ...owner,
+    password: hashPassword(input.newPassword.trim()),
+    mustChangePassword: false,
+  };
+  await saveOwnerAccount(updated);
+  return { ok: true as const };
 }
 
 export async function setOwnerSession(email: string) {

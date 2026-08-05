@@ -90,6 +90,12 @@ export default function OwnerAuthPage() {
             </button>
           </div>
 
+          <p className="mt-3 text-center text-sm">
+            <Link href="/owners/status" className="link link-primary">
+              Check application status
+            </Link>
+          </p>
+
           <h1 className="mt-5 text-xl font-semibold text-[var(--harbor-ink)]">
             {mode === "login" ? "Owner sign in" : "Owner access application"}
           </h1>

@@ -4,13 +4,31 @@ import { revalidatePath } from "next/cache";
 import {
   approveOwnerApplication,
   declineOwnerApplication,
+  requestOwnerApplicationInfo,
 } from "@/lib/owner-auth";
+import {
+  createOwnerApproval,
+  exceedsApprovalThreshold,
+  parseAmount,
+  resolveThresholdForAmountCheck,
+} from "@/lib/owner-approvals";
+import { createClient } from "@/lib/supabase/server";
+import {
+  COLLECTIONS,
+  listSharedRecords,
+} from "@/lib/shared-store";
+import type { ManagementContractDraft } from "@/lib/management-contract";
 import { hasTeamAccess } from "@/lib/team-auth";
 
 export type StaffApplicationState = {
   error?: string;
   success?: string;
+  temporaryPassword?: string;
 };
+
+function reviewerLabel() {
+  return "Harborline staff";
+}
 
 export async function createAccountFromApplication(
   _prev: StaffApplicationState,
@@ -21,18 +39,26 @@ export async function createAccountFromApplication(
   }
 
   const applicationId = String(formData.get("applicationId") ?? "");
-  const password = String(formData.get("password") ?? "");
+  const password = String(formData.get("password") ?? "").trim();
+  const reviewNotes = String(formData.get("reviewNotes") ?? "");
 
-  const result = await approveOwnerApplication({ applicationId, password });
+  const result = await approveOwnerApplication({
+    applicationId,
+    password: password || undefined,
+    reviewedBy: reviewerLabel(),
+    reviewNotes,
+  });
   if ("error" in result) {
     return { error: result.error };
   }
 
   revalidatePath("/ops/properties");
   revalidatePath("/ops/properties/applications");
+  revalidatePath("/owners/dashboard");
 
   return {
-    success: `Account created for ${result.fullName} (${result.email}). Temporary password: ${result.password}`,
+    success: `Account created for ${result.fullName} (${result.email}). ${result.propertiesProvisioned} draft propert${result.propertiesProvisioned === 1 ? "y" : "ies"} linked. Copy the temporary password below and share it out of band — it is hashed at rest and will not be shown again.`,
+    temporaryPassword: result.temporaryPassword,
   };
 }
 
@@ -45,7 +71,12 @@ export async function declineApplicationAction(
   }
 
   const applicationId = String(formData.get("applicationId") ?? "");
-  const result = await declineOwnerApplication(applicationId);
+  const reviewNotes = String(formData.get("reviewNotes") ?? "");
+  const result = await declineOwnerApplication({
+    applicationId,
+    reviewedBy: reviewerLabel(),
+    reviewNotes,
+  });
   if ("error" in result) {
     return { error: result.error };
   }
@@ -53,4 +84,102 @@ export async function declineApplicationAction(
   revalidatePath("/ops/properties");
   revalidatePath("/ops/properties/applications");
   return { success: "Application declined." };
+}
+
+export async function requestMoreInfoAction(
+  _prev: StaffApplicationState,
+  formData: FormData
+): Promise<StaffApplicationState> {
+  if (!(await hasTeamAccess())) {
+    return { error: "Team access required." };
+  }
+
+  const applicationId = String(formData.get("applicationId") ?? "");
+  const reviewNotes = String(formData.get("reviewNotes") ?? "");
+  const result = await requestOwnerApplicationInfo({
+    applicationId,
+    reviewedBy: reviewerLabel(),
+    reviewNotes,
+  });
+  if ("error" in result) {
+    return { error: result.error };
+  }
+
+  revalidatePath("/ops/properties");
+  revalidatePath("/ops/properties/applications");
+  return {
+    success: "Marked as needs more information. Applicant can see your note on the status page.",
+  };
+}
+
+export type StaffApprovalRequestState = {
+  error?: string;
+  success?: string;
+};
+
+export async function requestOwnerSpendApproval(
+  _prev: StaffApprovalRequestState,
+  formData: FormData
+): Promise<StaffApprovalRequestState> {
+  if (!(await hasTeamAccess())) {
+    return { error: "Team access required." };
+  }
+
+  const propertyId = String(formData.get("propertyId") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const amountRaw = String(formData.get("amount") ?? "");
+  const vendorName = String(formData.get("vendorName") ?? "").trim();
+  const staffNote = String(formData.get("staffNote") ?? "").trim();
+  const workOrderId = String(formData.get("workOrderId") ?? "").trim();
+  const amount = parseAmount(amountRaw);
+
+  if (!propertyId || !title) {
+    return { error: "Property and title are required." };
+  }
+
+  const client = await createClient();
+  const properties = await listSharedRecords<ManagementContractDraft>(
+    client,
+    COLLECTIONS.managedProperties
+  );
+  const property = properties.find((p) => p.id === propertyId);
+  if (!property) {
+    return { error: "Property not found." };
+  }
+  if (!property.ownerEmail?.trim()) {
+    return {
+      error: "This property has no owner email — link an owner before requesting approval.",
+    };
+  }
+
+  const threshold = resolveThresholdForAmountCheck(
+    property.ownerApprovalThreshold
+  );
+  if (!exceedsApprovalThreshold(amount, property.ownerApprovalThreshold)) {
+    return {
+      error: `Amount must be at least the owner approval threshold ($${threshold.toLocaleString()}).`,
+    };
+  }
+
+  const result = await createOwnerApproval({
+    propertyId: property.id,
+    propertyName: property.propertyName,
+    ownerEmail: property.ownerEmail.trim().toLowerCase(),
+    ownerAccountId: property.ownerAccountId || "",
+    workOrderId,
+    title,
+    description,
+    amount,
+    vendorName,
+    staffNote,
+    requestedBy: reviewerLabel(),
+  });
+
+  revalidatePath("/owners/dashboard/approvals");
+  revalidatePath(`/owners/dashboard/properties/${property.id}`);
+
+  return {
+    success: `Approval request sent to ${result.approval.ownerEmail} for $${amount.toLocaleString()}.`,
+  };
 }

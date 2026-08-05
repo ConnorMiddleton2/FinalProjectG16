@@ -72,3 +72,20 @@ body {
 .welcome-wash {
   animation: welcome-wash 8s ease-in-out infinite;
 }
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+}
+

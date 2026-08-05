@@ -44,11 +44,12 @@ export default async function PendingApplicationsPage() {
 
         <div>
           <h1 className="font-display text-4xl tracking-tight text-[var(--harbor-ink)]">
-            Pending applications
+            Owner applications
           </h1>
           <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/65">
-            Review owner access requests, reach out by email or phone, then create
-            their account when approved.
+            Review pending and needs-info requests, request more details, decline,
+            or approve — approval creates a hashed login and draft managed
+            properties linked to the owner.
           </p>
         </div>
 
