@@ -17,17 +17,31 @@ export function getMockMakePaymentContext(): MakePaymentContext {
     maxPayable: 4875,
     methods: [
       {
+        id: "pm-ach",
+        brand: "ACH",
+        last4: "9910",
+        kind: "ACH",
+        isDefault: true,
+      },
+      {
+        id: "pm-check",
+        brand: "Deliver",
+        last4: "CHCK",
+        kind: "Check",
+        isDefault: false,
+      },
+      {
+        id: "pm-monthly",
+        brand: "Monthly",
+        last4: "AUTO",
+        kind: "Monthly",
+        isDefault: false,
+      },
+      {
         id: "pm-1",
         brand: "Visa",
         last4: "4242",
         kind: "Card",
-        isDefault: true,
-      },
-      {
-        id: "pm-2",
-        brand: "Bank",
-        last4: "9910",
-        kind: "Bank",
         isDefault: false,
       },
     ],

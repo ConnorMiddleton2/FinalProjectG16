@@ -39,6 +39,38 @@ export async function getTenant(): Promise<ServiceResult<Tenant>> {
     // BACKEND_TODO: profile for auth.uid() only
     const stored = loadStoredProfile(auth.data.tenantScopeId);
     if (stored) return ok(stored, "mock");
+    if (auth.data.propertyName || auth.data.accountStatus === "active") {
+      return ok(
+        {
+          legalName: auth.data.displayName,
+          propertyName: auth.data.propertyName || "Assigned property",
+          unitNumber: auth.data.unit || "—",
+          tenantId: auth.data.tenantScopeId,
+          leaseStatus: "Active",
+          preferredName: auth.data.displayName,
+          email: auth.data.email,
+          phone: "",
+          preferredContactMethod: "email",
+          emergencyContact: { name: "", phone: "", relationship: "" },
+          vehicle: {
+            hasVehicle: false,
+            makeModel: "",
+            color: "",
+            licensePlate: "",
+            parkingPermit: "",
+          },
+          pets: { hasPets: false, summary: "", details: "" },
+          communication: {
+            emailUpdates: true,
+            smsUpdates: false,
+            portalMessages: true,
+            phoneCalls: false,
+            marketingOptIn: false,
+          },
+        },
+        "live"
+      );
+    }
     if (!sessionOwnsDemoFixtures(auth.data)) {
       return ok(
         {

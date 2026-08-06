@@ -48,9 +48,24 @@ function resolveDemoSessionClient(): PortalTenantSession | null {
 
 /**
  * Client-side session resolution for hooks/services.
- * Prefers live Supabase tenant role; falls back to always-on demo cookie session.
+ * Prefers tenant_accounts / server session API, then Supabase tenant, then demo.
  */
 export async function getPortalTenantSessionClient(): Promise<PortalTenantSession | null> {
+  try {
+    const res = await fetch("/api/portal/session", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { session?: PortalTenantSession | null };
+      if (data.session?.role === CURRENT_TENANT_ROLE) {
+        return data.session;
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+
   const demo = resolveDemoSessionClient();
 
   try {

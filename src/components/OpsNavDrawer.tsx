@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LogOut, PanelLeftOpen, X } from "lucide-react";
+import { Landmark, LogOut, PanelLeftOpen, X } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
 import type { HrOpsModule } from "@/lib/hr";
 import {
@@ -63,10 +63,10 @@ export function OpsNavDrawer({
         onHome && open ? "border-r border-[var(--harbor-sand)]/15" : ""
       }`}
     >
-      <div className="flex items-start justify-between gap-3 border-b border-[var(--harbor-sand)]/15 px-5 py-4">
+      <div className="flex items-start justify-between gap-3 border-b border-[var(--harbor-sand)]/15 px-4 py-3">
         <div>
-          <p className="font-display text-2xl leading-tight">Harborline</p>
-          <p className="text-xs opacity-70">
+          <p className="font-display text-xl leading-tight">Harborline</p>
+          <p className="text-[10px] opacity-70">
             Team member windows
             {current ? ` · ${current.label}` : ""}
           </p>
@@ -76,14 +76,14 @@ export function OpsNavDrawer({
             type="button"
             onClick={() => setOpen(false)}
             aria-label="Close menu"
-            className="btn btn-sm btn-ghost btn-circle text-[var(--harbor-sand)]"
+            className="btn btn-xs btn-ghost btn-circle text-[var(--harbor-sand)]"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </button>
         ) : null}
       </div>
 
-      <ul className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <ul className="flex-1 space-y-0.5 px-2.5 py-2">
         {windows.map(({ href, label, hint, icon: Icon }) => {
           const active = isOpsWindowActive(pathname, href);
           return (
@@ -91,17 +91,19 @@ export function OpsNavDrawer({
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className={`flex items-start gap-3 rounded-xl px-3 py-2.5 transition ${
+                className={`flex items-start gap-2 rounded-lg px-2.5 py-1.5 transition ${
                   active
                     ? "bg-[var(--harbor-sand)] text-[var(--harbor-ink)]"
                     : "hover:bg-[var(--harbor-sand)]/10"
                 }`}
               >
-                <Icon className="mt-0.5 h-5 w-5 shrink-0 opacity-80" />
+                <Icon className="mt-0.5 h-4 w-4 shrink-0 opacity-80" />
                 <span>
-                  <span className="block text-sm font-semibold">{label}</span>
+                  <span className="block text-xs font-semibold leading-snug">
+                    {label}
+                  </span>
                   <span
-                    className={`block text-xs ${
+                    className={`block text-[10px] leading-snug ${
                       active ? "opacity-60" : "opacity-55"
                     }`}
                   >
@@ -114,18 +116,26 @@ export function OpsNavDrawer({
         })}
       </ul>
 
-      <form
-        action={teamLogout}
-        className="border-t border-[var(--harbor-sand)]/15 px-5 py-4"
-      >
-        <button
-          type="submit"
-          className="btn btn-sm btn-ghost w-full justify-start gap-2 text-[var(--harbor-sand)]"
-        >
-          <LogOut className="h-4 w-4" />
-          Sign out
-        </button>
-      </form>
+      <div className="space-y-1 border-t border-[var(--harbor-sand)]/15 px-4 py-2.5">
+        {allowedModules === null || allowedModules.includes("banks") ? (
+          <Link
+            href="/ops/banks"
+            className="btn btn-xs btn-ghost h-8 w-full justify-start gap-2 text-[var(--harbor-sand)]"
+          >
+            <Landmark className="h-3.5 w-3.5" />
+            Banks
+          </Link>
+        ) : null}
+        <form action={teamLogout}>
+          <button
+            type="submit"
+            className="btn btn-xs btn-ghost h-8 w-full justify-start gap-2 text-[var(--harbor-sand)]"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign out
+          </button>
+        </form>
+      </div>
     </nav>
   );
 

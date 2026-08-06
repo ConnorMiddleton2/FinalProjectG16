@@ -56,6 +56,11 @@ export type SmTenantApplication = {
   tourPromptSentAt?: string;
   tourEventId?: string;
   tourHoldEventIds?: string[];
+  tenantAccountId?: string;
+  leasePacketStatus?: "not_sent" | "sent" | "signed" | "approved";
+  leaseOfferedAt?: string;
+  leaseSignedAt?: string;
+  leaseSignedName?: string;
 };
 
 export type SmCode =

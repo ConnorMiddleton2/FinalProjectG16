@@ -17,12 +17,17 @@ import {
   getPortalDemoSessionFromCookie,
   hasPortalDemoAccess,
 } from "@/lib/portal/portal-demo-auth-server";
+import { getTenantPortalSession } from "@/lib/tenant-portal-accounts";
+import { portalSessionFromTenantAccount } from "@/lib/portal/tenant-account-session";
 import type { UserRole } from "@/lib/types";
 
 /**
  * Returns the current-tenant portal session, or null if unsigned / wrong role.
  */
 export async function getCurrentPortalTenant(): Promise<PortalTenantSession | null> {
+  const account = await getTenantPortalSession();
+  if (account) return portalSessionFromTenantAccount(account);
+
   const demo = await getPortalDemoSessionFromCookie();
   if (demo) return demo;
 
@@ -64,13 +69,14 @@ export async function getCurrentPortalTenant(): Promise<PortalTenantSession | nu
 
 /**
  * Layout/page guard for private `/portal` routes.
- * - Demo cookie → always allowed as demo tenant
- * - Not signed in → `/login?next=…`
- * - Signed in but not current-tenant role → `/portal/unauthorized`
+ * Accepts: tenant_accounts cookie, demo cookie, or Supabase tenant role.
  */
 export async function requirePortalTenant(
   nextPath: string = PORTAL_HOME_PATH
 ): Promise<PortalTenantSession> {
+  const account = await getTenantPortalSession();
+  if (account) return portalSessionFromTenantAccount(account);
+
   if (await hasPortalDemoAccess()) {
     const demo = await getPortalDemoSessionFromCookie();
     if (demo) return demo;
@@ -111,6 +117,8 @@ export async function requirePortalTenant(
       tenantScopeId: resolveTenantScopeId(user),
     };
   } catch {
+    const accountRetry = await getTenantPortalSession();
+    if (accountRetry) return portalSessionFromTenantAccount(accountRetry);
     if (await hasPortalDemoAccess()) {
       const demo = await getPortalDemoSessionFromCookie();
       if (demo) return demo;

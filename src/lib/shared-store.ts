@@ -43,6 +43,18 @@ export const COLLECTIONS = {
   hrEmployees: "hr_employees",
   hrPayStubs: "hr_pay_stubs",
   hrTimePunches: "hr_time_punches",
+  /** Operating bank accounts — one per property + corporate HQ. */
+  bankAccounts: "bank_accounts",
+  /** Ledger lines for bank accounts (rent in, fees, expenses, owner remits). */
+  bankTransactions: "bank_transactions",
+  /** Management requests for additional owner cash when a property is short. */
+  ownerCashCalls: "owner_cash_calls",
+  /** Prospect / tenant portal login accounts. */
+  tenantAccounts: "tenant_accounts",
+  /** S&M ↔ prospect messages in the tenant portal. */
+  tenantPortalMessages: "tenant_portal_messages",
+  /** Fixed assets / PP&E by property (depreciation feeds financial statements). */
+  propertyAssets: "property_assets",
 } as const;
 
 export type SharedCollection =

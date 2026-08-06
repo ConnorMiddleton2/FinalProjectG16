@@ -26,6 +26,17 @@ export type PortalTenantSession = {
    * as an override — always derive from the authenticated session.
    */
   tenantScopeId: string;
+  /** Set when signed in via tenant_accounts cookie (prospect / active portal). */
+  accountStatus?:
+    | "prospect"
+    | "pending_application"
+    | "pending_lease"
+    | "active"
+    | "inactive";
+  propertyId?: string;
+  propertyName?: string;
+  unit?: string;
+  tenantAccountId?: string;
 };
 
 export function isPortalPublicPath(pathname: string): boolean {

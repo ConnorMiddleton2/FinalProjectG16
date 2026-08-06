@@ -2,11 +2,14 @@
 
 import { AnalyticsDashboard } from "@/components/mgmt/AnalyticsDashboard";
 import { PropertyAnalyticsDashboard } from "@/components/mgmt/PropertyAnalyticsDashboard";
+import { FinancialStatementsPanel } from "@/components/mgmt/FinancialStatementsPanel";
 
 /** Combined business + property analytics for Management. */
 export function CombinedAnalyticsDashboard() {
   return (
     <div className="space-y-10">
+      <FinancialStatementsPanel />
+
       <section className="space-y-3">
         <div>
           <h2 className="text-lg font-semibold text-[var(--harbor-ink)]">

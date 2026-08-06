@@ -125,7 +125,7 @@ export function UnitRentSchedulePanel({
         schedules,
       });
       if ("error" in result) {
-        setErr(result.error);
+        setErr(result.error ?? "Could not publish rents.");
         return;
       }
       const next: OwnerApplication = {

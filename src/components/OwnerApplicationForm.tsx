@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useState, type ReactNode } from "react";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, Plus, Sparkles, Trash2 } from "lucide-react";
 import { OwnerAlert } from "@/components/OwnerAlert";
 import {
   ownerApply,
@@ -11,6 +11,8 @@ import {
   COMMERCIAL_PROPERTY_TYPES,
   CURRENT_MANAGEMENT_OPTIONS,
   MANAGEMENT_SERVICES,
+  demoOwnerApplicationEntity,
+  demoOwnerApplicationProperties,
   emptyOwnerApplicationProperty,
   type OwnerApplicationProperty,
 } from "@/lib/owner-application-intake";
@@ -89,6 +91,61 @@ export function OwnerApplicationForm({
     properties[0]?.id ?? null
   );
   const [state, action, pending] = useActionState(ownerApply, initialState);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  function setNamedField(name: string, value: string | boolean) {
+    const form = formRef.current;
+    if (!form) return;
+    const el = form.elements.namedItem(name);
+    if (el instanceof HTMLInputElement) {
+      if (el.type === "checkbox") {
+        el.checked = Boolean(value);
+      } else if (!el.readOnly) {
+        el.value = String(value);
+      }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    if (el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) {
+      el.value = String(value);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+
+  function generateAllFields() {
+    const demo = demoOwnerApplicationEntity({
+      fullName: defaultFullName,
+      email: defaultEmail,
+    });
+
+    setNamedField("fullName", demo.fullName);
+    if (!lockedEmail) setNamedField("email", demo.email);
+    setNamedField("phone", demo.phone);
+    setNamedField("preferredContactMethod", demo.preferredContactMethod);
+    setNamedField("companyName", demo.companyName);
+    setNamedField("entityType", demo.entityType);
+    setNamedField("taxIdOrEin", demo.taxIdOrEin);
+    setNamedField("mailingAddress", demo.mailingAddress);
+    setNamedField("emergencyContactName", demo.emergencyContactName);
+    setNamedField("emergencyContactPhone", demo.emergencyContactPhone);
+    setNamedField("communicationPreference", demo.communicationPreference);
+    setNamedField("ownershipProofAvailable", demo.ownershipProofAvailable);
+    setNamedField("rentRollAvailable", demo.rentRollAvailable);
+    setNamedField("leasesAvailable", demo.leasesAvailable);
+    setNamedField("insuranceDocsAvailable", demo.insuranceDocsAvailable);
+    setNamedField("bankingReady", demo.bankingReady);
+    setNamedField("documentsReadyNotes", demo.documentsReadyNotes);
+    setNamedField("message", demo.message);
+
+    const rows: PropertyRow[] = demoOwnerApplicationProperties().map((p) => ({
+      id: crypto.randomUUID(),
+      ...p,
+    }));
+    setProperties(rows);
+    setOpenPropertyId(rows[0]?.id ?? null);
+  }
 
   function updateProperty<K extends keyof OwnerApplicationProperty>(
     id: string,
@@ -116,7 +173,26 @@ export function OwnerApplicationForm({
   }
 
   return (
-    <form action={action} className="space-y-5">
+    <form ref={formRef} action={action} className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-[var(--harbor-mist)]/30 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-[var(--harbor-ink)]">
+            Demo shortcut
+          </p>
+          <p className="owner-muted text-xs">
+            Fills entity, documents, notes, and two sample commercial properties.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--harbor-ink)] px-4 text-sm font-semibold text-[var(--harbor-sand)] hover:opacity-90"
+          onClick={generateAllFields}
+        >
+          <Sparkles className="h-4 w-4" />
+          Generate all fields
+        </button>
+      </div>
+
       <Section
         title="1. Ownership entity & contacts"
         blurb="Legal ownership details Harborline needs for contracting, tax reporting, and day-to-day communication."

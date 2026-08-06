@@ -143,7 +143,7 @@ export function OwnersAccountsDashboard() {
         notes,
       });
       if ("error" in result) {
-        flash(result.error);
+        flash(result.error ?? "Something went wrong.");
         return;
       }
       setOwners((prev) =>
@@ -164,7 +164,7 @@ export function OwnersAccountsDashboard() {
         email: selected.email,
       });
       if ("error" in result) {
-        flash(result.error);
+        flash(result.error ?? "Something went wrong.");
         return;
       }
       setOwners((prev) =>
@@ -199,7 +199,7 @@ export function OwnersAccountsDashboard() {
         mustChangePassword: false,
       });
       if ("error" in result) {
-        flash(result.error);
+        flash(result.error ?? "Something went wrong.");
         return;
       }
       setOwners((prev) =>
@@ -233,7 +233,7 @@ export function OwnersAccountsDashboard() {
         companyName: newCompany,
       });
       if ("error" in result) {
-        flash(result.error);
+        flash(result.error ?? "Something went wrong.");
         return;
       }
       flash(

@@ -44,7 +44,9 @@ export type HrOpsModule =
   | "ar"
   | "hr"
   | "sales-marketing"
-  | "management";
+  | "management"
+  | "banks"
+  | "assets";
 
 export type HrEmployee = {
   id: string;
@@ -148,6 +150,8 @@ export const HR_OPS_MODULES: { value: HrOpsModule; label: string }[] = [
   { value: "tenant", label: "Tenant" },
   { value: "ap", label: "Accounts payable" },
   { value: "ar", label: "Accounts receivable" },
+  { value: "banks", label: "Bank accounts" },
+  { value: "assets", label: "Assets" },
   { value: "hr", label: "Human resources" },
   { value: "sales-marketing", label: "Sales & marketing" },
   { value: "management", label: "Management" },
@@ -163,7 +167,7 @@ export const DEPARTMENT_DEFAULT_MODULE_ACCESS: Record<
 > = {
   maintenance: ["maintenance", "properties"],
   leasing: ["tenant", "sales-marketing", "properties"],
-  accounting: ["ap", "ar"],
+  accounting: ["ap", "ar", "banks", "assets"],
   hr: ["hr"],
   management: [...ALL_HR_OPS_MODULES],
   other: [],

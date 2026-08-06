@@ -16,10 +16,11 @@ import type {
 } from "@/lib/portal/maintenance-types";
 import { createMaintenanceRequest } from "@/lib/portal/services/maintenanceService";
 
-export function useMaintenanceForm() {
-  const [values, setValues] = useState<MaintenanceFormValues>(
-    EMPTY_MAINTENANCE_FORM
-  );
+export function useMaintenanceForm(defaults?: Partial<MaintenanceFormValues>) {
+  const [values, setValues] = useState<MaintenanceFormValues>(() => ({
+    ...EMPTY_MAINTENANCE_FORM,
+    ...defaults,
+  }));
   const [errors, setErrors] = useState<MaintenanceFormErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);

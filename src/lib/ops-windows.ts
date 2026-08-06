@@ -5,6 +5,7 @@ import {
   Home,
   LayoutGrid,
   Megaphone,
+  Package,
   Receipt,
   Users,
   Wallet,
@@ -66,6 +67,13 @@ export const OPS_WINDOWS: OpsWindow[] = [
     hint: "Rent and miscellaneous billing",
     icon: Receipt,
     module: "ar",
+  },
+  {
+    href: "/ops/assets",
+    label: "Assets",
+    hint: "PP&E, depreciation, and placed-in-service dates",
+    icon: Package,
+    module: "assets",
   },
   {
     href: "/ops/hr",

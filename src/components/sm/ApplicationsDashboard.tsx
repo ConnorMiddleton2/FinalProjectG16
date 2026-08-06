@@ -19,7 +19,11 @@ import {
   type SmCalendarEvent,
   type SmTenantApplication,
 } from "@/lib/sales-marketing";
-import { approveTenantMoveIn } from "@/app/ops/management/owner-applications/actions";
+import {
+  confirmSignedLeaseAndMoveIn,
+  offerLeaseForApplication,
+  sendAvailabilityToApplicant,
+} from "@/app/ops/sm/tenant-pipeline-actions";
 
 type TourOption = { start: string; end: string };
 
@@ -164,14 +168,14 @@ export function ApplicationsDashboard() {
     if (smStatus === "approved") {
       if (!draft.unitId || !draft.propertyId) {
         setMsg(
-          "Select a vacant unit with published asking rent before approving."
+          "Select a vacant unit with published asking rent before offering the lease."
         );
         setTimeout(() => setMsg(null), 3500);
         return;
       }
       setMoveInBusy(true);
       try {
-        const result = await approveTenantMoveIn({
+        const result = await offerLeaseForApplication({
           applicationId: selected.id,
           propertyId: draft.propertyId,
           unitId: draft.unitId,
@@ -179,7 +183,7 @@ export function ApplicationsDashboard() {
           tenantEmail: draft.email,
         });
         if ("error" in result) {
-          setMsg(result.error);
+          setMsg(result.error ?? "Could not offer lease.");
           setTimeout(() => setMsg(null), 4000);
           return;
         }
@@ -189,10 +193,10 @@ export function ApplicationsDashboard() {
           status: "In review",
           proposedRent: result.monthlyRent,
           unitLabel: result.unitLabel,
-          movedInAt: new Date().toISOString(),
+          leasePacketStatus: "sent",
+          leaseOfferedAt: new Date().toISOString(),
           roomSize: `${result.unitLabel} · ${money(result.monthlyRent)}/mo`,
         });
-        await refreshUnits();
         setDraft((d) =>
           d
             ? {
@@ -200,14 +204,14 @@ export function ApplicationsDashboard() {
                 smStatus: "approved",
                 proposedRent: result.monthlyRent,
                 unitLabel: result.unitLabel,
-                movedInAt: new Date().toISOString(),
+                leasePacketStatus: "sent",
               }
             : d
         );
         setMsg(
-          `Approved & moved in at ${money(result.monthlyRent)}/mo. AR + portal invoice opened at unit rent (${result.receivableId}).`
+          `Lease offered at ${money(result.monthlyRent)}/mo for ${result.unitLabel}. Tenant must sign in their portal; then use “Confirm signed lease” to move them in.`
         );
-        setTimeout(() => setMsg(null), 5000);
+        setTimeout(() => setMsg(null), 6000);
       } finally {
         setMoveInBusy(false);
       }
@@ -216,6 +220,50 @@ export function ApplicationsDashboard() {
 
     setDraft((d) => (d ? { ...d, smStatus } : d));
     await saveApp(next);
+  }
+
+  async function handleSendAvailability() {
+    if (!selected || !draft) return;
+    setMoveInBusy(true);
+    try {
+      const result = await sendAvailabilityToApplicant({
+        applicationId: selected.id,
+        propertyId: draft.propertyId,
+      });
+      if ("error" in result) {
+        setMsg(result.error ?? "Something went wrong.");
+        setTimeout(() => setMsg(null), 4000);
+        return;
+      }
+      setMsg(
+        `Sent ${result.unitCount} vacant unit option(s) to the applicant portal.`
+      );
+      setTimeout(() => setMsg(null), 4000);
+    } finally {
+      setMoveInBusy(false);
+    }
+  }
+
+  async function handleConfirmSignedLease() {
+    if (!selected) return;
+    setMoveInBusy(true);
+    try {
+      const result = await confirmSignedLeaseAndMoveIn({
+        applicationId: selected.id,
+      });
+      if ("error" in result) {
+        setMsg(result.error ?? "Something went wrong.");
+        setTimeout(() => setMsg(null), 4000);
+        return;
+      }
+      await refreshUnits();
+      setMsg(
+        `Lease approved & moved in at ${money(result.monthlyRent)}/mo. AR + portal invoice opened (${result.receivableId}).`
+      );
+      setTimeout(() => setMsg(null), 5000);
+    } finally {
+      setMoveInBusy(false);
+    }
   }
 
   async function sendTourPrompt() {
@@ -432,9 +480,10 @@ export function ApplicationsDashboard() {
                 Assign vacant unit (FMR / asking rent)
               </p>
               <p className="text-xs opacity-65">
-                Units appear after Management publishes fair-market asking rents
-                from the inspected owner application. Approving move-in locks
-                that rent and opens AR billing.
+                Units appear after Management publishes fair-market asking rents.
+                Set status to <strong>approved</strong> to send a lease packet
+                to the applicant portal (not an instant move-in). After they
+                sign, confirm below to activate tenancy and open AR.
               </p>
               <select
                 className="select select-bordered select-sm w-full bg-white"
@@ -469,6 +518,36 @@ export function ApplicationsDashboard() {
                   application.
                 </p>
               ) : null}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  disabled={moveInBusy}
+                  onClick={() => void handleSendAvailability()}
+                >
+                  Send availability to portal
+                </button>
+                {draft.leasePacketStatus === "signed" && !draft.movedInAt ? (
+                  <button
+                    type="button"
+                    className="btn btn-sm border-0 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]"
+                    disabled={moveInBusy}
+                    onClick={() => void handleConfirmSignedLease()}
+                  >
+                    Confirm signed lease &amp; move in
+                  </button>
+                ) : null}
+                {draft.leasePacketStatus === "sent" ? (
+                  <span className="badge badge-info badge-sm self-center">
+                    Lease sent — awaiting tenant signature
+                  </span>
+                ) : null}
+                {draft.movedInAt ? (
+                  <span className="badge badge-success badge-sm self-center">
+                    Moved in
+                  </span>
+                ) : null}
+              </div>
             </div>
 
             <label className="form-control w-full">

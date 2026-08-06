@@ -63,12 +63,47 @@ export function OperatingExpensesPayable() {
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [propertyFilter, setPropertyFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dueFilter, setDueFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [form, setForm] = useState<PayableFormState>(emptyPayableForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
 
   const today = todayIso();
+
+  function matchesFilters(inv: PayableInvoice) {
+    if (
+      propertyFilter !== "all" &&
+      (inv.property || "").toLowerCase() !== propertyFilter.toLowerCase()
+    ) {
+      return false;
+    }
+    const status = statusOf(inv);
+    if (statusFilter === "open") {
+      if (status !== "unpaid" && status !== "partially_paid") return false;
+    } else if (statusFilter !== "all" && status !== statusFilter) {
+      return false;
+    }
+    const balance = balanceOf(inv);
+    if (dueFilter === "overdue" && !isOverdue(inv, today)) return false;
+    if (dueFilter === "current" && !(balance > 0 && !isOverdue(inv, today)))
+      return false;
+    if (dueFilter === "open" && balance <= 0) return false;
+    if (categoryFilter !== "all" && inv.category !== categoryFilter) {
+      return false;
+    }
+    const q = searchFilter.trim().toLowerCase();
+    if (q) {
+      const hay =
+        `${inv.vendorName} ${inv.invoiceNumber} ${inv.property} ${inv.notes}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }
 
   const totals = useMemo(() => {
     let billed = 0;
@@ -81,6 +116,7 @@ export function OperatingExpensesPayable() {
     let openCount = 0;
 
     for (const inv of invoices) {
+      if (!matchesFilters(inv)) continue;
       const balance = balanceOf(inv);
       billed += inv.amount;
       paid += inv.amountPaid;
@@ -105,18 +141,38 @@ export function OperatingExpensesPayable() {
       disputed: round2(disputed),
       openCount,
     };
-  }, [invoices, today]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    invoices,
+    today,
+    propertyFilter,
+    statusFilter,
+    dueFilter,
+    categoryFilter,
+    searchFilter,
+  ]);
 
   const sortedInvoices = useMemo(() => {
-    return [...invoices].sort((a, b) => {
-      const aOpen = balanceOf(a) > 0 ? 0 : 1;
-      const bOpen = balanceOf(b) > 0 ? 0 : 1;
-      if (aOpen !== bOpen) return aOpen - bOpen;
-      const aDue = a.dueDate || "9999-12-31";
-      const bDue = b.dueDate || "9999-12-31";
-      return aDue.localeCompare(bDue);
-    });
-  }, [invoices]);
+    return [...invoices]
+      .filter((inv) => matchesFilters(inv))
+      .sort((a, b) => {
+        const aOpen = balanceOf(a) > 0 ? 0 : 1;
+        const bOpen = balanceOf(b) > 0 ? 0 : 1;
+        if (aOpen !== bOpen) return aOpen - bOpen;
+        const aDue = a.dueDate || "9999-12-31";
+        const bDue = b.dueDate || "9999-12-31";
+        return aDue.localeCompare(bDue);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    invoices,
+    propertyFilter,
+    statusFilter,
+    dueFilter,
+    categoryFilter,
+    searchFilter,
+    today,
+  ]);
 
   const knownProperties = useMemo(
     () =>
@@ -274,9 +330,36 @@ export function OperatingExpensesPayable() {
       ...invoice,
       amountPaid: round2(invoice.amountPaid + amount),
     });
+    try {
+      const { debitPropertyBankFromAp } = await import(
+        "@/app/ops/banks/ledger-bridge-actions"
+      );
+      const bank = await debitPropertyBankFromAp({
+        propertyName: invoice.property,
+        vendorName: invoice.vendorName,
+        category: invoice.category || "operating",
+        amount,
+        relatedId: invoice.id,
+        kind:
+          (invoice.category || "").toLowerCase().includes("payroll") ||
+          (invoice.category || "").toLowerCase().includes("wages")
+            ? "payroll"
+            : "property_expense",
+      });
+      if (bank && "error" in bank) {
+        setSavedMsg(
+          `Recorded ${money(amount)} on ${invoice.invoiceNumber}, but bank debit failed: ${bank.error}`
+        );
+        setTimeout(() => setSavedMsg(null), 5000);
+        setPaymentAmount("");
+        return;
+      }
+    } catch {
+      /* best-effort */
+    }
     setPaymentAmount("");
     setSavedMsg(
-      `Recorded a ${money(amount)} payment on invoice ${invoice.invoiceNumber}.`
+      `Recorded a ${money(amount)} payment on invoice ${invoice.invoiceNumber} (debited property bank when matched).`
     );
     setTimeout(() => setSavedMsg(null), 4000);
   }
@@ -295,6 +378,76 @@ export function OperatingExpensesPayable() {
             {savedMsg}
           </div>
         )}
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <label className="form-control">
+            <span className="mb-1 text-sm opacity-70">Property</span>
+            <select
+              className="select select-bordered bg-white"
+              value={propertyFilter}
+              onChange={(e) => setPropertyFilter(e.target.value)}
+            >
+              <option value="all">All properties</option>
+              {knownProperties.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="form-control">
+            <span className="mb-1 text-sm opacity-70">Payment status</span>
+            <select
+              className="select select-bordered bg-white"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All statuses</option>
+              <option value="open">Open (unpaid / partial)</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="partially_paid">Partially paid</option>
+              <option value="paid">Paid</option>
+              <option value="disputed">Disputed</option>
+            </select>
+          </label>
+          <label className="form-control">
+            <span className="mb-1 text-sm opacity-70">Due status</span>
+            <select
+              className="select select-bordered bg-white"
+              value={dueFilter}
+              onChange={(e) => setDueFilter(e.target.value)}
+            >
+              <option value="all">Any due date</option>
+              <option value="open">Has balance</option>
+              <option value="overdue">Overdue</option>
+              <option value="current">Current (not overdue)</option>
+            </select>
+          </label>
+          <label className="form-control">
+            <span className="mb-1 text-sm opacity-70">Category</span>
+            <select
+              className="select select-bordered bg-white"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
+              <option value="all">All categories</option>
+              {PAYABLE_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="form-control">
+            <span className="mb-1 text-sm opacity-70">Search</span>
+            <input
+              className="input input-bordered bg-white"
+              placeholder="Vendor, invoice #…"
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+            />
+          </label>
+        </div>
 
         <section className={`${apCardClass} p-6`}>
           <div className="flex flex-wrap items-start justify-between gap-6">

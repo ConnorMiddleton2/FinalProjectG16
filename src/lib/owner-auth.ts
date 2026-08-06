@@ -351,19 +351,8 @@ export async function submitOwnerApplication(input: {
   }
 
   const apps = await readOwnerApplications();
-  const openSameEmail = apps.find(
-    (a) =>
-      a.email === email &&
-      (a.status === "pending" ||
-        a.status === "needs_info" ||
-        a.status === "awaiting_signature")
-  );
-  if (openSameEmail) {
-    return {
-      error: "You already have an open application with this email." as const,
-      applicationId: openSameEmail.id,
-    };
-  }
+  // Owners may submit multiple applications (additional assets over time).
+  void apps;
 
   const application: OwnerApplication = {
     id: crypto.randomUUID(),

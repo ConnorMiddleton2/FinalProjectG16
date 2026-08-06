@@ -144,6 +144,75 @@ export default async function OwnerApplicationDetailPage({
             </section>
           ) : null}
 
+          {(app.proposedFeePercent ||
+            app.proposedTermYears ||
+            app.negotiationTerms ||
+            app.paymentTerms ||
+            app.exclusiveManagement != null ||
+            app.draftContract) && (
+            <section className="space-y-3 border-t border-[var(--harbor-deep)]/10 pt-4">
+              <h2 className="text-sm font-semibold text-[var(--harbor-ink)]">
+                Management terms to review
+              </h2>
+              <p className="owner-muted text-xs">
+                Harborline set these terms during diligence. Review carefully
+                before signing the management agreement below.
+              </p>
+              <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                {app.proposedFeePercent ? (
+                  <>
+                    <dt className="opacity-60">Proposed management fee</dt>
+                    <dd className="font-medium">{app.proposedFeePercent}%</dd>
+                  </>
+                ) : null}
+                {app.proposedTermYears ? (
+                  <>
+                    <dt className="opacity-60">Proposed term</dt>
+                    <dd className="font-medium">{app.proposedTermYears} years</dd>
+                  </>
+                ) : null}
+                {app.exclusiveManagement != null ? (
+                  <>
+                    <dt className="opacity-60">Exclusive management</dt>
+                    <dd className="font-medium">
+                      {app.exclusiveManagement ? "Yes" : "No"}
+                    </dd>
+                  </>
+                ) : null}
+              </dl>
+              {app.negotiationTerms ? (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide opacity-55">
+                    Negotiated terms
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm">
+                    {app.negotiationTerms}
+                  </p>
+                </div>
+              ) : null}
+              {app.paymentTerms ? (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide opacity-55">
+                    Payment / remittance terms
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm">
+                    {app.paymentTerms}
+                  </p>
+                </div>
+              ) : null}
+              {app.draftContract ? (
+                <details className="rounded-lg border border-[var(--harbor-deep)]/10 bg-white/80">
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+                    Draft terms package from management
+                  </summary>
+                  <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap border-t border-[var(--harbor-deep)]/10 p-3 text-xs leading-relaxed">
+                    {app.draftContract}
+                  </pre>
+                </details>
+              ) : null}
+            </section>
+          )}
+
           <p className="text-xs opacity-50">
             Submitted {new Date(app.createdAt).toLocaleString()} · ID{" "}
             <span className="font-mono">{app.id}</span>

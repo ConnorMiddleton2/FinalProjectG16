@@ -12,6 +12,7 @@ import { OwnerChangePasswordForm } from "@/components/OwnerChangePasswordForm";
 import { OwnerEmptyState } from "@/components/OwnerEmptyState";
 import { OwnerPortalHeader } from "@/components/OwnerPortalHeader";
 import { OwnerPropertyRevenuePanel } from "@/components/OwnerPropertyRevenuePanel";
+import { OwnerBankActivityPanel } from "@/components/OwnerBankActivityPanel";
 import { OwnerShell } from "@/components/OwnerShell";
 import { getCurrentOwner, readOwnerApplications } from "@/lib/owner-auth";
 import { getPendingApprovalsForOwner } from "@/lib/owner-approvals";
@@ -141,6 +142,8 @@ export default async function OwnerDashboardPage() {
         {properties.length > 0 ? (
           <OwnerPropertyRevenuePanel financials={financials} />
         ) : null}
+
+        <OwnerBankActivityPanel owner={owner} />
 
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">

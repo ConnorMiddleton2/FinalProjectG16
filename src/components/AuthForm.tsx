@@ -114,6 +114,37 @@ export function AuthForm({ mode }: { mode: Mode }) {
         return;
       }
 
+      // Prospect / tenant portal accounts (created via Start application)
+      if (next && isPortalPrivatePath(next)) {
+        try {
+          const { tenantPortalLoginAction } = await import(
+            "@/app/portal/prospect-actions"
+          );
+          const portalLogin = await tenantPortalLoginAction(
+            {},
+            (() => {
+              const fd = new FormData();
+              fd.set("email", email);
+              fd.set("password", password);
+              return fd;
+            })()
+          );
+          if (!portalLogin?.error) {
+            router.push(portalDestination);
+            router.refresh();
+            return;
+          }
+        } catch (err) {
+          const digest =
+            err && typeof err === "object" && "digest" in err
+              ? String((err as { digest?: string }).digest)
+              : "";
+          if (digest.startsWith("NEXT_REDIRECT")) {
+            return;
+          }
+        }
+      }
+
       try {
         const supabase = createClient();
         const { error: signInError } = await supabase.auth.signInWithPassword({

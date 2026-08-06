@@ -261,3 +261,184 @@ export function propertyHasMinimumDetail(p: OwnerApplicationProperty): boolean {
       p.category
   );
 }
+
+/** Demo payload for owner entity / documents / message fields (uncontrolled inputs). */
+export type DemoOwnerApplicationEntity = {
+  fullName: string;
+  email: string;
+  phone: string;
+  preferredContactMethod: string;
+  companyName: string;
+  entityType: string;
+  taxIdOrEin: string;
+  mailingAddress: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  communicationPreference: string;
+  ownershipProofAvailable: boolean;
+  rentRollAvailable: boolean;
+  leasesAvailable: boolean;
+  insuranceDocsAvailable: boolean;
+  bankingReady: boolean;
+  documentsReadyNotes: string;
+  message: string;
+};
+
+/** Realistic demo values for class walkthroughs — one multifamily + one office. */
+export function demoOwnerApplicationEntity(opts?: {
+  fullName?: string;
+  email?: string;
+}): DemoOwnerApplicationEntity {
+  return {
+    fullName: opts?.fullName?.trim() || "Jordan Hale",
+    email: opts?.email?.trim() || "jordan.hale@summitresidential.example",
+    phone: "(615) 555-0142",
+    preferredContactMethod: "email",
+    companyName: "Summit Residential Partners LLC",
+    entityType: "LLC",
+    taxIdOrEin: "62-4893107",
+    mailingAddress: "1200 Commerce St, Suite 400, Nashville, TN 37203",
+    emergencyContactName: "Casey Hale",
+    emergencyContactPhone: "(615) 555-0199",
+    communicationPreference: "monthly_summary",
+    ownershipProofAvailable: true,
+    rentRollAvailable: true,
+    leasesAvailable: true,
+    insuranceDocsAvailable: true,
+    bankingReady: true,
+    documentsReadyNotes:
+      "CAM reconciliations for the last two years will be uploaded after diligence kickoff. Elevator warranty sits with prior manager and transfers at takeover.",
+    message:
+      "Looking for a full-service commercial manager starting next quarter. Prefer 4.5–5% fee on collections, $2,500 owner-approval threshold, and monthly NOI packs. Lender requires quarterly compliance certificates.",
+  };
+}
+
+export function demoOwnerApplicationProperties(): OwnerApplicationProperty[] {
+  return [
+    {
+      propertyName: "Grandview Apartments",
+      category: "multifamily",
+      streetAddress: "900 Grandview Pkwy",
+      city: "Nashville",
+      state: "TN",
+      zip: "37211",
+      county: "Davidson",
+      parcelTaxId: "TAX-PROP-GRANDVIEW",
+      yearBuilt: "2012",
+      yearRenovated: "2022",
+      buildings: "6",
+      floors: "4",
+      unitsSuites: "300",
+      grossSf: "285000",
+      rentableSf: "270000",
+      parkingSpaces: "360",
+      zoning: "RM-3",
+      amenities:
+        "On-site leasing office, package room, fitness center, pool, controlled access",
+      elevator: "yes",
+      fireSprinkler: "yes",
+      occupancyPercent: "82",
+      tenantCount: "246",
+      monthlyRentRoll: "478500",
+      annualGpr: "5742000",
+      annualOperatingExpenses: "2577600",
+      annualNoi: "3164400",
+      arBalance: "19140",
+      securityDepositsHeld: "215000",
+      reserveBalance: "322200",
+      camOrNnnStructure: "Gross residential leases",
+      majorLeaseExpirations: "2027-06-30 · ~18% of units turn over next 12 months",
+      currentManagement: "other_firm",
+      reasonForChange:
+        "Prior firm understaffed maintenance; want Harborline for leasing velocity and owner reporting.",
+      avgLeaseTermYears: "1",
+      percentLeasesExpiring12mo: "28",
+      roofAgeYears: "8",
+      hvacNotes: "Package units by building; 2022 condenser replacements on buildings 1–3.",
+      knownIssues: "Building 4 elevator modernization scheduled Q4; two vacant make-readies delayed.",
+      preferredVendors: "Delta Mechanical; ClearPath Janitorial; NightWatch Security",
+      utilityNotes: "Owner-paid common area electric/water; tenants pay unit electric.",
+      accessNotes: "Master key with on-site office; after-hours vendor gate code provided at takeover.",
+      insuranceCarrier: "Harbor Mutual",
+      insuranceCoverageAmount: "GL $2M / building replacement cost",
+      insuranceExpiration: "2027-03-31",
+      claimsHistoryNotes: "One water damage claim (2024) closed; no open claims.",
+      ownerGoals:
+        "Stabilize occupancy above 90%, shorten make-ready cycle, clean monthly owner packs.",
+      servicesRequested: [
+        "leasing",
+        "tenant_relations",
+        "maintenance",
+        "accounting",
+        "reporting",
+        "capital_projects",
+      ],
+      capitalPlans: "Lobby refresh Q4; roof overlay budgeted next FY for building 5.",
+      specialInstructions:
+        "Owner approval required above $2,500; no weekend construction without 48-hour notice.",
+      location: "900 Grandview Pkwy, Nashville, TN 37211",
+      squareFeet: "270000",
+    },
+    {
+      propertyName: "Riverside Office Park",
+      category: "office",
+      streetAddress: "220 Riverside Dr",
+      city: "Evanston",
+      state: "IL",
+      zip: "60201",
+      county: "Cook",
+      parcelTaxId: "TAX-PROP-RIVERSIDE",
+      yearBuilt: "1998",
+      yearRenovated: "2019",
+      buildings: "3",
+      floors: "4",
+      unitsSuites: "80",
+      grossSf: "224000",
+      rentableSf: "200000",
+      parkingSpaces: "290",
+      zoning: "C-2",
+      amenities: "Conference suite, loading dock, covered parking, cafe shell",
+      elevator: "yes",
+      fireSprinkler: "yes",
+      occupancyPercent: "80",
+      tenantCount: "64",
+      monthlyRentRoll: "94600",
+      annualGpr: "1135200",
+      annualOperatingExpenses: "621600",
+      annualNoi: "513600",
+      arBalance: "3784",
+      securityDepositsHeld: "142000",
+      reserveBalance: "77700",
+      camOrNnnStructure: "Modified gross with CAM recoveries",
+      majorLeaseExpirations: "2028-12-31 · Floor 3 anchor expires; two suites soft in 2027",
+      currentManagement: "self_managed",
+      reasonForChange:
+        "Self-managed through acquisition; need institutional leasing and CAM reconciliations.",
+      avgLeaseTermYears: "5",
+      percentLeasesExpiring12mo: "12",
+      roofAgeYears: "6",
+      hvacNotes: "Central plant with VAV; boilers replaced 2019.",
+      knownIssues: "Suite 240 HVAC balancing complaint; parking lot reseal planned spring.",
+      preferredVendors: "Delta Mechanical; ClearPath Janitorial",
+      utilityNotes: "NNN electric for suites; owner pays base building utilities.",
+      accessNotes: "Card access; property engineer hours 7a–4p weekdays.",
+      insuranceCarrier: "Harbor Mutual",
+      insuranceCoverageAmount: "GL $2M / property replacement",
+      insuranceExpiration: "2026-12-15",
+      claimsHistoryNotes: "No claims in trailing 36 months.",
+      ownerGoals: "Raise occupancy, complete CAM true-ups, prepare asset for refinance.",
+      servicesRequested: [
+        "leasing",
+        "maintenance",
+        "accounting",
+        "cam_nnn",
+        "reporting",
+        "insurance_claims",
+      ],
+      capitalPlans: "Parking lot reseal spring; lobby lighting LED retrofit.",
+      specialInstructions: "Lender covenants require quarterly occupancy certificates.",
+      location: "220 Riverside Dr, Evanston, IL 60201",
+      squareFeet: "200000",
+    },
+  ];
+}

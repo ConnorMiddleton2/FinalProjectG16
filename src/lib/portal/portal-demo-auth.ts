@@ -21,14 +21,12 @@ export const PORTAL_DEMO_TENANT: PortalTenantSession = {
   tenantScopeId: DEMO_TENANT_ID,
 };
 
-/** Prefill password for the login form. Always accepted by portal demo login. */
-export const PORTAL_DEMO_PASSWORD = "tenant123";
+/** Prefill password for the login form. Demo login disabled — use real tenant accounts. */
+export const PORTAL_DEMO_PASSWORD = "";
 
-export function isPortalDemoCredentials(email: string, password: string) {
-  return (
-    email.trim().toLowerCase() === PORTAL_DEMO_TENANT.email &&
-    password === PORTAL_DEMO_PASSWORD
-  );
+export function isPortalDemoCredentials(_email: string, _password: string) {
+  // Broken Alex demo tenant removed — prospects register via Start application.
+  return false;
 }
 
 export function isPortalDemoCookieValue(value: string | undefined | null) {

@@ -46,7 +46,7 @@ const categories = [
     href: "/ops/management/analytics",
     icon: BarChart3,
     blurb:
-      "Business KPIs and property performance — occupancy, NOI, margins, and more.",
+      "Business KPIs, property performance, and accountant financial statement packages.",
   },
   {
     title: "Missed payments",

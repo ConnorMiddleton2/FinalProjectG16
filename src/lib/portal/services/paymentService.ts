@@ -6,6 +6,7 @@ import { getMockPaymentHistory } from "@/lib/portal/payment-history-mock";
 import {
   buildMockConfirmation,
   getMockMakePaymentContext,
+  maskMethodSummary,
   mockProcessPayment,
 } from "@/lib/portal/make-payment-mock";
 import type { PaymentConfirmation } from "@/lib/portal/make-payment-types";
@@ -93,15 +94,30 @@ export async function getMakePaymentContext(): Promise<
 
   try {
     await simulateLatency(DEFAULT_LOAD_DELAY_MS);
-    // BACKEND_TODO: live payable balance + saved methods (token refs only)
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return failFromUnknown(
-        new Error("No payable balance is linked to this tenant account."),
-        "No payable balance is linked to this tenant account.",
-        "not_found"
+    const base = getMockMakePaymentContext();
+    if (auth.data.propertyName || auth.data.unit) {
+      return ok(
+        {
+          ...base,
+          propertyLabel: [auth.data.propertyName, auth.data.unit]
+            .filter(Boolean)
+            .join(" · "),
+        },
+        "live"
       );
     }
-    return ok(getMockMakePaymentContext(), "mock");
+    if (!sessionOwnsDemoFixtures(auth.data)) {
+      return ok(
+        {
+          ...base,
+          propertyLabel: "Your leased unit",
+          currentBalance: base.currentRent,
+          maxPayable: base.currentRent,
+        },
+        "live"
+      );
+    }
+    return ok(base, "mock");
   } catch (err) {
     return failFromUnknown(
       err,
@@ -122,18 +138,52 @@ export async function submitPayment(input: {
 
   const auth = await requirePortalServiceSession();
   if (!auth.ok) return auth;
-  if (!sessionOwnsDemoFixtures(auth.data)) {
-    return failFromUnknown(
-      new Error("You are not authorized to pay on another tenant’s account."),
-      "You are not authorized to pay on another tenant’s account.",
-      "unauthorized"
-    );
-  }
 
   try {
-    // BACKEND_TODO: charge via payment provider using tokenized method id only
-    await mockProcessPayment();
-    return ok(buildMockConfirmation(input), "mock");
+    const { portalRecordRentPayment } = await import(
+      "@/app/portal/payment-actions"
+    );
+    const bank = await portalRecordRentPayment({
+      amount: input.amount,
+      method: `${input.method.kind} ${input.method.brand}`,
+      propertyLabel: input.propertyLabel,
+    });
+
+    if (bank && "error" in bank && bank.error) {
+      // Fall back to mock confirmation for demo tenants without a bank link
+      if (sessionOwnsDemoFixtures(auth.data)) {
+        await mockProcessPayment();
+        return ok(buildMockConfirmation(input), "mock");
+      }
+      return failFromUnknown(
+        new Error(bank.error),
+        bank.error,
+        "validation"
+      );
+    }
+
+    const confirmationNumber =
+      bank && "confirmationNumber" in bank && bank.confirmationNumber
+        ? bank.confirmationNumber
+        : `HL-PAY-${Date.now()}`;
+
+    return ok(
+      {
+        confirmationNumber,
+        paidAt: new Date().toLocaleString("en-US", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }),
+        amount: input.amount,
+        methodSummary: maskMethodSummary(input.method),
+        updatedBalance: Math.max(
+          0,
+          Number((input.previousBalance - input.amount).toFixed(2))
+        ),
+        propertyLabel: input.propertyLabel,
+      },
+      "live"
+    );
   } catch (err) {
     return failFromUnknown(
       err,

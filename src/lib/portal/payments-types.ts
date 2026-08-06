@@ -14,7 +14,7 @@ export type SavedPaymentMethodSummary = {
   brand: string;
   /** Masked last four only — never full PAN or account number. */
   last4: string;
-  kind: "Card" | "Bank";
+  kind: "Card" | "Bank" | "ACH" | "Check" | "Monthly";
   isDefault: boolean;
 };
 

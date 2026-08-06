@@ -28,7 +28,11 @@ import {
   todayIsoLocal,
 } from "@/lib/portal/validation-utils";
 
-export function MaintenanceRequestForm() {
+export function MaintenanceRequestForm({
+  defaultPropertyOrUnit = "",
+}: {
+  defaultPropertyOrUnit?: string;
+}) {
   const {
     values,
     errors,
@@ -40,7 +44,11 @@ export function MaintenanceRequestForm() {
     removeAttachment,
     submit,
     reset,
-  } = useMaintenanceForm();
+  } = useMaintenanceForm(
+    defaultPropertyOrUnit
+      ? { propertyOrUnit: defaultPropertyOrUnit }
+      : undefined
+  );
 
   if (result) {
     return (
@@ -91,7 +99,14 @@ export function MaintenanceRequestForm() {
               required
             >
               <option value="">Select unit or property</option>
-              {MAINTENANCE_PROPERTY_OPTIONS.map((option) => (
+              {defaultPropertyOrUnit ? (
+                <option value={defaultPropertyOrUnit}>
+                  {defaultPropertyOrUnit} (your unit)
+                </option>
+              ) : null}
+              {MAINTENANCE_PROPERTY_OPTIONS.filter(
+                (option) => option !== defaultPropertyOrUnit
+              ).map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>

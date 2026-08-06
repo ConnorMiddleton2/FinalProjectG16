@@ -77,6 +77,10 @@ export function ReceivablesPanel({ kind }: Props) {
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [propertyFilter, setPropertyFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dueFilter, setDueFilter] = useState("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [form, setForm] = useState<ReceivableFormState>(() =>
     emptyReceivableForm(kind)
   );
@@ -84,6 +88,32 @@ export function ReceivablesPanel({ kind }: Props) {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [receiptAmount, setReceiptAmount] = useState("");
   const today = todayIso();
+
+  function matchesFilters(row: Receivable) {
+    if (
+      propertyFilter !== "all" &&
+      (row.property || "").toLowerCase() !== propertyFilter.toLowerCase()
+    ) {
+      return false;
+    }
+    const status = statusOf(row);
+    if (statusFilter === "open") {
+      if (status !== "unpaid" && status !== "partially_paid") return false;
+    } else if (statusFilter !== "all" && status !== statusFilter) {
+      return false;
+    }
+    const balance = balanceOf(row);
+    if (dueFilter === "overdue" && !isOverdue(row, today)) return false;
+    if (dueFilter === "current" && !(balance > 0 && !isOverdue(row, today)))
+      return false;
+    if (dueFilter === "open" && balance <= 0) return false;
+    const q = searchFilter.trim().toLowerCase();
+    if (q) {
+      const hay = `${row.customerName} ${row.property} ${row.unit} ${row.receivableId}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }
 
   const totals = useMemo(() => {
     let invoiced = 0;
@@ -96,6 +126,7 @@ export function ReceivablesPanel({ kind }: Props) {
     let openCount = 0;
 
     for (const row of receivables) {
+      if (!matchesFilters(row)) continue;
       const balance = balanceOf(row);
       invoiced += row.amount;
       received += row.amountReceived;
@@ -120,19 +151,40 @@ export function ReceivablesPanel({ kind }: Props) {
       disputed: round2(disputed),
       openCount,
     };
-  }, [receivables, today]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- matchesFilters uses filter state
+  }, [
+    receivables,
+    today,
+    propertyFilter,
+    statusFilter,
+    dueFilter,
+    searchFilter,
+  ]);
+
+  const knownProperties = useMemo(() => {
+    const set = new Set(
+      receivables.map((r) => r.property).filter(Boolean) as string[]
+    );
+    for (const t of tenants) {
+      if (t.propertyLeased) set.add(t.propertyLeased);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [receivables, tenants]);
 
   const sorted = useMemo(
     () =>
-      [...receivables].sort((a, b) => {
-        const aOpen = balanceOf(a) > 0 ? 0 : 1;
-        const bOpen = balanceOf(b) > 0 ? 0 : 1;
-        if (aOpen !== bOpen) return aOpen - bOpen;
-        return (a.dueDate || "9999-12-31").localeCompare(
-          b.dueDate || "9999-12-31"
-        );
-      }),
-    [receivables]
+      [...receivables]
+        .filter((row) => matchesFilters(row))
+        .sort((a, b) => {
+          const aOpen = balanceOf(a) > 0 ? 0 : 1;
+          const bOpen = balanceOf(b) > 0 ? 0 : 1;
+          if (aOpen !== bOpen) return aOpen - bOpen;
+          return (a.dueDate || "9999-12-31").localeCompare(
+            b.dueDate || "9999-12-31"
+          );
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [receivables, propertyFilter, statusFilter, dueFilter, searchFilter, today]
   );
 
   const knownCustomers = useMemo(() => {
@@ -311,9 +363,24 @@ export function ReceivablesPanel({ kind }: Props) {
       ...row,
       amountReceived: round2(row.amountReceived + amount),
     });
+    try {
+      const { creditPropertyBankFromAr } = await import(
+        "@/app/ops/banks/ledger-bridge-actions"
+      );
+      await creditPropertyBankFromAr({
+        propertyName: row.property,
+        tenantName: row.customerName,
+        unit: row.unit,
+        amount,
+        method: row.paymentMethod || "AR receipt",
+        relatedId: row.id,
+      });
+    } catch {
+      /* bank post best-effort */
+    }
     setReceiptAmount("");
     setSavedMsg(
-      `Recorded a ${money(amount)} receipt on ${row.receivableId}.`
+      `Recorded a ${money(amount)} receipt on ${row.receivableId} (credited property bank when matched).`
     );
     setTimeout(() => setSavedMsg(null), 4000);
   }
@@ -334,6 +401,61 @@ export function ReceivablesPanel({ kind }: Props) {
             {savedMsg}
           </div>
         ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="form-control">
+            <span className="mb-1 text-sm opacity-70">Property</span>
+            <select
+              className="select select-bordered bg-white"
+              value={propertyFilter}
+              onChange={(e) => setPropertyFilter(e.target.value)}
+            >
+              <option value="all">All properties</option>
+              {knownProperties.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="form-control">
+            <span className="mb-1 text-sm opacity-70">Payment status</span>
+            <select
+              className="select select-bordered bg-white"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All statuses</option>
+              <option value="open">Open (unpaid / partial)</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="partially_paid">Partially paid</option>
+              <option value="paid">Paid</option>
+              <option value="disputed">Disputed</option>
+            </select>
+          </label>
+          <label className="form-control">
+            <span className="mb-1 text-sm opacity-70">Due status</span>
+            <select
+              className="select select-bordered bg-white"
+              value={dueFilter}
+              onChange={(e) => setDueFilter(e.target.value)}
+            >
+              <option value="all">Any due date</option>
+              <option value="open">Has balance</option>
+              <option value="overdue">Overdue</option>
+              <option value="current">Current (not overdue)</option>
+            </select>
+          </label>
+          <label className="form-control">
+            <span className="mb-1 text-sm opacity-70">Search</span>
+            <input
+              className="input input-bordered bg-white"
+              placeholder="Customer, unit, ID…"
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+            />
+          </label>
+        </div>
 
         <section className={`${apCardClass} p-6`}>
           <div className="flex flex-wrap items-start justify-between gap-6">
