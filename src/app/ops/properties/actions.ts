@@ -18,7 +18,7 @@ import {
   COLLECTIONS,
   listSharedRecords,
 } from "@/lib/shared-store";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { canAccessOpsModule } from "@/lib/team-auth";
 
 export type StaffApplicationState = {
   error?: string;
@@ -48,8 +48,8 @@ export async function sendContractForSignatureAction(
   _prev: StaffApplicationState,
   formData: FormData
 ): Promise<StaffApplicationState> {
-  if (!(await hasTeamAccess())) {
-    return { error: "Team access required." };
+  if (!(await canAccessOpsModule("properties"))) {
+    return { error: "Properties access required." };
   }
 
   const applicationId = String(formData.get("applicationId") ?? "");
@@ -94,8 +94,8 @@ export async function declineApplicationAction(
   _prev: StaffApplicationState,
   formData: FormData
 ): Promise<StaffApplicationState> {
-  if (!(await hasTeamAccess())) {
-    return { error: "Team access required." };
+  if (!(await canAccessOpsModule("properties"))) {
+    return { error: "Properties access required." };
   }
 
   const applicationId = String(formData.get("applicationId") ?? "");
@@ -118,8 +118,8 @@ export async function requestMoreInfoAction(
   _prev: StaffApplicationState,
   formData: FormData
 ): Promise<StaffApplicationState> {
-  if (!(await hasTeamAccess())) {
-    return { error: "Team access required." };
+  if (!(await canAccessOpsModule("properties"))) {
+    return { error: "Properties access required." };
   }
 
   const applicationId = String(formData.get("applicationId") ?? "");
@@ -149,8 +149,8 @@ export async function requestOwnerSpendApproval(
   _prev: StaffApprovalRequestState,
   formData: FormData
 ): Promise<StaffApprovalRequestState> {
-  if (!(await hasTeamAccess())) {
-    return { error: "Team access required." };
+  if (!(await canAccessOpsModule("properties"))) {
+    return { error: "Properties access required." };
   }
 
   const propertyId = String(formData.get("propertyId") ?? "");

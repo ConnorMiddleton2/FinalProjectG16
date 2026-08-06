@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import {
   AlertTriangle,
   BarChart3,
@@ -8,7 +7,7 @@ import {
   ScrollText,
   Wallet,
 } from "lucide-react";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { requireOpsModule } from "@/lib/team-auth";
 import { MgShell, tileClass } from "@/components/mgmt/MgShell";
 
 const categories = [
@@ -57,9 +56,7 @@ const categories = [
 ] as const;
 
 export default async function ManagementHubPage() {
-  if (!(await hasTeamAccess())) {
-    redirect("/team");
-  }
+  await requireOpsModule("management");
 
   return (
     <MgShell

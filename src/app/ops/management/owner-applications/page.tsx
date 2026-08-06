@@ -1,10 +1,9 @@
-import { redirect } from "next/navigation";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { requireOpsModule } from "@/lib/team-auth";
 import { MgShell } from "@/components/mgmt/MgShell";
 import { OwnerApplicationsDashboard } from "@/components/mgmt/OwnerApplicationsDashboard";
 
 export default async function Page() {
-  if (!(await hasTeamAccess())) redirect("/team");
+  await requireOpsModule("management");
   return (
     <MgShell
       title="Pending owner applications"

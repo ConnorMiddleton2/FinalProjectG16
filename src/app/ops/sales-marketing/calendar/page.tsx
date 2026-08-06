@@ -1,12 +1,9 @@
-import { redirect } from "next/navigation";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { requireOpsModule } from "@/lib/team-auth";
 import { SmShell } from "@/components/sm/SmShell";
 import { CalendarDashboard } from "@/components/sm/CalendarDashboard";
 
 export default async function SmCalendarPage() {
-  if (!(await hasTeamAccess())) {
-    redirect("/team");
-  }
+  await requireOpsModule("sales-marketing");
 
   return (
     <SmShell

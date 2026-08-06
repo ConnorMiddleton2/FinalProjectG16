@@ -21,22 +21,27 @@ import {
 } from "@/hooks/useSharedCollection";
 import {
   categoryLabel,
+  documentToForm,
   emptyDocument,
   emptyWorkOrder,
+  generateMaintenanceInvoiceNumber,
   isDocumentApproved,
   laborLabel,
   normalizeDocumentApproval,
+  normalizeMaintenanceDocument,
   approvalStatusLabel,
   normalizePriority,
   priorityLabel,
   sourceLabel,
   statusLabel,
+  workOrderCategoryToPayableCategory,
   WORK_ORDER_CATEGORIES,
   WORK_ORDER_PRIORITIES,
   WORK_ORDER_STATUSES,
   type BudgetLine,
   type DocumentKind,
   type MaintenanceDocument,
+  type MaintenanceDocumentForm,
   type VendorRecord,
   type WorkOrder,
   type WorkOrderCategory,
@@ -46,10 +51,24 @@ import {
   type WorkOrderStatus,
 } from "@/lib/maintenance";
 import { submitDocumentForApproval } from "@/lib/document-approval";
+import { maintenanceDocPayableStatusLabel } from "@/lib/maintenance-finance-bridge";
+import {
+  addDaysIso,
+  money,
+  parsePaidAmount,
+  parsePositiveAmount,
+  round2,
+  todayIso,
+} from "@/lib/money";
 import type { ManagementContractDraft } from "@/lib/management-contract";
 
 type Panel = "new" | "ledger" | "vendors" | "budget" | "documents";
 type BudgetView = "budget" | "expenses" | "ytd";
+
+type EditingDocument = MaintenanceDocumentForm & {
+  id: string;
+  submittedAt: string;
+};
 
 type Filters = {
   status: WorkOrderStatus | "all";
@@ -72,14 +91,6 @@ const defaultFilters: Filters = {
 };
 
 const PROPERTY_OTHER = "__other__";
-
-function money(n: number) {
-  return n.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
-}
 
 function priorityBadgeClass(priority: WorkOrderPriority) {
   switch (priority) {
@@ -113,9 +124,16 @@ export function MaintenanceDashboard() {
     saveAll: saveBudgetAll,
   } = useSharedCollection<BudgetLine>(COLLECTIONS.budgetLines);
   const {
-    items: documents,
-    saveOne: saveDocument,
+    items: rawDocuments,
+    saveOne: saveDocumentRaw,
   } = useSharedCollection<MaintenanceDocument>(COLLECTIONS.maintenanceDocuments);
+  const documents = useMemo(
+    () => rawDocuments.map((d) => normalizeMaintenanceDocument(d)),
+    [rawDocuments]
+  );
+  async function saveDocument(doc: MaintenanceDocument) {
+    await saveDocumentRaw(normalizeMaintenanceDocument(doc));
+  }
   const { items: managedProperties } =
     useSharedCollection<ManagementContractDraft>(COLLECTIONS.managedProperties);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
@@ -136,7 +154,7 @@ export function MaintenanceDashboard() {
   const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editingDocument, setEditingDocument] =
-    useState<MaintenanceDocument | null>(null);
+    useState<EditingDocument | null>(null);
   const [editDocSaving, setEditDocSaving] = useState(false);
 
   const managedPropertyNames = useMemo(() => {
@@ -265,14 +283,13 @@ export function MaintenanceDashboard() {
     if (linked.length === 0) return null;
     const approvedTotal = linked.reduce((sum, d) => {
       if (!isDocumentApproved(d)) return sum;
-      const n = Number(d.amount);
-      return sum + (Number.isNaN(n) ? 0 : n);
+      return sum + (Number.isFinite(d.amount) ? d.amount : 0);
     }, 0);
     const label =
       linked.length === 1
         ? `1 ${linked[0].kind}`
         : `${linked.length} invoices/receipts`;
-    return `${label} · $${approvedTotal}`;
+    return `${label} · ${money(round2(approvedTotal))}`;
   }
 
   function actualCostFromDocuments(
@@ -284,10 +301,10 @@ export function MaintenanceDashboard() {
         (d) => d.workOrderId === workOrderId && isDocumentApproved(d)
       )
       .reduce((sum, d) => {
-        const n = Number(d.amount);
+        const n = typeof d.amount === "number" ? d.amount : Number(d.amount);
         return sum + (Number.isNaN(n) ? 0 : n);
       }, 0);
-    return total > 0 ? String(total) : "";
+    return total > 0 ? String(round2(total)) : "";
   }
 
   function updateForm<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -388,9 +405,13 @@ export function MaintenanceDashboard() {
     for (const doc of docList) {
       if (!doc.applyToBudget || !isDocumentApproved(doc)) continue;
       const lineId = doc.budgetLineId?.trim();
-      const amount = Number(doc.amount || "0");
+      const amount =
+        typeof doc.amount === "number" ? doc.amount : Number(doc.amount || 0);
       if (!lineId || Number.isNaN(amount) || amount <= 0) continue;
-      spendByLine.set(lineId, (spendByLine.get(lineId) ?? 0) + amount);
+      spendByLine.set(
+        lineId,
+        round2((spendByLine.get(lineId) ?? 0) + amount)
+      );
     }
 
     let changed = false;
@@ -496,30 +517,45 @@ export function MaintenanceDashboard() {
 
   async function recordExpense(e: FormEvent) {
     e.preventDefault();
-    const amount = Number(expenseForm.amount);
-    if (!expenseForm.lineId || Number.isNaN(amount) || amount <= 0) return;
+    const amount = parsePositiveAmount(expenseForm.amount);
+    if (!expenseForm.lineId || amount == null) return;
 
     const line = budget.find((b) => b.id === expenseForm.lineId);
-    const receipt = submitDocumentForApproval({
-      id: crypto.randomUUID(),
-      kind: "receipt",
-      vendorName: "Manual expense",
-      property: "",
-      amount: String(amount),
-      documentDate: new Date().toISOString().slice(0, 10),
-      workOrderId: "",
-      category: line && line.category !== "all" ? line.category : "",
-      fileName: "manual-expense",
-      notes: expenseForm.note.trim() || "Posted from Budget dashboard",
-      submittedAt: new Date().toISOString(),
-      applyToBudget: true,
-      budgetLineId: expenseForm.lineId,
-      approvalStatus: "pending",
-      submittedForApprovalAt: "",
-      approvedAt: "",
-      approvedBy: "",
-      rejectionReason: "",
-    });
+    const category =
+      line && line.category !== "all" ? line.category : ("" as const);
+    const id = crypto.randomUUID();
+    const day = todayIso();
+    const receipt = submitDocumentForApproval(
+      normalizeMaintenanceDocument({
+        id,
+        kind: "receipt",
+        vendorName: "Manual expense",
+        property: "",
+        amount,
+        documentDate: day,
+        invoiceDate: day,
+        dueDate: "",
+        invoiceNumber: generateMaintenanceInvoiceNumber(id),
+        vendorId: "",
+        amountPaid: 0,
+        disputed: false,
+        payableCategory: category
+          ? workOrderCategoryToPayableCategory(category)
+          : "other",
+        workOrderId: "",
+        category: category || "",
+        fileName: "manual-expense",
+        notes: expenseForm.note.trim() || "Posted from Budget dashboard",
+        submittedAt: new Date().toISOString(),
+        applyToBudget: true,
+        budgetLineId: expenseForm.lineId,
+        approvalStatus: "pending",
+        submittedForApprovalAt: "",
+        approvedAt: "",
+        approvedBy: "",
+        rejectionReason: "",
+      })
+    );
 
     await saveDocument(receipt);
     await syncBudgetSpendFromLedger(orders, [receipt, ...documents]);
@@ -529,9 +565,9 @@ export function MaintenanceDashboard() {
     setTimeout(() => setSavedMsg(null), 3500);
   }
 
-  function updateDocForm<K extends keyof ReturnType<typeof emptyDocument>>(
+  function updateDocForm<K extends keyof MaintenanceDocumentForm>(
     key: K,
-    value: ReturnType<typeof emptyDocument>[K]
+    value: MaintenanceDocumentForm[K]
   ) {
     setDocForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -553,8 +589,8 @@ export function MaintenanceDashboard() {
       return;
     }
 
-    const amount = Number(docForm.amount);
-    if (Number.isNaN(amount) || amount <= 0) {
+    const amount = parsePositiveAmount(docForm.amount);
+    if (amount == null) {
       setSavedMsg("Enter a valid amount greater than zero.");
       return;
     }
@@ -564,20 +600,38 @@ export function MaintenanceDashboard() {
       resolveBudgetLineForWorkOrder(linkedOrder, "") ||
       "";
 
-    const next: MaintenanceDocument = submitDocumentForApproval({
-      ...docForm,
-      id: crypto.randomUUID(),
-      submittedAt: new Date().toISOString(),
-      applyToBudget: true,
-      budgetLineId,
-      category: docForm.category || linkedOrder.category,
-      property: docForm.property.trim() || linkedOrder.property,
-      approvalStatus: "pending",
-      submittedForApprovalAt: "",
-      approvedAt: "",
-      approvedBy: "",
-      rejectionReason: "",
-    });
+    const category = docForm.category || linkedOrder.category;
+    const id = crypto.randomUUID();
+    const invoiceDate = docForm.invoiceDate || docForm.documentDate || todayIso();
+    const next: MaintenanceDocument = submitDocumentForApproval(
+      normalizeMaintenanceDocument({
+        ...docForm,
+        id,
+        submittedAt: new Date().toISOString(),
+        applyToBudget: true,
+        budgetLineId,
+        category,
+        property: docForm.property.trim() || linkedOrder.property,
+        amount,
+        amountPaid: parsePaidAmount(docForm.amountPaid) ?? 0,
+        documentDate: invoiceDate,
+        invoiceDate,
+        dueDate: docForm.dueDate || addDaysIso(invoiceDate, 30),
+        invoiceNumber:
+          docForm.invoiceNumber.trim() ||
+          generateMaintenanceInvoiceNumber(id),
+        vendorId: docForm.vendorId,
+        disputed: docForm.disputed,
+        payableCategory:
+          docForm.payableCategory ||
+          workOrderCategoryToPayableCategory(category),
+        approvalStatus: "pending",
+        submittedForApprovalAt: "",
+        approvedAt: "",
+        approvedBy: "",
+        rejectionReason: "",
+      })
+    );
 
     try {
       await saveDocument(next);
@@ -592,7 +646,7 @@ export function MaintenanceDashboard() {
         budgetAppliedLineId: "",
         status: isDocumentApproved(next) ? "completed" : linkedOrder.status,
         completedAt: isDocumentApproved(next)
-          ? linkedOrder.completedAt || new Date().toISOString().slice(0, 10)
+          ? linkedOrder.completedAt || todayIso()
           : linkedOrder.completedAt,
       };
       await saveOrder(updatedOrder);
@@ -626,22 +680,28 @@ export function MaintenanceDashboard() {
       workOrderId,
       property: order.property,
       category: order.category,
+      payableCategory: workOrderCategoryToPayableCategory(order.category),
       applyToBudget: true,
       budgetLineId: resolveBudgetLineForWorkOrder(order, prev.budgetLineId),
     }));
   }
 
   function startEditDocument(doc: MaintenanceDocument) {
-    setEditingDocument({ ...doc });
+    const n = normalizeMaintenanceDocument(doc);
+    setEditingDocument({
+      ...documentToForm(n),
+      id: n.id,
+      submittedAt: n.submittedAt,
+    });
   }
 
   function cancelEditDocument() {
     setEditingDocument(null);
   }
 
-  function updateEditingDocument<K extends keyof MaintenanceDocument>(
+  function updateEditingDocument<K extends keyof EditingDocument>(
     key: K,
-    value: MaintenanceDocument[K]
+    value: EditingDocument[K]
   ) {
     setEditingDocument((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
@@ -659,6 +719,7 @@ export function MaintenanceDashboard() {
             workOrderId,
             property: order.property,
             category: order.category,
+            payableCategory: workOrderCategoryToPayableCategory(order.category),
             applyToBudget: true,
             budgetLineId: resolveBudgetLineForWorkOrder(
               order,
@@ -690,8 +751,8 @@ export function MaintenanceDashboard() {
       return;
     }
 
-    const amount = Number(editingDocument.amount);
-    if (Number.isNaN(amount) || amount <= 0) {
+    const amount = parsePositiveAmount(editingDocument.amount);
+    if (amount == null) {
       setSavedMsg("Enter a valid amount greater than zero.");
       return;
     }
@@ -704,20 +765,42 @@ export function MaintenanceDashboard() {
       resolveBudgetLineForWorkOrder(linkedOrder, "") ||
       "";
 
-    const updated: MaintenanceDocument = submitDocumentForApproval({
-      ...editingDocument,
-      id: editingDocument.id,
-      submittedAt: original?.submittedAt ?? editingDocument.submittedAt,
-      applyToBudget: true,
-      budgetLineId,
-      category: editingDocument.category || linkedOrder.category,
-      property: editingDocument.property.trim() || linkedOrder.property,
-      approvalStatus: "pending",
-      submittedForApprovalAt: "",
-      approvedAt: "",
-      approvedBy: "",
-      rejectionReason: "",
-    });
+    const category = editingDocument.category || linkedOrder.category;
+    const invoiceDate =
+      editingDocument.invoiceDate ||
+      editingDocument.documentDate ||
+      todayIso();
+
+    const updated: MaintenanceDocument = submitDocumentForApproval(
+      normalizeMaintenanceDocument({
+        ...editingDocument,
+        id: editingDocument.id,
+        submittedAt: original?.submittedAt ?? editingDocument.submittedAt,
+        applyToBudget: true,
+        budgetLineId,
+        category,
+        property: editingDocument.property.trim() || linkedOrder.property,
+        amount,
+        amountPaid: parsePaidAmount(editingDocument.amountPaid) ?? 0,
+        documentDate: invoiceDate,
+        invoiceDate,
+        dueDate:
+          editingDocument.dueDate || addDaysIso(invoiceDate, 30),
+        invoiceNumber:
+          editingDocument.invoiceNumber.trim() ||
+          generateMaintenanceInvoiceNumber(editingDocument.id),
+        vendorId: editingDocument.vendorId,
+        disputed: editingDocument.disputed,
+        payableCategory:
+          editingDocument.payableCategory ||
+          workOrderCategoryToPayableCategory(category),
+        approvalStatus: "pending",
+        submittedForApprovalAt: "",
+        approvedAt: "",
+        approvedBy: "",
+        rejectionReason: "",
+      })
+    );
 
     setEditDocSaving(true);
     try {
@@ -1322,7 +1405,9 @@ export function MaintenanceDashboard() {
                           <td className="text-sm tabular-nums">
                             {o.actualCost ? (
                               <>
-                                <p className="font-medium">${o.actualCost}</p>
+                                <p className="font-medium">
+                                  {money(Number(o.actualCost))}
+                                </p>
                                 {linkedDocsSummary(o.id) ? (
                                   <p className="text-xs opacity-55">
                                     {linkedDocsSummary(o.id)}
@@ -1529,7 +1614,11 @@ export function MaintenanceDashboard() {
                     <span className="mb-1 text-sm opacity-70">Actual cost</span>
                     <p className="font-medium tabular-nums">
                       {actualCostFromDocuments(editingOrder.id, documents)
-                        ? `$${actualCostFromDocuments(editingOrder.id, documents)}`
+                        ? money(
+                            Number(
+                              actualCostFromDocuments(editingOrder.id, documents)
+                            )
+                          )
                         : "No invoice yet"}
                     </p>
                     <p className="mt-1 text-xs opacity-55">
@@ -1567,15 +1656,18 @@ export function MaintenanceDashboard() {
                             className="rounded-lg border border-base-300 px-3 py-2 text-sm"
                           >
                             <p className="font-medium capitalize">
-                              {doc.kind} · {doc.vendorName} · ${doc.amount}
+                              {doc.kind} · {doc.vendorName} ·{" "}
+                              {money(doc.amount)}
                             </p>
                             <p className="text-xs opacity-55">
-                              {doc.documentDate}
+                              {doc.invoiceDate || doc.documentDate}
                               {doc.fileName ? ` · ${doc.fileName}` : ""}
                               {" · "}
                               {approvalStatusLabel(
                                 normalizeDocumentApproval(doc).approvalStatus!
                               )}
+                              {" · "}
+                              {maintenanceDocPayableStatusLabel(doc)}
                             </p>
                           </li>
                         ))}
@@ -2316,11 +2408,39 @@ export function MaintenanceDashboard() {
                     <input
                       type="date"
                       className="input input-bordered w-full"
-                      value={editingDocument.documentDate}
-                      onChange={(e) =>
-                        updateEditingDocument("documentDate", e.target.value)
+                      value={
+                        editingDocument.invoiceDate ||
+                        editingDocument.documentDate
                       }
+                      onChange={(e) => {
+                        updateEditingDocument("invoiceDate", e.target.value);
+                        updateEditingDocument("documentDate", e.target.value);
+                      }}
                       required
+                    />
+                  </label>
+
+                  <label className="form-control w-full">
+                    <span className="mb-1 text-sm opacity-70">Due date</span>
+                    <input
+                      type="date"
+                      className="input input-bordered w-full"
+                      value={editingDocument.dueDate}
+                      onChange={(e) =>
+                        updateEditingDocument("dueDate", e.target.value)
+                      }
+                    />
+                  </label>
+
+                  <label className="form-control w-full">
+                    <span className="mb-1 text-sm opacity-70">Invoice #</span>
+                    <input
+                      className="input input-bordered w-full"
+                      value={editingDocument.invoiceNumber}
+                      onChange={(e) =>
+                        updateEditingDocument("invoiceNumber", e.target.value)
+                      }
+                      placeholder="Auto if blank"
                     />
                   </label>
 
@@ -2539,11 +2659,34 @@ export function MaintenanceDashboard() {
                   <input
                     type="date"
                     className="input input-bordered w-full"
-                    value={docForm.documentDate}
-                    onChange={(e) =>
-                      updateDocForm("documentDate", e.target.value)
-                    }
+                    value={docForm.invoiceDate || docForm.documentDate}
+                    onChange={(e) => {
+                      updateDocForm("invoiceDate", e.target.value);
+                      updateDocForm("documentDate", e.target.value);
+                    }}
                     required
+                  />
+                </label>
+
+                <label className="form-control w-full">
+                  <span className="mb-1 text-sm opacity-70">Due date</span>
+                  <input
+                    type="date"
+                    className="input input-bordered w-full"
+                    value={docForm.dueDate}
+                    onChange={(e) => updateDocForm("dueDate", e.target.value)}
+                  />
+                </label>
+
+                <label className="form-control w-full">
+                  <span className="mb-1 text-sm opacity-70">Invoice #</span>
+                  <input
+                    className="input input-bordered w-full"
+                    value={docForm.invoiceNumber}
+                    onChange={(e) =>
+                      updateDocForm("invoiceNumber", e.target.value)
+                    }
+                    placeholder="Auto if blank"
                   />
                 </label>
 
@@ -2711,7 +2854,10 @@ export function MaintenanceDashboard() {
                             </p>
                             <p className="text-sm opacity-65">
                               {doc.property || "No property"} ·{" "}
-                              {doc.documentDate}
+                              {doc.invoiceDate || doc.documentDate}
+                              {doc.invoiceNumber
+                                ? ` · #${doc.invoiceNumber}`
+                                : ""}
                               {doc.category
                                 ? ` · ${categoryLabel(doc.category)}`
                                 : ""}
@@ -2723,8 +2869,11 @@ export function MaintenanceDashboard() {
                             >
                               {approvalStatusLabel(approval.approvalStatus!)}
                             </span>
+                            <span className="badge badge-sm badge-outline">
+                              {maintenanceDocPayableStatusLabel(doc)}
+                            </span>
                             <span className="badge badge-outline">
-                              ${doc.amount}
+                              {money(doc.amount)}
                             </span>
                             <button
                               type="button"
