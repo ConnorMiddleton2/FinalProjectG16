@@ -43,16 +43,12 @@ export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const path = request.nextUrl.pathname;
-<<<<<<< HEAD
-  const hasTeamCookie = request.cookies.get("harborline_team")?.value === "1";
+  const hasTeamCookie = hasTeamSessionCookie(request);
   const hasPortalDemo = isPortalDemoCookieValue(
     request.cookies.get(PORTAL_DEMO_COOKIE)?.value
   );
   const isLoginOrSignup =
     path.startsWith("/login") || path.startsWith("/signup");
-=======
-  const hasTeamCookie = hasTeamSessionCookie(request);
->>>>>>> origin/main
 
   const isPublic =
     path === "/" ||
