@@ -1,31 +1,41 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  Building2,
-  Percent,
-  PlusCircle,
-  Users,
-} from "lucide-react";
+import { ArrowLeft, PlusCircle } from "lucide-react";
 import {
   COLLECTIONS,
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
 import {
+  formatOptionalLeaseDate,
+  getPaymentStatus,
+  isCurrentTenant,
+  isLeaseExpiringWithinDays,
+  softPropertyNamesMatch,
+  tenantCategoryLabel,
+  type TenantRecord,
+} from "@/lib/tenants";
+import {
   emptyPropertyTenant,
   feeStructureLabel,
+  formatMetricCurrency,
+  formatPropertyAddress,
   type ManagementContractDraft,
   type SharedPropertyTenant,
 } from "@/lib/management-contract";
+import type { RentalReceivable } from "@/lib/rental-receivables";
+import {
+  buildLivePortfolioMetrics,
+  formatLiveOccupancy,
+  LIVE_TENANT_OCCUPANCY_HELPER,
+  NO_COMPLETE_UNIT_ROSTER_NOTE,
+  NO_PROPERTY_ROSTER_NOTE,
+  resolveTenantManagedPropertyId,
+  VACANT_UNITS_HELPER,
+} from "@/lib/property-live-metrics";
 
-function Metric({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-[var(--harbor-deep)]/10 bg-white/80 px-3 py-3">
       <p className="text-xs uppercase tracking-wide opacity-55">{label}</p>
@@ -52,12 +62,19 @@ function DetailBlock({
 }
 
 function Row({ label, value }: { label: string; value: string }) {
+  const v = (value || "").trim();
+  if (!v) return null;
   return (
     <div className="grid grid-cols-[10rem_1fr] gap-3 border-b border-base-200 py-2 text-sm last:border-0">
       <dt className="opacity-60">{label}</dt>
-      <dd className="font-medium text-[var(--harbor-ink)]">{value || "—"}</dd>
+      <dd className="font-medium text-[var(--harbor-ink)]">{v}</dd>
     </div>
   );
+}
+
+function meaningful(value: string | undefined | null): boolean {
+  const v = (value || "").trim();
+  return !!v && v !== "—" && v.toLowerCase() !== "not entered";
 }
 
 type Props = {
@@ -72,11 +89,54 @@ export function PropertyDetailView({ contract, onBack }: Props) {
     loading,
     error,
   } = useSharedCollection<SharedPropertyTenant>(COLLECTIONS.propertyTenants);
+  const { items: masterTenants } = useSharedCollection<TenantRecord>(
+    COLLECTIONS.tenants
+  );
+  const { items: allContracts } =
+    useSharedCollection<ManagementContractDraft>(COLLECTIONS.managedProperties);
+  const { items: receivables } = useSharedCollection<RentalReceivable>(
+    COLLECTIONS.rentalReceivables
+  );
 
-  const tenants = useMemo(
+  const rosterTenants = useMemo(
     () => allTenants.filter((t) => t.propertyId === contract.id),
     [allTenants, contract.id]
   );
+
+  const linkedTenants = useMemo(
+    () =>
+      masterTenants.filter((t) => {
+        const link = resolveTenantManagedPropertyId(t, allContracts);
+        if (link.propertyId) return link.propertyId === contract.id;
+        return softPropertyNamesMatch(t.propertyLeased, contract.propertyName);
+      }),
+    [masterTenants, allContracts, contract.id, contract.propertyName]
+  );
+
+  const livePortfolio = useMemo(
+    () =>
+      buildLivePortfolioMetrics(allContracts, masterTenants, receivables),
+    [allContracts, masterTenants, receivables]
+  );
+  const liveProp = livePortfolio.byPropertyId[contract.id];
+  const liveCurrentTenants = liveProp?.currentTenants ?? 0;
+  const liveOccupiedUnits = liveProp?.occupiedUnits ?? 0;
+  const liveVacantUnits = liveProp?.vacantUnits ?? 0;
+  const liveTotalUnits = liveProp?.totalUnits ?? 0;
+  const liveOccLabel = formatLiveOccupancy(liveOccupiedUnits, liveTotalUnits);
+  const monthlyRentRoll = liveProp?.monthlyRentRoll ?? 0;
+  const outstandingAr = liveProp?.outstandingAr ?? 0;
+  const occupiedRows = liveProp?.occupiedUnitRows ?? [];
+  const specificVacant = liveProp?.specificVacantUnitLabels ?? [];
+  const hasCompleteRoster = liveProp?.hasCompleteUnitRoster ?? false;
+
+  const currentLinked = linkedTenants.filter((t) => isCurrentTenant(t));
+  const linkedDelinquent = linkedTenants.filter(
+    (t) => getPaymentStatus(t) === "late" || t.category === "past_due"
+  ).length;
+  const linkedExpiring90 = linkedTenants.filter((t) =>
+    isLeaseExpiringWithinDays(t, 90)
+  ).length;
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(() =>
@@ -84,15 +144,37 @@ export function PropertyDetailView({ contract, onBack }: Props) {
   );
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
-  const activeTenants = tenants.filter((t) => t.status !== "vacant").length;
-  const vacantTenants = tenants.filter((t) => t.status === "vacant").length;
-  const address = [
-    contract.streetAddress,
-    [contract.city, contract.state].filter(Boolean).join(", "),
-    contract.zip,
+  const address = formatPropertyAddress(contract);
+  const feeLabel = [
+    feeStructureLabel(contract.feeStructure),
+    contract.feePercent ? `${contract.feePercent}%` : "",
+    contract.feeFlatAmount ? `$${contract.feeFlatAmount}` : "",
   ]
     .filter(Boolean)
     .join(" · ");
+
+  const assetRows: { label: string; value: string }[] = [
+    { label: "Parcel / tax ID", value: contract.parcelTaxId },
+    { label: "County", value: contract.county },
+    { label: "Year built", value: contract.yearBuilt },
+    { label: "Renovated", value: contract.yearRenovated },
+    {
+      label: "Buildings / floors",
+      value:
+        meaningful(contract.buildings) || meaningful(contract.floors)
+          ? `${contract.buildings || "—"} / ${contract.floors || "—"}`
+          : "",
+    },
+    { label: "Gross SF", value: contract.grossSf },
+    { label: "Parking", value: contract.parkingSpaces },
+    { label: "Zoning", value: contract.zoning },
+    { label: "Amenities", value: contract.amenities },
+    { label: "Lease structure", value: contract.camOrNnnStructure },
+    { label: "Insurance", value: contract.insuranceRequirements },
+    { label: "Preferred vendors", value: contract.preferredVendors },
+    { label: "Special terms", value: contract.specialTerms },
+    { label: "Notes", value: contract.notes },
+  ].filter((r) => meaningful(r.value));
 
   async function handleAddTenant(e: FormEvent) {
     e.preventDefault();
@@ -111,7 +193,7 @@ export function PropertyDetailView({ contract, onBack }: Props) {
       });
       setForm(emptyPropertyTenant(contract.id, contract.propertyName));
       setShowForm(false);
-      setSavedMsg("Tenant saved to the shared team database.");
+      setSavedMsg("Roster tenant saved to the shared team database.");
       setTimeout(() => setSavedMsg(null), 3000);
     } catch (err) {
       setSavedMsg(
@@ -139,331 +221,159 @@ export function PropertyDetailView({ contract, onBack }: Props) {
           <h1 className="font-display text-4xl tracking-tight text-[var(--harbor-ink)]">
             {contract.propertyName || "Untitled property"}
           </h1>
-          <p className="mt-2 text-[var(--harbor-ink)]/65">{address || "No address"}</p>
+          <p className="mt-2 text-[var(--harbor-ink)]/65">
+            {address || "No address"}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <span className="badge badge-outline capitalize">
             {contract.propertyType}
           </span>
           {contract.exclusiveManagement && (
-            <span className="badge badge-neutral">Exclusive</span>
+            <span className="badge badge-neutral">Exclusive management</span>
           )}
         </div>
       </div>
 
+      <p className="rounded-xl border border-[var(--harbor-deep)]/10 bg-white/70 px-4 py-3 text-sm text-[var(--harbor-ink)]/70">
+        {LIVE_TENANT_OCCUPANCY_HELPER} {VACANT_UNITS_HELPER} Monthly rent roll
+        and outstanding A/R are derived from linked tenant and receivable
+        records.
+      </p>
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric label="Current tenants" value={String(liveCurrentTenants)} />
         <Metric
-          label="Occupancy"
-          value={
-            contract.occupancyPercent
-              ? `${contract.occupancyPercent}%`
-              : "—"
-          }
+          label="Total units"
+          value={liveTotalUnits > 0 ? String(liveTotalUnits) : "—"}
         />
-        <Metric
-          label="Tenants"
-          value={
-            String(activeTenants || contract.tenantCount || "—")
-          }
-        />
-        <Metric
-          label="Rentable SF"
-          value={contract.rentableSf ? `${contract.rentableSf}` : "—"}
-        />
+        <Metric label="Occupied units" value={String(liveOccupiedUnits)} />
+        <Metric label="Vacant units" value={String(liveVacantUnits)} />
+        <Metric label="Live occupancy" value={liveOccLabel} />
         <Metric
           label="Monthly rent roll"
-          value={
-            contract.monthlyRentRoll
-              ? `$${Number(contract.monthlyRentRoll).toLocaleString()}`
-              : "—"
-          }
+          value={formatMetricCurrency(monthlyRentRoll, "$0")}
+        />
+        <Metric
+          label="Outstanding A/R"
+          value={formatMetricCurrency(outstandingAr, "$0")}
         />
       </div>
 
+      {liveProp?.liveOccupancyPercent != null && (
+        <div className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-4 shadow-sm">
+          <div className="mb-2 flex items-center justify-between text-sm">
+            <span className="font-medium text-[var(--harbor-ink)]">
+              Live occupancy
+            </span>
+            <span className="opacity-70">{liveOccLabel}</span>
+          </div>
+          <progress
+            className="progress progress-info w-full"
+            value={Math.min(100, Math.max(0, liveProp.liveOccupancyPercent))}
+            max={100}
+          />
+        </div>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-2">
-        <DetailBlock title="Asset details">
+        <DetailBlock title="Management">
           <dl>
-            <Row label="Parcel / tax ID" value={contract.parcelTaxId} />
-            <Row label="County" value={contract.county} />
-            <Row label="Year built" value={contract.yearBuilt} />
-            <Row label="Renovated" value={contract.yearRenovated} />
-            <Row label="Buildings / floors" value={`${contract.buildings || "—"} / ${contract.floors || "—"}`} />
-            <Row label="Units / suites" value={contract.unitsSuites} />
-            <Row label="Gross SF" value={contract.grossSf} />
-            <Row label="Parking" value={contract.parkingSpaces} />
-            <Row label="Zoning" value={contract.zoning} />
-            <Row label="Amenities" value={contract.amenities} />
+            <Row label="Owner" value={contract.ownerLegalName} />
+            <Row label="Owner entity" value={contract.ownerEntityType} />
+            <Row label="Owner contact" value={contract.ownerContactName} />
+            <Row label="Owner email" value={contract.ownerEmail} />
+            <Row label="Owner phone" value={contract.ownerPhone} />
+            <Row label="Assigned manager" value={contract.assignedManager} />
+            <Row label="Agreement start" value={contract.contractStartDate} />
+            <Row
+              label="Agreement end / renewal"
+              value={
+                [contract.contractEndDate, contract.renewalOptions]
+                  .filter(Boolean)
+                  .join(" · ") || ""
+              }
+            />
+            <Row label="Fee structure" value={feeLabel} />
           </dl>
         </DetailBlock>
 
-        <DetailBlock title="Owner & management">
-          <dl>
-            <Row label="Owner" value={contract.ownerLegalName} />
-            <Row label="Entity" value={contract.ownerEntityType} />
-            <Row label="Contact" value={contract.ownerContactName} />
-            <Row label="Email" value={contract.ownerEmail} />
-            <Row label="Phone" value={contract.ownerPhone} />
-            <Row
-              label="Contract term"
-              value={[contract.contractStartDate, contract.contractEndDate]
-                .filter(Boolean)
-                .join(" → ")}
-            />
-            <Row label="Renewals" value={contract.renewalOptions} />
-            <Row
-              label="Fee structure"
-              value={feeStructureLabel(contract.feeStructure)}
-            />
-            <Row
-              label="Mgmt fee"
-              value={
-                contract.feePercent
-                  ? `${contract.feePercent}%`
-                  : contract.feeFlatAmount
-                    ? `$${contract.feeFlatAmount}`
-                    : ""
-              }
-            />
-            <Row label="Assigned manager" value={contract.assignedManager} />
-          </dl>
+        <DetailBlock title="Tenant activity">
+          <p className="mb-3 text-sm text-[var(--harbor-ink)]/65">
+            Linked management tenants for this property.{" "}
+            {linkedDelinquent} delinquent · {linkedExpiring90} leases expiring
+            within 90 days.
+          </p>
+          {currentLinked.length === 0 ? (
+            <p className="text-sm opacity-60">
+              No current tenants uniquely linked to this property.
+            </p>
+          ) : (
+            <ul className="divide-y divide-base-200">
+              {currentLinked.map((t) => (
+                <li
+                  key={t.id}
+                  className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                >
+                  <Link
+                    href={`/ops/tenant/${encodeURIComponent(t.id)}`}
+                    className="font-medium text-[var(--harbor-mid)] underline-offset-2 hover:underline"
+                  >
+                    {t.name}
+                  </Link>
+                  <span className="text-xs opacity-70">
+                    {t.unit || "No unit"} · {tenantCategoryLabel(t.category)}
+                    {getPaymentStatus(t) === "late" || t.category === "past_due"
+                      ? " · Delinquent"
+                      : ""}
+                    {isLeaseExpiringWithinDays(t, 90)
+                      ? " · Expiring ≤90d"
+                      : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {rosterTenants.length === 0 && (
+            <p className="mt-3 text-xs text-[var(--harbor-ink)]/55">
+              {NO_PROPERTY_ROSTER_NOTE}
+            </p>
+          )}
         </DetailBlock>
       </div>
 
-      <DetailBlock title="Operating metrics">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Metric
-            label="Annual GPR"
-            value={
-              contract.annualGpr
-                ? `$${Number(contract.annualGpr).toLocaleString()}`
-                : "—"
-            }
-          />
-          <Metric
-            label="OpEx"
-            value={
-              contract.annualOperatingExpenses
-                ? `$${Number(contract.annualOperatingExpenses).toLocaleString()}`
-                : "—"
-            }
-          />
-          <Metric
-            label="NOI"
-            value={
-              contract.annualNoi
-                ? `$${Number(contract.annualNoi).toLocaleString()}`
-                : "—"
-            }
-          />
-          <Metric
-            label="Cap rate"
-            value={
-              contract.capRatePercent ? `${contract.capRatePercent}%` : "—"
-            }
-          />
-          <Metric
-            label="AR / arrears"
-            value={
-              contract.arBalance
-                ? `$${Number(contract.arBalance).toLocaleString()}`
-                : "—"
-            }
-          />
-          <Metric
-            label="Deposits held"
-            value={
-              contract.securityDepositsHeld
-                ? `$${Number(contract.securityDepositsHeld).toLocaleString()}`
-                : "—"
-            }
-          />
-          <Metric
-            label="Reserves"
-            value={
-              contract.reserveBalance
-                ? `$${Number(contract.reserveBalance).toLocaleString()}`
-                : "—"
-            }
-          />
-          <Metric label="Lease structure" value={contract.camOrNnnStructure} />
-          <Metric label="Insurance" value={contract.insuranceRequirements} />
-        </div>
-        {contract.majorLeaseExpirations ? (
-          <p className="mt-4 text-sm text-[var(--harbor-ink)]/70">
-            <span className="font-medium">Major lease expirations: </span>
-            {contract.majorLeaseExpirations}
-          </p>
-        ) : null}
-      </DetailBlock>
-
-      <DetailBlock title="Tenant roster">
-        <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
-          <span className="inline-flex items-center gap-1 opacity-70">
-            <Users className="h-4 w-4" />
-            {activeTenants} occupied
-          </span>
-          <span className="inline-flex items-center gap-1 opacity-70">
-            <Building2 className="h-4 w-4" />
-            {vacantTenants} vacant
-          </span>
-          <span className="inline-flex items-center gap-1 opacity-70">
-            <Percent className="h-4 w-4" />
-            {contract.occupancyPercent
-              ? `${contract.occupancyPercent}% occupancy`
-              : "Occupancy not set"}
-          </span>
-          <button
-            type="button"
-            className="btn btn-neutral btn-xs gap-1 ml-auto"
-            onClick={() => setShowForm((v) => !v)}
-          >
-            <PlusCircle className="h-3.5 w-3.5" />
-            {showForm ? "Hide" : "Add tenant"}
-          </button>
-        </div>
-
-        {error && <p className="mb-2 text-sm text-red-700">{error}</p>}
-        {savedMsg && (
-          <p className="mb-2 text-sm text-emerald-800">{savedMsg}</p>
-        )}
-        {loading && (
-          <p className="mb-2 text-sm opacity-60">Loading shared roster…</p>
-        )}
-
-        {showForm && (
-          <form
-            onSubmit={handleAddTenant}
-            className="mb-4 grid gap-2 rounded-xl border border-base-300 bg-base-100 p-3 sm:grid-cols-2 lg:grid-cols-3"
-          >
-            <input
-              className="input input-bordered input-sm"
-              placeholder="Unit"
-              value={form.unit}
-              onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
-              required
-            />
-            <input
-              className="input input-bordered input-sm"
-              placeholder="Tenant name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              required
-            />
-            <input
-              className="input input-bordered input-sm"
-              placeholder="Email"
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            />
-            <input
-              className="input input-bordered input-sm"
-              placeholder="Phone"
-              value={form.phone}
-              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-            />
-            <input
-              type="date"
-              className="input input-bordered input-sm"
-              value={form.leaseStart}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, leaseStart: e.target.value }))
-              }
-            />
-            <input
-              type="date"
-              className="input input-bordered input-sm"
-              value={form.leaseEnd}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, leaseEnd: e.target.value }))
-              }
-            />
-            <input
-              className="input input-bordered input-sm"
-              placeholder="SF"
-              value={form.sqft}
-              onChange={(e) => setForm((f) => ({ ...f, sqft: e.target.value }))}
-            />
-            <input
-              className="input input-bordered input-sm"
-              placeholder="Rent / mo"
-              value={form.monthlyRent}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, monthlyRent: e.target.value }))
-              }
-            />
-            <select
-              className="select select-bordered select-sm"
-              value={form.status}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  status: e.target.value as SharedPropertyTenant["status"],
-                }))
-              }
-            >
-              <option value="active">active</option>
-              <option value="notice">notice</option>
-              <option value="vacant">vacant</option>
-            </select>
-            <button type="submit" className="btn btn-neutral btn-sm">
-              Save to shared database
-            </button>
-          </form>
-        )}
-
-        {tenants.length === 0 ? (
+      <DetailBlock title="Occupied units">
+        {occupiedRows.length === 0 ? (
           <p className="text-sm opacity-60">
-            No tenants on the shared roster yet. Add one so classmates see it.
+            No occupied units identified from current tenant assignments.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-base-300">
-            <table className="table">
+          <div className="overflow-x-auto">
+            <table className="table table-sm">
               <thead>
                 <tr>
                   <th>Unit</th>
                   <th>Tenant</th>
-                  <th>Lease</th>
-                  <th>SF</th>
-                  <th>Rent / mo</th>
-                  <th>Status</th>
+                  <th>Lease status</th>
+                  <th>Lease end</th>
+                  <th>Delinquency</th>
                 </tr>
               </thead>
               <tbody>
-                {tenants.map((t) => (
-                  <tr key={t.id}>
-                    <td className="font-medium">{t.unit}</td>
+                {occupiedRows.map((row) => (
+                  <tr key={row.unitKey}>
+                    <td className="font-medium">{row.unitLabel}</td>
                     <td>
-                      <p>{t.name}</p>
-                      {(t.email || t.phone) && (
-                        <p className="text-xs opacity-60">
-                          {[t.email, t.phone].filter(Boolean).join(" · ")}
-                        </p>
-                      )}
-                    </td>
-                    <td className="text-sm">
-                      {t.leaseStart || t.leaseEnd
-                        ? `${t.leaseStart || "—"} → ${t.leaseEnd || "—"}`
-                        : "—"}
-                    </td>
-                    <td>{t.sqft || "—"}</td>
-                    <td>
-                      {t.monthlyRent
-                        ? `$${Number(t.monthlyRent).toLocaleString()}`
-                        : "—"}
-                    </td>
-                    <td>
-                      <span
-                        className={`badge ${
-                          t.status === "active"
-                            ? "badge-success"
-                            : t.status === "notice"
-                              ? "badge-warning"
-                              : "badge-ghost"
-                        }`}
+                      <Link
+                        href={`/ops/tenant/${encodeURIComponent(row.tenantId)}`}
+                        className="text-[var(--harbor-mid)] underline-offset-2 hover:underline"
                       >
-                        {t.status}
-                      </span>
+                        {row.tenantName}
+                      </Link>
                     </td>
+                    <td>{row.leaseStatus}</td>
+                    <td>{formatOptionalLeaseDate(row.leaseEnd)}</td>
+                    <td>{row.delinquent ? "Delinquent" : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -472,16 +382,104 @@ export function PropertyDetailView({ contract, onBack }: Props) {
         )}
       </DetailBlock>
 
-      {(contract.knownIssues ||
-        contract.preferredVendors ||
-        contract.specialTerms ||
-        contract.notes) && (
-        <DetailBlock title="Operations notes">
+      <DetailBlock title="Vacant units">
+        <p className="mb-2 text-sm">
+          Calculated vacant units:{" "}
+          <span className="font-semibold">{liveVacantUnits}</span>
+        </p>
+        {hasCompleteRoster && specificVacant.length > 0 ? (
+          <ul className="list-inside list-disc text-sm">
+            {specificVacant.map((label) => (
+              <li key={label}>{label}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-[var(--harbor-ink)]/65">
+            {NO_COMPLETE_UNIT_ROSTER_NOTE}
+          </p>
+        )}
+        {occupiedRows.length > 0 && (
+          <p className="mt-2 text-xs opacity-55">
+            Known occupied identifiers:{" "}
+            {occupiedRows.map((r) => r.unitLabel).join(", ")}
+          </p>
+        )}
+      </DetailBlock>
+
+      {rosterTenants.length > 0 && (
+        <DetailBlock title="Property roster">
+          <p className="mb-3 text-sm text-[var(--harbor-ink)]/65">
+            Separate from the management Tenant master list. Not treated as a
+            complete unit inventory.
+          </p>
+          <ul className="divide-y divide-base-200 text-sm">
+            {rosterTenants.map((t) => (
+              <li key={t.id} className="flex justify-between gap-2 py-2">
+                <span>
+                  {t.unit} · {t.name}
+                </span>
+                <span className="opacity-60 capitalize">{t.status}</span>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs mt-3 gap-1"
+            onClick={() => setShowForm((v) => !v)}
+          >
+            <PlusCircle className="h-3.5 w-3.5" />
+            {showForm ? "Hide form" : "Add roster tenant"}
+          </button>
+        </DetailBlock>
+      )}
+
+      {rosterTenants.length === 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs gap-1"
+            onClick={() => setShowForm((v) => !v)}
+          >
+            <PlusCircle className="h-3.5 w-3.5" />
+            {showForm ? "Hide form" : "Add property roster tenant"}
+          </button>
+          {loading && <span className="opacity-55">Loading roster…</span>}
+        </div>
+      )}
+
+      {showForm && (
+        <form
+          onSubmit={handleAddTenant}
+          className="grid gap-2 rounded-xl border border-base-300 bg-white/80 p-3 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          <input
+            className="input input-bordered input-sm"
+            placeholder="Unit"
+            value={form.unit}
+            onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+            required
+          />
+          <input
+            className="input input-bordered input-sm"
+            placeholder="Tenant name"
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            required
+          />
+          <button type="submit" className="btn btn-neutral btn-sm">
+            Save roster row
+          </button>
+        </form>
+      )}
+      {error && <p className="text-sm text-red-700">{error}</p>}
+      {savedMsg && <p className="text-sm text-emerald-800">{savedMsg}</p>}
+
+      {assetRows.length > 0 && (
+        <DetailBlock title="Optional asset details">
           <dl>
-            <Row label="Known issues" value={contract.knownIssues} />
-            <Row label="Preferred vendors" value={contract.preferredVendors} />
-            <Row label="Special terms" value={contract.specialTerms} />
-            <Row label="Notes" value={contract.notes} />
+            {assetRows.map((r) => (
+              <Row key={r.label} label={r.label} value={r.value} />
+            ))}
           </dl>
         </DetailBlock>
       )}

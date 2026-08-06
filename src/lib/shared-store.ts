@@ -13,6 +13,17 @@ export const COLLECTIONS = {
   propertyTenants: "property_tenants",
   tenantContracts: "tenant_contracts",
   tenantInvoices: "tenant_invoices",
+  /**
+   * AR teammate rent ledger — Collections may READ only.
+   * Never write or mutate this collection from Collections UI.
+   */
+  rentalReceivables: "rental_receivables",
+  /** Collections weekly notices (simulated delivery only). */
+  collectionsNotices: "collections_notices",
+  /** Per-tenant pause / dispute / payment-plan / review controls. */
+  collectionsAccountState: "collections_account_state",
+  /** 90-day management-review alerts (internal only). */
+  managementAlerts: "management_alerts",
 } as const;
 
 export type SharedCollection =

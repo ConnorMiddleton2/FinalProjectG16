@@ -1,35 +1,11 @@
+"use client";
+
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, LogOut } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
-import { ManagementDashboardClient } from "@/components/ManagementDashboardClient";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { ArrowLeft, LogOut } from "lucide-react";
+import { ManagementCollectionsPanel } from "@/components/ManagementCollectionsPanel";
 
-const DASHBOARDS: Record<string, { title: string }> = {
-  ap: { title: "Accounts Payable" },
-  ar: { title: "Accounts Receivable" },
-  hr: { title: "Human Resources" },
-  "sales-marketing": { title: "Sales & Marketing" },
-  management: { title: "Management" },
-};
-
-type Props = {
-  params: Promise<{ slug: string }>;
-};
-
-export default async function OpsDashboardPage({ params }: Props) {
-  if (!(await hasTeamAccess())) {
-    redirect("/team");
-  }
-
-  const { slug } = await params;
-  const dash = DASHBOARDS[slug];
-  if (!dash) notFound();
-
-  if (slug === "management") {
-    return <ManagementDashboardClient />;
-  }
-
+export function ManagementDashboardClient() {
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
       <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
@@ -50,7 +26,7 @@ export default async function OpsDashboardPage({ params }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-10 space-y-6">
+      <main className="mx-auto max-w-6xl space-y-6 px-6 py-10">
         <Link
           href="/ops"
           className="inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
@@ -61,15 +37,15 @@ export default async function OpsDashboardPage({ params }: Props) {
 
         <div>
           <h1 className="font-display text-4xl tracking-tight text-[var(--harbor-ink)]">
-            {dash.title}
+            Management
           </h1>
-          <p className="mt-2 text-[var(--harbor-ink)]/65">
-            This dashboard is intentionally blank for now. We will build it out
-            later.
+          <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/65">
+            Collections escalation alerts for authorized management review.
+            Other management workflows will be added separately.
           </p>
         </div>
 
-        <div className="min-h-64 rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/50" />
+        <ManagementCollectionsPanel />
       </main>
     </div>
   );
