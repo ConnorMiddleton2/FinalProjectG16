@@ -6,12 +6,18 @@ import {
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
 import {
+  seedPayableInvoices,
+  type PayableInvoice,
+} from "@/lib/accounts-payable";
+import {
   deptExpenseToUnified,
   money,
+  payableInvoiceIdForExpense,
   seedApPayables,
   seedDepartmentExpenses,
   smReceiptToUnified,
   unifiedExpenseToApPayable,
+  unifiedExpenseToPayableInvoice,
   type ApPayable,
   type DepartmentExpense,
   type UnifiedExpense,
@@ -46,6 +52,13 @@ export function ApprovalsDashboard() {
     items: apItems,
     saveOne: saveAp,
   } = useSharedCollection<ApPayable>(COLLECTIONS.apPayables, seedApPayables);
+  const {
+    items: payableInvoices,
+    saveOne: saveInvoice,
+  } = useSharedCollection<PayableInvoice>(
+    COLLECTIONS.payableInvoices,
+    seedPayableInvoices
+  );
 
   const [filter, setFilter] = useState<"pending" | "all">("pending");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -76,6 +89,24 @@ export function ApprovalsDashboard() {
     return apItems.some((p) => p.sourceExpenseId === selected.id);
   }, [apItems, selected]);
 
+  const invoiceOnFile = useMemo(() => {
+    if (!selected) return false;
+    const id = payableInvoiceIdForExpense(selected.id);
+    return payableInvoices.some((p) => p.id === id);
+  }, [payableInvoices, selected]);
+
+  async function forwardToAccountsPayable(row: UnifiedExpense) {
+    const existsAp = apItems.some((p) => p.sourceExpenseId === row.id);
+    if (!existsAp) {
+      await saveAp(unifiedExpenseToApPayable(row));
+    }
+    const invoiceId = payableInvoiceIdForExpense(row.id);
+    const existsInvoice = payableInvoices.some((p) => p.id === invoiceId);
+    if (!existsInvoice) {
+      await saveInvoice(unifiedExpenseToPayableInvoice(row));
+    }
+  }
+
   async function setStatus(
     row: UnifiedExpense,
     status: "approved" | "declined"
@@ -99,12 +130,9 @@ export function ApprovalsDashboard() {
     }
 
     if (status === "approved") {
-      const exists = apItems.some((p) => p.sourceExpenseId === row.id);
-      if (!exists) {
-        await saveAp(unifiedExpenseToApPayable(row));
-      }
+      await forwardToAccountsPayable(row);
       setMsg(
-        "Approved — sent to Accounts Payable for payment processing."
+        "Approved — queued for payment and added to Operating expenses in Accounts Payable."
       );
     } else {
       setMsg("Declined.");
@@ -263,7 +291,10 @@ export function ApprovalsDashboard() {
 
               {alreadyQueued ? (
                 <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-                  Already queued in Accounts Payable.
+                  Already queued in Accounts Payable
+                  {invoiceOnFile
+                    ? " (payment queue + operating expenses)."
+                    : "."}
                 </p>
               ) : null}
 
@@ -284,13 +315,17 @@ export function ApprovalsDashboard() {
                     Decline
                   </button>
                 </div>
-              ) : selected.status === "approved" && !alreadyQueued ? (
+              ) : selected.status === "approved" &&
+                (!alreadyQueued || !invoiceOnFile) ? (
                 <button
                   type="button"
                   className="btn btn-outline btn-sm"
                   onClick={async () => {
-                    await saveAp(unifiedExpenseToApPayable(selected));
-                    setMsg("Forwarded to Accounts Payable.");
+                    await forwardToAccountsPayable(selected);
+                    setMsg(
+                      "Forwarded to Accounts Payable (payment queue + operating expenses)."
+                    );
+                    setTimeout(() => setMsg(null), 3500);
                   }}
                 >
                   Send to Accounts Payable
