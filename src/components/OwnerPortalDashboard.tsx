@@ -7,7 +7,10 @@ import {
 } from "@/hooks/useSharedCollection";
 import type { OwnerAccount } from "@/lib/owner-auth";
 import {
+  CAPEX_PAYMENT_METHODS,
+  capexPaymentLabel,
   money,
+  type CapExPaymentMethod,
   type CapitalExpenditure,
   type OwnerContract,
 } from "@/lib/management";
@@ -31,6 +34,9 @@ export function OwnerPortalDashboard({ owner }: Props) {
 
   const [msg, setMsg] = useState<string | null>(null);
   const [signer, setSigner] = useState(owner.fullName);
+  const [paymentByCapex, setPaymentByCapex] = useState<
+    Record<string, CapExPaymentMethod>
+  >({});
 
   const myContracts = useMemo(
     () =>
@@ -83,20 +89,31 @@ export function OwnerPortalDashboard({ owner }: Props) {
     c: CapitalExpenditure,
     status: "approved_by_owner" | "declined_by_owner"
   ) {
+    if (status === "approved_by_owner") {
+      const method = paymentByCapex[c.id];
+      if (!method) {
+        setMsg("Select how you want to pay before approving.");
+        return;
+      }
+      await saveCapex({
+        ...c,
+        status,
+        paymentMethod: method,
+        ownerRespondedAt: new Date().toISOString(),
+        ownerResponseNotes: `Owner approved CapEx. Payment preference: ${capexPaymentLabel(method)}.`,
+      });
+      setMsg(
+        `CapEx approved · ${capexPaymentLabel(method)}. Harborline will follow up.`
+      );
+      return;
+    }
     await saveCapex({
       ...c,
       status,
       ownerRespondedAt: new Date().toISOString(),
-      ownerResponseNotes:
-        status === "approved_by_owner"
-          ? "Owner approved CapEx request."
-          : "Owner declined CapEx request.",
+      ownerResponseNotes: "Owner declined CapEx request.",
     });
-    setMsg(
-      status === "approved_by_owner"
-        ? "CapEx approved."
-        : "CapEx declined."
-    );
+    setMsg("CapEx declined.");
   }
 
   return (
@@ -118,7 +135,7 @@ export function OwnerPortalDashboard({ owner }: Props) {
                 key={a.id}
                 className="rounded-xl border border-base-300 bg-base-100 px-3 py-2 text-sm whitespace-pre-wrap"
               >
-                <p className="text-xs opacity-55 mb-1">
+                <p className="mb-1 text-xs opacity-55">
                   Status: {a.mgmtStatus ?? "pending"}
                 </p>
                 {a.accountMessage || "No messages yet."}
@@ -128,7 +145,7 @@ export function OwnerPortalDashboard({ owner }: Props) {
         )}
       </section>
 
-      <section className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-5 shadow-sm space-y-3">
+      <section className="space-y-3 rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-5 shadow-sm">
         <h2 className="text-lg font-semibold">Contracts to review & sign</h2>
         {myContracts.length === 0 ? (
           <p className="text-sm opacity-60">No contracts in your portal yet.</p>
@@ -136,7 +153,7 @@ export function OwnerPortalDashboard({ owner }: Props) {
           myContracts.map((c) => (
             <article
               key={c.id}
-              className="rounded-xl border border-base-300 bg-base-100 p-4 space-y-2"
+              className="space-y-2 rounded-xl border border-base-300 bg-base-100 p-4"
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
@@ -182,43 +199,136 @@ export function OwnerPortalDashboard({ owner }: Props) {
         )}
       </section>
 
-      <section className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-5 shadow-sm space-y-3">
+      <section className="space-y-3 rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-5 shadow-sm">
         <h2 className="text-lg font-semibold">Capital expenditure requests</h2>
+        <p className="text-sm opacity-65">
+          Review vendor invoices carefully before approving. Choose how you want
+          to fund the work when you approve.
+        </p>
         {myCapex.length === 0 ? (
           <p className="text-sm opacity-60">No CapEx requests right now.</p>
         ) : (
           myCapex.map((c) => (
             <article
               key={c.id}
-              className="rounded-xl border border-base-300 bg-base-100 p-4 space-y-2"
+              className="space-y-3 rounded-xl border border-base-300 bg-base-100 p-4"
             >
-              <p className="font-semibold">{c.title}</p>
-              <p className="text-sm opacity-70">
-                {c.propertyName} · {money(c.estimatedCost)} · {c.category}
-              </p>
-              <p className="text-sm">{c.description}</p>
-              <p className="text-sm opacity-80">{c.justification}</p>
-              {c.status === "pending_owner_approval" ? (
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="btn btn-neutral btn-sm"
-                    onClick={() => void respondCapex(c, "approved_by_owner")}
-                  >
-                    Approve CapEx
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-outline btn-sm"
-                    onClick={() => void respondCapex(c, "declined_by_owner")}
-                  >
-                    Decline
-                  </button>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold">{c.title}</p>
+                  <p className="text-sm opacity-70">
+                    {c.propertyName} · {money(c.estimatedCost)} ·{" "}
+                    {c.category.replaceAll("_", " ")}
+                  </p>
                 </div>
-              ) : (
                 <span className="badge badge-sm capitalize">
                   {c.status.replaceAll("_", " ")}
                 </span>
+              </div>
+              <p className="text-sm">{c.description}</p>
+              <p className="text-sm opacity-80">{c.justification}</p>
+
+              <div className="rounded-lg border border-[var(--harbor-deep)]/10 bg-white p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-55">
+                  Vendor invoices
+                </p>
+                {(c.vendorInvoices ?? []).length === 0 ? (
+                  <p className="text-xs opacity-55">
+                    No invoices attached. Ask Harborline to upload the vendor
+                    quotes before approving if needed.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {(c.vendorInvoices ?? []).map((inv) => (
+                      <li
+                        key={inv.id}
+                        className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                      >
+                        <span>
+                          {inv.vendorName} · {inv.fileName}
+                          {inv.amount > 0 ? ` · ${money(inv.amount)}` : ""}
+                        </span>
+                        {inv.dataUrl ? (
+                          <a
+                            href={inv.dataUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn btn-outline btn-xs"
+                          >
+                            View invoice
+                          </a>
+                        ) : (
+                          <span className="text-xs opacity-50">
+                            File name on record (preview not embedded)
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {c.status === "pending_owner_approval" ? (
+                <div className="space-y-3">
+                  <fieldset className="space-y-2">
+                    <legend className="text-sm font-medium">
+                      How would you like to pay if you approve?
+                    </legend>
+                    {CAPEX_PAYMENT_METHODS.map((m) => (
+                      <label
+                        key={m.value}
+                        className="flex cursor-pointer gap-2 rounded-lg border border-base-300 bg-white px-3 py-2 text-sm has-[:checked]:border-[var(--harbor-mid)] has-[:checked]:bg-[var(--harbor-deep)]/[0.04]"
+                      >
+                        <input
+                          type="radio"
+                          className="radio radio-sm mt-0.5"
+                          name={`pay-${c.id}`}
+                          checked={paymentByCapex[c.id] === m.value}
+                          onChange={() =>
+                            setPaymentByCapex((prev) => ({
+                              ...prev,
+                              [c.id]: m.value,
+                            }))
+                          }
+                        />
+                        <span>
+                          <span className="font-medium">{m.label}</span>
+                          <span className="mt-0.5 block text-xs opacity-60">
+                            {m.blurb}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-neutral btn-sm"
+                      onClick={() => void respondCapex(c, "approved_by_owner")}
+                    >
+                      Approve CapEx
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => void respondCapex(c, "declined_by_owner")}
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm">
+                  {c.paymentMethod ? (
+                    <p>
+                      Payment preference:{" "}
+                      <strong>{capexPaymentLabel(c.paymentMethod)}</strong>
+                    </p>
+                  ) : null}
+                  {c.ownerResponseNotes ? (
+                    <p className="opacity-70">{c.ownerResponseNotes}</p>
+                  ) : null}
+                </div>
               )}
             </article>
           ))

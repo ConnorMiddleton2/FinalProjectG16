@@ -1,5 +1,9 @@
 import type { OwnerApplication } from "@/lib/owner-auth";
 import type { SmReceipt } from "@/lib/sales-marketing";
+import {
+  normalizeSmCode,
+  SM_CATEGORY_TO_CODE,
+} from "@/lib/sales-marketing";
 
 export type OwnerContract = {
   id: string;
@@ -22,30 +26,89 @@ export type OwnerContract = {
   relatedApplicationId?: string;
 };
 
+export type CapExVendorInvoice = {
+  id: string;
+  fileName: string;
+  vendorName: string;
+  amount: number;
+  /** Optional data URL so the owner can preview the invoice in-portal. */
+  dataUrl?: string;
+  uploadedAt: string;
+};
+
+export type CapExPaymentMethod =
+  | "pay_harborline_direct"
+  | "credit_owner_account"
+  | "owner_pays_vendor"
+  | "financing_discussion";
+
 export type CapitalExpenditure = {
   id: string;
   title: string;
+  propertyId?: string;
   propertyName: string;
   ownerEmail: string;
   ownerName: string;
+  ownerAccountId?: string;
   category: "renovation" | "addition" | "major_repair" | "equipment" | "other";
   estimatedCost: number;
   description: string;
   justification: string;
   source: "maintenance" | "management";
   relatedWorkOrderId?: string;
+  /** Third-party vendor invoices attached for owner review. */
+  vendorInvoices?: CapExVendorInvoice[];
   status:
     | "draft"
     | "pending_mgmt_edit"
     | "pending_owner_approval"
     | "approved_by_owner"
     | "declined_by_owner"
+    | "cancelled"
     | "complete";
   createdAt: string;
+  submittedToOwnerAt?: string;
+  emailedTo?: string;
+  emailedAt?: string;
   ownerRequestMessage?: string;
   ownerRespondedAt?: string;
   ownerResponseNotes?: string;
+  /** How the owner chooses to fund an approved CapEx. */
+  paymentMethod?: CapExPaymentMethod;
 };
+
+export const CAPEX_PAYMENT_METHODS: {
+  value: CapExPaymentMethod;
+  label: string;
+  blurb: string;
+}[] = [
+  {
+    value: "pay_harborline_direct",
+    label: "Pay Harborline directly",
+    blurb: "Owner remits funds to Harborline; we pay the vendor.",
+  },
+  {
+    value: "credit_owner_account",
+    label: "Credit my owner account",
+    blurb: "Deduct / credit against reserves or amounts held by Harborline.",
+  },
+  {
+    value: "owner_pays_vendor",
+    label: "I will pay the vendor",
+    blurb: "Owner pays the contractor directly after reviewing invoices.",
+  },
+  {
+    value: "financing_discussion",
+    label: "Discuss financing",
+    blurb: "Need Harborline to propose financing or phased payment options.",
+  },
+];
+
+export function capexPaymentLabel(method?: CapExPaymentMethod) {
+  return (
+    CAPEX_PAYMENT_METHODS.find((m) => m.value === method)?.label ?? "—"
+  );
+}
 
 export type DepartmentExpense = {
   id: string;
@@ -74,13 +137,73 @@ export type MgmtBudgetDepartment =
   | "sales_marketing"
   | "executive";
 
+/** 12 monthly amounts Jan=0 … Dec=11. Yearly = sum. */
+export type MonthlyAmounts = [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+];
+
 export type DepartmentBudget = {
   id: string;
-  department: MgmtBudgetDepartment;
+  propertyId: string;
+  propertyName: string;
+  fiscalYear: number;
+  /** Built-in dept id or custom dept id from PropertyBudgetPack. */
+  department: string;
   categoryKey: string;
   label: string;
-  budgeted: number;
+  /** Monthly budget; yearly is the sum of months. */
+  months: MonthlyAmounts;
+  /** Legacy single annual field (migrated into months when present). */
+  budgeted?: number;
   notes: string;
+  updatedAt: string;
+};
+
+export type BudgetCategoryDef = {
+  key: string;
+  label: string;
+  defaultBudgeted: number;
+};
+
+export type CustomBudgetDepartment = {
+  id: string;
+  title: string;
+  blurb: string;
+  categories: BudgetCategoryDef[];
+};
+
+/** Which departments/categories are active for a property + fiscal year. */
+export type PropertyBudgetPack = {
+  id: string;
+  propertyId: string;
+  propertyName: string;
+  fiscalYear: number;
+  enabledBuiltIns: MgmtBudgetDepartment[];
+  customDepartments: CustomBudgetDepartment[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Per-property fiscal year plan (legacy estimate — revenue now comes from AR). */
+export type PropertyBudgetPlan = {
+  id: string;
+  propertyId: string;
+  propertyName: string;
+  fiscalYear: number;
+  /** @deprecated Prefer AR paid revenue. Kept for older rows. */
+  priorYearRevenueEstimate: number;
+  createdAt: string;
   updatedAt: string;
 };
 
@@ -219,51 +342,498 @@ export const MGMT_BUDGET_CATEGORIES: Record<
   ],
 };
 
+export const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+export type BudgetPeriodView = "year" | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+
+export function emptyMonths(): MonthlyAmounts {
+  return [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+}
+
+/** Spread an annual total evenly across 12 months (remainder on Dec). */
+export function monthsFromAnnual(annual: number): MonthlyAmounts {
+  const total = Math.max(0, Math.round(annual));
+  const base = Math.floor(total / 12);
+  const months = emptyMonths();
+  for (let i = 0; i < 12; i++) months[i] = base;
+  months[11] += total - base * 12;
+  return months;
+}
+
+export function yearlyFromMonths(months: MonthlyAmounts | number[] | undefined): number {
+  if (!months || months.length < 12) return 0;
+  return months.reduce((s, n) => s + (Number(n) || 0), 0);
+}
+
+export function ensureMonths(line: DepartmentBudget): MonthlyAmounts {
+  if (line.months && line.months.length === 12) {
+    return line.months.map((n) => Number(n) || 0) as MonthlyAmounts;
+  }
+  if (typeof line.budgeted === "number" && line.budgeted > 0) {
+    return monthsFromAnnual(line.budgeted);
+  }
+  return emptyMonths();
+}
+
+export function budgetLineId(
+  propertyId: string,
+  fiscalYear: number,
+  department: string,
+  categoryKey: string
+) {
+  return `mgmt-budget-${propertyId}-${fiscalYear}-${department}-${categoryKey}`;
+}
+
+export function budgetPlanId(propertyId: string, fiscalYear: number) {
+  return `budget-plan-${propertyId}-${fiscalYear}`;
+}
+
+export function budgetPackId(propertyId: string, fiscalYear: number) {
+  return `budget-pack-${propertyId}-${fiscalYear}`;
+}
+
+export function estimatePriorYearRevenue(property: {
+  monthlyRentRoll?: string;
+  annualGpr?: string;
+  annualNoi?: string;
+}): number {
+  const rentRoll = Number(property.monthlyRentRoll) || 0;
+  if (rentRoll > 0) return Math.round(rentRoll * 12);
+  const gpr = Number(property.annualGpr) || 0;
+  if (gpr > 0) return Math.round(gpr);
+  return 0;
+}
+
 export function seedDepartmentBudgets(): DepartmentBudget[] {
+  return [];
+}
+
+export function seedPropertyBudgetPlans(): PropertyBudgetPlan[] {
+  return [];
+}
+
+export function seedPropertyBudgetPacks(): PropertyBudgetPack[] {
+  return [];
+}
+
+export function defaultPropertyBudgetPack(input: {
+  propertyId: string;
+  propertyName: string;
+  fiscalYear: number;
+}): PropertyBudgetPack {
+  const now = new Date().toISOString();
+  return {
+    id: budgetPackId(input.propertyId, input.fiscalYear),
+    propertyId: input.propertyId,
+    propertyName: input.propertyName,
+    fiscalYear: input.fiscalYear,
+    enabledBuiltIns: ["maintenance", "sales_marketing", "executive"],
+    customDepartments: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export type ActiveBudgetDepartment = {
+  id: string;
+  title: string;
+  blurb: string;
+  categories: BudgetCategoryDef[];
+  kind: "builtin" | "custom";
+};
+
+export function activeDepartmentsFromPack(
+  pack: PropertyBudgetPack | null | undefined
+): ActiveBudgetDepartment[] {
+  const enabled = pack?.enabledBuiltIns ?? [
+    "maintenance",
+    "sales_marketing",
+    "executive",
+  ];
+  const builtIns: ActiveBudgetDepartment[] = MGMT_BUDGET_DEPARTMENTS.filter(
+    (d) => enabled.includes(d.id)
+  ).map((d) => ({
+    id: d.id,
+    title: d.title,
+    blurb: d.blurb,
+    categories: MGMT_BUDGET_CATEGORIES[d.id],
+    kind: "builtin" as const,
+  }));
+  const customs: ActiveBudgetDepartment[] = (pack?.customDepartments ?? []).map(
+    (c) => ({
+      id: c.id,
+      title: c.title,
+      blurb: c.blurb || "Custom department budget",
+      categories: c.categories,
+      kind: "custom" as const,
+    })
+  );
+  return [...builtIns, ...customs];
+}
+
+/** Opex budget total for a property (or all properties) in a fiscal year. */
+export function budgetTotalForYear(
+  items: DepartmentBudget[],
+  fiscalYear: number,
+  propertyId?: string | null
+): number {
+  return items
+    .filter(
+      (r) =>
+        r.fiscalYear === fiscalYear &&
+        (!propertyId || r.propertyId === propertyId)
+    )
+    .reduce((s, r) => s + yearlyFromMonths(ensureMonths(r)), 0);
+}
+
+/**
+ * Revenue figure for calendar/fiscal year Y.
+ * Stored as priorYearRevenueEstimate on the plan for year Y+1
+ * (i.e. “prior year revenue for Y+1 planning”).
+ */
+export function revenueForYear(
+  plans: PropertyBudgetPlan[],
+  fiscalYear: number,
+  propertyId: string,
+  fallbackEstimate = 0
+): number {
+  const fromNextPlan = plans.find(
+    (p) => p.propertyId === propertyId && p.fiscalYear === fiscalYear + 1
+  );
+  if (fromNextPlan && fromNextPlan.priorYearRevenueEstimate > 0) {
+    return fromNextPlan.priorYearRevenueEstimate;
+  }
+  const fromSamePlan = plans.find(
+    (p) => p.propertyId === propertyId && p.fiscalYear === fiscalYear
+  );
+  if (fromSamePlan && fromSamePlan.priorYearRevenueEstimate > 0) {
+    return fromSamePlan.priorYearRevenueEstimate;
+  }
+  return fallbackEstimate;
+}
+
+export function companyRevenueForYear(
+  plans: PropertyBudgetPlan[],
+  properties: { id: string; priorEstimate: number }[],
+  fiscalYear: number
+): number {
+  return properties.reduce(
+    (s, p) =>
+      s + revenueForYear(plans, fiscalYear, p.id, p.priorEstimate),
+    0
+  );
+}
+
+export type YearCompareRow = {
+  year: number;
+  label: string;
+  revenue: number;
+  budget: number;
+  net: number;
+};
+
+export function buildYearCompareRows(input: {
+  thisYear: number;
+  revenueFor: (year: number) => number;
+  budgetFor: (year: number) => number;
+}): YearCompareRow[] {
+  const years = [input.thisYear - 1, input.thisYear, input.thisYear + 1];
+  return years.map((year) => {
+    const revenue = input.revenueFor(year);
+    const budget = input.budgetFor(year);
+    const tag =
+      year === input.thisYear - 1
+        ? "Prior"
+        : year === input.thisYear
+          ? "Current"
+          : "Next";
+    return {
+      year,
+      label: `${year} · ${tag}`,
+      revenue,
+      budget,
+      net: revenue - budget,
+    };
+  });
+}
+
+export type CategorySpend = { approved: number; pending: number };
+
+/** Map maintenance / work-order category strings onto budget category keys. */
+export function normalizeMaintCategoryKey(raw: string): string {
+  const k = raw.toLowerCase().replace(/\s+/g, "_");
+  const map: Record<string, string> = {
+    appliance: "appliances",
+    appliances: "appliances",
+    janitorial: "housekeeping",
+    housekeeping: "housekeeping",
+    structural: "other",
+    security: "other",
+    painting: "painting_drywall",
+    painting_drywall: "painting_drywall",
+    doors: "doors_locks",
+    doors_locks: "doors_locks",
+    make_ready: "make_ready",
+    makeready: "make_ready",
+    pest: "pest_control",
+    pest_control: "pest_control",
+    emergency: "emergency",
+    amenities: "amenities",
+    landscaping: "landscaping",
+    hvac: "hvac",
+    plumbing: "plumbing",
+    electrical: "electrical",
+    general: "general",
+    other: "other",
+  };
+  return map[k] ?? k;
+}
+
+/** Live approved/pending spend for one Management budget category. */
+export function spendForBudgetCategory(input: {
+  department: string;
+  categoryKey: string;
+  fiscalYear: number;
+  /** 0–11 to restrict to one month; omit for full year. */
+  month?: number;
+  propertyName?: string | null;
+  smReceipts: Array<{
+    code: string;
+    amount: number;
+    status: string;
+    submittedAt: string;
+  }>;
+  deptExpenses: Array<{
+    department: string;
+    code: string;
+    amount: number;
+    status: string;
+    submittedAt: string;
+    description?: string;
+  }>;
+  /** Maintenance module budget_lines (spent to date). */
+  maintBudgetLines?: Array<{
+    category: string;
+    spentAmount: number;
+  }>;
+  /** Approved maintenance invoices/receipts. */
+  maintDocs?: Array<{
+    amount: string;
+    category: string;
+    property: string;
+    documentDate: string;
+    approvalStatus?: string;
+  }>;
+}): CategorySpend {
+  let approved = 0;
+  let pending = 0;
+  const year = input.fiscalYear;
+  const key = input.categoryKey;
+  const month = input.month;
+
+  function inPeriod(isoOrDate: string) {
+    const d = new Date(isoOrDate);
+    if (!Number.isFinite(d.getTime())) return false;
+    if (d.getFullYear() !== year) return false;
+    if (month !== undefined && d.getMonth() !== month) return false;
+    return true;
+  }
+
+  if (input.department === "sales_marketing") {
+    const code = SM_CATEGORY_TO_CODE[key];
+    if (code) {
+      for (const r of input.smReceipts) {
+        if (normalizeSmCode(r.code) !== code) continue;
+        if (!inPeriod(r.submittedAt)) continue;
+        if (r.status === "approved") approved += r.amount;
+        else if (r.status === "pending") pending += r.amount;
+      }
+    }
+    return { approved, pending };
+  }
+
+  if (input.department === "maintenance") {
+    for (const line of input.maintBudgetLines ?? []) {
+      if (line.category === "all") continue;
+      if (normalizeMaintCategoryKey(line.category) !== key) continue;
+      const thisYear = new Date().getFullYear();
+      if (year !== thisYear) continue;
+      // Seeded YTD lines — only count on full-year (or current month) view
+      if (month !== undefined && month !== new Date().getMonth()) continue;
+      const amt = Number(line.spentAmount) || 0;
+      if (month !== undefined) approved += Math.round(amt / 12);
+      else approved += amt;
+    }
+    for (const doc of input.maintDocs ?? []) {
+      if (normalizeMaintCategoryKey(doc.category || "general") !== key) continue;
+      if (!inPeriod(doc.documentDate)) continue;
+      const status = doc.approvalStatus ?? "approved";
+      if (input.propertyName) {
+        const prop = (doc.property || "").toLowerCase();
+        const want = input.propertyName.toLowerCase();
+        if (prop && want && !prop.includes(want) && !want.includes(prop)) {
+          continue;
+        }
+      }
+      const amt = Number(String(doc.amount).replace(/[^0-9.-]/g, "")) || 0;
+      if (status === "approved") approved += amt;
+      else if (status === "pending") pending += amt;
+    }
+    for (const e of input.deptExpenses) {
+      if (e.department !== "maintenance") continue;
+      if (!inPeriod(e.submittedAt)) continue;
+      const desc = (e.description || "").toLowerCase();
+      const codeL = e.code.toLowerCase();
+      const keyWords = key.replace(/_/g, " ");
+      const matches =
+        desc.includes(keyWords) ||
+        codeL.includes(key) ||
+        (key === "general" &&
+          !MGMT_BUDGET_CATEGORIES.maintenance.some(
+            (c) =>
+              c.key !== "general" &&
+              (desc.includes(c.key.replace(/_/g, " ")) ||
+                codeL.includes(c.key))
+          ));
+      if (!matches) continue;
+      if (e.status === "approved") approved += e.amount;
+      else if (e.status === "pending") pending += e.amount;
+    }
+    return { approved, pending };
+  }
+
+  if (input.department !== "executive") {
+    return { approved: 0, pending: 0 };
+  }
+
+  for (const e of input.deptExpenses) {
+    if (!inPeriod(e.submittedAt)) continue;
+    const blob = `${e.code} ${e.description || ""} ${e.department}`.toLowerCase();
+    const isExec =
+      e.department === "operations" ||
+      e.department === "other" ||
+      e.department === "human_resources" ||
+      blob.includes("exec") ||
+      blob.includes("travel") ||
+      blob.includes("professional");
+    if (!isExec) continue;
+    const matchesKey =
+      key === "other" ||
+      blob.includes(key.replace(/_/g, " ")) ||
+      (key === "general" &&
+        !blob.includes("travel") &&
+        !blob.includes("professional")) ||
+      (key === "travel" && blob.includes("travel")) ||
+      (key === "professional_services" && blob.includes("professional"));
+    if (!matchesKey) continue;
+    if (e.status === "approved") approved += e.amount;
+    else if (e.status === "pending") pending += e.amount;
+  }
+  return { approved, pending };
+}
+
+
+/** Build category lines for a property + year + department (merge existing). */
+export function normalizeDepartmentBudgetLines(
+  department: string,
+  categories: BudgetCategoryDef[],
+  existing: DepartmentBudget[],
+  ctx: { propertyId: string; propertyName: string; fiscalYear: number }
+): DepartmentBudget[] {
+  const now = new Date().toISOString();
+  const scoped = existing.filter(
+    (r) =>
+      r.department === department &&
+      r.propertyId === ctx.propertyId &&
+      r.fiscalYear === ctx.fiscalYear
+  );
+  const byKey = new Map(scoped.map((r) => [r.categoryKey, r]));
+
+  return categories.map((cat) => {
+    const prior = byKey.get(cat.key);
+    if (prior) {
+      return {
+        ...prior,
+        label: cat.label,
+        propertyName: ctx.propertyName,
+        months: ensureMonths(prior),
+      };
+    }
+    return {
+      id: budgetLineId(
+        ctx.propertyId,
+        ctx.fiscalYear,
+        department,
+        cat.key
+      ),
+      propertyId: ctx.propertyId,
+      propertyName: ctx.propertyName,
+      fiscalYear: ctx.fiscalYear,
+      department,
+      categoryKey: cat.key,
+      label: cat.label,
+      months: monthsFromAnnual(cat.defaultBudgeted),
+      notes: "",
+      updatedAt: now,
+    };
+  });
+}
+
+/** Create category lines for enabled departments on a pack. */
+export function createPropertyYearBudgetLines(input: {
+  propertyId: string;
+  propertyName: string;
+  fiscalYear: number;
+  pack: PropertyBudgetPack;
+  /** Optional prior-year lines to copy monthly shape from. */
+  copyFrom?: DepartmentBudget[];
+}): DepartmentBudget[] {
   const now = new Date().toISOString();
   const rows: DepartmentBudget[] = [];
-  for (const dept of Object.keys(MGMT_BUDGET_CATEGORIES) as MgmtBudgetDepartment[]) {
-    for (const cat of MGMT_BUDGET_CATEGORIES[dept]) {
+  const depts = activeDepartmentsFromPack(input.pack);
+  for (const dept of depts) {
+    for (const cat of dept.categories) {
+      const prior = input.copyFrom?.find(
+        (r) =>
+          r.department === dept.id &&
+          r.categoryKey === cat.key &&
+          r.propertyId === input.propertyId
+      );
       rows.push({
-        id: `mgmt-budget-${dept}-${cat.key}`,
-        department: dept,
+        id: budgetLineId(
+          input.propertyId,
+          input.fiscalYear,
+          dept.id,
+          cat.key
+        ),
+        propertyId: input.propertyId,
+        propertyName: input.propertyName,
+        fiscalYear: input.fiscalYear,
+        department: dept.id,
         categoryKey: cat.key,
         label: cat.label,
-        budgeted: cat.defaultBudgeted,
-        notes: "",
+        months: prior
+          ? ensureMonths(prior)
+          : monthsFromAnnual(cat.defaultBudgeted),
+        notes: prior?.notes ?? "",
         updatedAt: now,
       });
     }
   }
   return rows;
-}
-
-/** Merge saved rows with the canonical category list for a department. */
-export function normalizeDepartmentBudgetLines(
-  department: MgmtBudgetDepartment,
-  existing: DepartmentBudget[]
-): DepartmentBudget[] {
-  const now = new Date().toISOString();
-  const byKey = new Map(
-    existing
-      .filter((r) => r.department === department)
-      .map((r) => [r.categoryKey, r])
-  );
-  return MGMT_BUDGET_CATEGORIES[department].map((cat) => {
-    const prior = byKey.get(cat.key);
-    if (prior) {
-      return { ...prior, label: cat.label };
-    }
-    return {
-      id: `mgmt-budget-${department}-${cat.key}`,
-      department,
-      categoryKey: cat.key,
-      label: cat.label,
-      budgeted: cat.defaultBudgeted,
-      notes: "",
-      updatedAt: now,
-    };
-  });
 }
 
 export function seedApPayables(): ApPayable[] {

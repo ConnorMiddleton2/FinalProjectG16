@@ -1,17 +1,8 @@
+import { redirect } from "next/navigation";
 import { requireOpsModule } from "@/lib/team-auth";
-import { MgShell } from "@/components/mgmt/MgShell";
-import { PropertyAnalyticsDashboard } from "@/components/mgmt/PropertyAnalyticsDashboard";
 
-export default async function Page() {
+/** Property analytics lives under the combined Analytics dashboard. */
+export default async function PropertyAnalyticsRedirect() {
   await requireOpsModule("management");
-  return (
-    <MgShell
-      title="Property analytics"
-      subtitle="Profit margin, occupancy, and performance by property or group."
-      backHref="/ops/management"
-      backLabel="Back to Management"
-    >
-      <PropertyAnalyticsDashboard />
-    </MgShell>
-  );
+  redirect("/ops/management/analytics");
 }

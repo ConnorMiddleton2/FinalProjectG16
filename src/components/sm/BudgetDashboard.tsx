@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { BudgetFillBar } from "@/components/mgmt/BudgetFillBar";
 import {
   COLLECTIONS,
   useSharedCollection,
@@ -17,54 +18,6 @@ import {
   type SmCode,
   type SmReceipt,
 } from "@/lib/sales-marketing";
-
-function FillBar({
-  budgeted,
-  approved,
-  pending,
-  compact,
-}: {
-  budgeted: number;
-  approved: number;
-  pending: number;
-  compact?: boolean;
-}) {
-  const total = Math.max(budgeted, 1);
-  const approvedPct = Math.min(100, (approved / total) * 100);
-  const pendingPct = Math.min(100 - approvedPct, (pending / total) * 100);
-  return (
-    <div
-      className={`relative overflow-hidden rounded-md bg-[#c5cdd4] shadow-inner ring-1 ring-[#9aa6b0]/55 ${
-        compact ? "h-7" : "h-9"
-      }`}
-    >
-      <div
-        className="absolute inset-y-0 left-0 bg-[#6d8799]"
-        style={{ width: `${approvedPct}%` }}
-      />
-      <div
-        className="absolute inset-y-0 bg-[#6d8799]/40"
-        style={{ left: `${approvedPct}%`, width: `${pendingPct}%` }}
-      />
-      <div
-        className={`absolute inset-0 flex items-center justify-between gap-2 px-2 font-semibold text-[#243542] ${
-          compact ? "text-[10px]" : "text-xs"
-        }`}
-      >
-        <span>
-          {money(approved)}
-          {pending > 0 ? (
-            <span className="font-medium opacity-70">
-              {" "}
-              (+{money(pending)})
-            </span>
-          ) : null}
-        </span>
-        <span className="opacity-75">{money(budgeted)}</span>
-      </div>
-    </div>
-  );
-}
 
 export function BudgetDashboard() {
   const {
@@ -165,7 +118,7 @@ export function BudgetDashboard() {
             {money(net - approvedTotal)} left
           </span>
         </div>
-        <FillBar
+        <BudgetFillBar
           budgeted={net}
           approved={approvedTotal}
           pending={pendingTotal}
@@ -188,7 +141,7 @@ export function BudgetDashboard() {
                   {cat.label}
                 </p>
               </div>
-              <FillBar
+              <BudgetFillBar
                 budgeted={cat.budgeted}
                 approved={approved}
                 pending={pending}
