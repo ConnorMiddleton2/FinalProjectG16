@@ -11,6 +11,7 @@ export default async function SmCampaignsPage() {
       subtitle="List every sales and marketing campaign — ads, sponsorships, events — with spend and ROI."
       backHref="/ops/sales-marketing"
       backLabel="Back to Sales & Marketing"
+      activeNavHref="/ops/sales-marketing/campaigns"
     >
       <CampaignsDashboard />
     </SmShell>

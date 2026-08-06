@@ -10,6 +10,7 @@ export default async function Page() {
       subtitle="Delinquency track records, foreclosure risk, and escalation steps."
       backHref="/ops/management"
       backLabel="Back to Management"
+      activeNavHref="/ops/management/missed-payments"
     >
       <MissedPaymentsDashboard />
     </MgShell>
