@@ -1,4 +1,4 @@
-import { hashPassword } from "@/lib/owner-password";
+﻿import { hashPassword } from "@/lib/owner-password";
 
 export type HrDepartment =
   | "maintenance"
@@ -57,12 +57,16 @@ export type HrEmployee = {
   category: HrEmployeeCategory;
   jobTitle: string;
   status: HrEmployeeStatus;
+  /** Managed property assignment for on-site / property-category staff. */
+  propertyId: string;
+  propertyName: string;
   moduleAccess: HrOpsModule[];
   /** scrypt hash (salt:hash); empty until a password is issued */
   passwordHash: string;
   temporaryPassword: string;
   mustResetPassword: boolean;
   payType: HrPayType;
+  /** Annual salary (salary) or hourly rate (hourly), as a numeric string. */
   payRate: string;
   payFrequency: HrPayFrequency;
   payEffectiveDate: string;
@@ -293,6 +297,16 @@ export function employeeDisplayName(e: Pick<HrEmployee, "firstName" | "lastName"
   return `${e.firstName} ${e.lastName}`.trim() || e.employeeId || "Unnamed";
 }
 
+/** Next Harborline employee code (HL-####) from existing roster. */
+export function nextEmployeeId(employees: Pick<HrEmployee, "employeeId">[]): string {
+  let max = 0;
+  for (const e of employees) {
+    const m = String(e.employeeId || "").match(/HL-(\d+)/i);
+    if (m) max = Math.max(max, Number(m[1]) || 0);
+  }
+  return `HL-${String(max + 1).padStart(4, "0")}`;
+}
+
 export function normalizeHrEmployee(
   raw: Partial<HrEmployee> & { id: string }
 ): HrEmployee {
@@ -307,6 +321,8 @@ export function normalizeHrEmployee(
     temporaryPassword:
       typeof raw.temporaryPassword === "string" ? raw.temporaryPassword : "",
     mustResetPassword: Boolean(raw.mustResetPassword),
+    propertyId: typeof raw.propertyId === "string" ? raw.propertyId : "",
+    propertyName: typeof raw.propertyName === "string" ? raw.propertyName : "",
     createdAt: raw.createdAt ?? base.hiredAt,
     updatedAt: raw.updatedAt ?? base.hiredAt,
   };
@@ -336,6 +352,8 @@ export function emptyEmployee(): Omit<HrEmployee, "id" | "createdAt" | "updatedA
     category: "property",
     jobTitle: "",
     status: "active",
+    propertyId: "",
+    propertyName: "",
     moduleAccess: [],
     passwordHash: "",
     temporaryPassword: "",
@@ -371,16 +389,18 @@ export function makeCadeEmployee(now = new Date().toISOString()): HrEmployee {
     category,
     jobTitle: "Team member",
     status: "active",
+    propertyId: "",
+    propertyName: "Harborline Corporate",
     moduleAccess: resolveEmployeeModuleAccess(department, category),
     passwordHash: CADE_PASSWORD_HASH,
     temporaryPassword: CADE_DEMO.password,
     mustResetPassword: false,
     payType: "salary",
-    payRate: "",
+    payRate: "95000",
     payFrequency: "biweekly",
     payEffectiveDate: today,
-    federalWithholding: "Married filing jointly — W-4 on file",
-    stateWithholding: "CA — standard",
+    federalWithholding: "Married filing jointly â€” W-4 on file",
+    stateWithholding: "CA â€” standard",
     deductionsNotes: "Health insurance, 401(k) 4%",
     directDepositBank: "Harborline Credit Union",
     directDepositAccountLast4: "4821",
@@ -399,298 +419,17 @@ export function makeCadeEmployee(now = new Date().toISOString()): HrEmployee {
   };
 }
 
+/** Full roster is seeded by scripts/seed-portfolio.mjs (corporate + per-property). */
 export function seedEmployees(): HrEmployee[] {
-  const now = new Date().toISOString();
-  const today = now.slice(0, 10);
-
-  const mayaDept: HrDepartment = "maintenance";
-  const mayaCat: HrEmployeeCategory = "property";
-  const jordanDept: HrDepartment = "maintenance";
-  const jordanCat: HrEmployeeCategory = "property";
-  const priyaDept: HrDepartment = "leasing";
-  const priyaCat: HrEmployeeCategory = "property";
-  const samDept: HrDepartment = "management";
-  const samCat: HrEmployeeCategory = "corporate";
-  const alexDept: HrDepartment = "accounting";
-  const alexCat: HrEmployeeCategory = "corporate";
-
-  return [
-    makeCadeEmployee(now),
-    {
-      id: "hr-emp-1",
-      employeeId: "HL-0042",
-      firstName: "Maya",
-      lastName: "Chen",
-      email: "maya.chen@harborline.demo",
-      phone: "(555) 201-4402",
-      department: mayaDept,
-      category: mayaCat,
-      jobTitle: "Maintenance director",
-      status: "active",
-      moduleAccess: resolveEmployeeModuleAccess(mayaDept, mayaCat),
-      passwordHash: "",
-      temporaryPassword: "temp-maya-42",
-      mustResetPassword: true,
-      payType: "salary",
-      payRate: "72000",
-      payFrequency: "biweekly",
-      payEffectiveDate: "2024-01-01",
-      federalWithholding: "Single — W-4 2024",
-      stateWithholding: "CA — additional 2%",
-      deductionsNotes: "Health, dental, parking",
-      directDepositBank: "First National",
-      directDepositAccountLast4: "9012",
-      directDepositRoutingLast4: "1210",
-      payrollNotes: "Property maintenance director — salaried exempt.",
-      contractTitle: "Employment agreement — Maintenance director",
-      contractStart: "2024-01-01",
-      contractEnd: "",
-      contractFileName: "maya-chen-contract.pdf",
-      contractNotes: "Full-time; overtime exempt.",
-      hiredAt: "2024-01-01",
-      terminatedAt: "",
-      notes: "Approves work-order closeouts.",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "hr-emp-2",
-      employeeId: "HL-0058",
-      firstName: "Jordan",
-      lastName: "Blake",
-      email: "jordan.blake@harborline.demo",
-      phone: "(555) 201-4418",
-      department: jordanDept,
-      category: jordanCat,
-      jobTitle: "Maintenance technician",
-      status: "active",
-      moduleAccess: resolveEmployeeModuleAccess(jordanDept, jordanCat),
-      passwordHash: "",
-      temporaryPassword: "temp-jordan-58",
-      mustResetPassword: true,
-      payType: "hourly",
-      payRate: "28.50",
-      payFrequency: "weekly",
-      payEffectiveDate: "2025-03-15",
-      federalWithholding: "Single — standard",
-      stateWithholding: "CA — standard",
-      deductionsNotes: "",
-      directDepositBank: "Community Bank",
-      directDepositAccountLast4: "3344",
-      directDepositRoutingLast4: "1221",
-      payrollNotes: "Weekly hourly — timesheet required.",
-      contractTitle: "Hourly employment agreement — Technician",
-      contractStart: "2025-03-15",
-      contractEnd: "",
-      contractFileName: "",
-      contractNotes: "",
-      hiredAt: "2025-03-15",
-      terminatedAt: "",
-      notes: "In-house labor on work orders.",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "hr-emp-3",
-      employeeId: "HL-0031",
-      firstName: "Priya",
-      lastName: "Nair",
-      email: "priya.nair@harborline.demo",
-      phone: "(555) 201-4431",
-      department: priyaDept,
-      category: priyaCat,
-      jobTitle: "Leasing specialist",
-      status: "active",
-      moduleAccess: resolveEmployeeModuleAccess(priyaDept, priyaCat),
-      passwordHash: "",
-      temporaryPassword: "temp-priya-31",
-      mustResetPassword: false,
-      payType: "salary",
-      payRate: "54000",
-      payFrequency: "semimonthly",
-      payEffectiveDate: "2023-06-01",
-      ...emptyPayrollProfile(),
-      contractTitle: "Employment agreement — Leasing",
-      contractStart: "2023-06-01",
-      contractEnd: "",
-      contractFileName: "priya-nair-contract.pdf",
-      contractNotes: "",
-      hiredAt: "2023-06-01",
-      terminatedAt: "",
-      notes: "",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "hr-emp-4",
-      employeeId: "HL-0012",
-      firstName: "Sam",
-      lastName: "Ortiz",
-      email: "sam.ortiz@harborline.demo",
-      phone: "(555) 201-4400",
-      department: samDept,
-      category: samCat,
-      jobTitle: "Operations manager",
-      status: "active",
-      moduleAccess: resolveEmployeeModuleAccess(samDept, samCat),
-      passwordHash: "",
-      temporaryPassword: "temp-sam-12",
-      mustResetPassword: false,
-      payType: "salary",
-      payRate: "95000",
-      payFrequency: "biweekly",
-      payEffectiveDate: "2022-09-01",
-      federalWithholding: "Married filing jointly",
-      stateWithholding: "CA — standard",
-      deductionsNotes: "Executive benefits package",
-      directDepositBank: "Harborline Credit Union",
-      directDepositAccountLast4: "1100",
-      directDepositRoutingLast4: "1220",
-      payrollNotes: "",
-      contractTitle: "Employment agreement — Operations manager",
-      contractStart: "2022-09-01",
-      contractEnd: "",
-      contractFileName: "sam-ortiz-contract.pdf",
-      contractNotes: "Executive access to all ops windows.",
-      hiredAt: "2022-09-01",
-      terminatedAt: "",
-      notes: "",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "hr-emp-5",
-      employeeId: "HL-0027",
-      firstName: "Alex",
-      lastName: "Nguyen",
-      email: "alex.nguyen@harborline.demo",
-      phone: "(555) 201-4427",
-      department: alexDept,
-      category: alexCat,
-      jobTitle: "AP clerk",
-      status: "on_leave",
-      moduleAccess: resolveEmployeeModuleAccess(alexDept, alexCat),
-      passwordHash: "",
-      temporaryPassword: "",
-      mustResetPassword: false,
-      payType: "hourly",
-      payRate: "24.00",
-      payFrequency: "biweekly",
-      payEffectiveDate: "2024-08-01",
-      federalWithholding: "Single — W-4 on file",
-      stateWithholding: "CA — standard",
-      deductionsNotes: "On parental leave — partial pay",
-      directDepositBank: "First National",
-      directDepositAccountLast4: "5567",
-      directDepositRoutingLast4: "1210",
-      payrollNotes: "Leave through end of month.",
-      contractTitle: "Hourly employment agreement — AP clerk",
-      contractStart: "2024-08-01",
-      contractEnd: "",
-      contractFileName: "",
-      contractNotes: "Parental leave through end of month.",
-      hiredAt: "2024-08-01",
-      terminatedAt: "",
-      notes: `Leave started ${today}.`,
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
+  return [makeCadeEmployee()];
 }
 
-export function nextEmployeeId(existing: HrEmployee[]) {
-  const nums = existing
-    .map((e) => {
-      const m = /^HL-(\d+)$/i.exec(e.employeeId.trim());
-      return m ? Number(m[1]) : 0;
-    })
-    .filter((n) => n > 0);
-  const max = nums.length ? Math.max(...nums) : 100;
-  return `HL-${String(max + 1).padStart(4, "0")}`;
+/** Pay stubs are written by the portfolio seed from each employee pay profile. */
+export function seedPayStubs(): HrPayStub[] {
+  return [];
 }
 
 /** Hash a plaintext password for storage on an employee record. */
 export function hashEmployeePassword(password: string) {
   return hashPassword(password);
-}
-
-export function seedPayStubs(): HrPayStub[] {
-  const now = new Date().toISOString();
-  return [
-    {
-      id: "hr-stub-1",
-      employeeId: "hr-emp-1",
-      periodStart: "2025-07-01",
-      periodEnd: "2025-07-15",
-      payDate: "2025-07-18",
-      grossPay: "2769.23",
-      deductions: "692.31",
-      netPay: "2076.92",
-      hoursWorked: "",
-      status: "paid",
-      notes: "Biweekly salary — maintenance director",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "hr-stub-2",
-      employeeId: "hr-emp-2",
-      periodStart: "2025-07-07",
-      periodEnd: "2025-07-13",
-      payDate: "2025-07-14",
-      grossPay: "1140.00",
-      deductions: "228.00",
-      netPay: "912.00",
-      hoursWorked: "40",
-      status: "paid",
-      notes: "Weekly hourly — 40 hours",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "hr-stub-3",
-      employeeId: "hr-emp-2",
-      periodStart: "2025-07-14",
-      periodEnd: "2025-07-20",
-      payDate: "2025-07-21",
-      grossPay: "1197.00",
-      deductions: "239.40",
-      netPay: "957.60",
-      hoursWorked: "42",
-      status: "processed",
-      notes: "Includes 2 hours OT",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "hr-stub-4",
-      employeeId: "hr-emp-5",
-      periodStart: "2025-06-16",
-      periodEnd: "2025-06-30",
-      payDate: "2025-07-03",
-      grossPay: "1920.00",
-      deductions: "384.00",
-      netPay: "1536.00",
-      hoursWorked: "80",
-      status: "paid",
-      notes: "Pre-leave biweekly period",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "hr-stub-5",
-      employeeId: "hr-emp-5",
-      periodStart: "2025-07-01",
-      periodEnd: "2025-07-15",
-      payDate: "2025-07-18",
-      grossPay: "960.00",
-      deductions: "192.00",
-      netPay: "768.00",
-      hoursWorked: "40",
-      status: "draft",
-      notes: "Partial leave period",
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
 }

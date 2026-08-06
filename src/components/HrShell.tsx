@@ -26,6 +26,10 @@ import { createClient } from "@/lib/supabase/client";
 import { deleteSharedRecord } from "@/lib/shared-store";
 import { money } from "@/lib/money";
 import {
+  annualCompensation,
+  stubFromEmployeePayProfile,
+} from "@/lib/hr-payroll";
+import {
   CADE_DEMO,
   CADE_EMPLOYEE_ID,
   categoryLabel,
@@ -214,7 +218,7 @@ export function HrDashboard() {
   const activeCount = employees.filter((e) => e.status === "active").length;
   const payrollHint = employees
     .filter((e) => e.status === "active" && e.payRate)
-    .reduce((sum, e) => sum + (Number(e.payRate) || 0), 0);
+    .reduce((sum, e) => sum + annualCompensation(e), 0);
 
   function flash(message: string) {
     setMsg(message);
@@ -248,6 +252,8 @@ export function HrDashboard() {
       category: emp.category,
       jobTitle: emp.jobTitle,
       status: emp.status,
+      propertyId: emp.propertyId || "",
+      propertyName: emp.propertyName || "",
       moduleAccess: [...emp.moduleAccess],
       passwordHash: emp.passwordHash,
       temporaryPassword: emp.temporaryPassword,
@@ -256,6 +262,13 @@ export function HrDashboard() {
       payRate: emp.payRate,
       payFrequency: emp.payFrequency,
       payEffectiveDate: emp.payEffectiveDate,
+      federalWithholding: emp.federalWithholding,
+      stateWithholding: emp.stateWithholding,
+      deductionsNotes: emp.deductionsNotes,
+      directDepositBank: emp.directDepositBank,
+      directDepositAccountLast4: emp.directDepositAccountLast4,
+      directDepositRoutingLast4: emp.directDepositRoutingLast4,
+      payrollNotes: emp.payrollNotes,
       contractTitle: emp.contractTitle,
       contractStart: emp.contractStart,
       contractEnd: emp.contractEnd,
@@ -490,12 +503,14 @@ export function HrDashboard() {
           </div>
           <div className="rounded-2xl border border-[var(--harbor-deep)]/12 bg-white/90 px-4 py-3 shadow-sm">
             <p className="text-xs uppercase tracking-wide opacity-55">
-              Active compensation (sum)
+              Active annual compensation
             </p>
             <p className="mt-1 text-2xl font-semibold tabular-nums">
               {loading ? "…" : `$${payrollHint.toLocaleString()}`}
             </p>
-            <p className="text-xs opacity-50">Display only — not a payroll run</p>
+            <p className="text-xs opacity-50">
+              Salaries + hourly×2,080 — not a payroll run
+            </p>
           </div>
         </div>
 
@@ -833,6 +848,28 @@ function DirectoryPanel({
               </select>
             </label>
             <label className="form-control">
+              <span className="mb-1 text-sm opacity-70">Property (site)</span>
+              <input
+                className="input input-bordered"
+                value={form.propertyName}
+                onChange={(e) => onUpdateForm("propertyName", e.target.value)}
+                placeholder={
+                  form.category === "corporate"
+                    ? "Harborline Corporate"
+                    : "Assigned community / building"
+                }
+              />
+            </label>
+            <label className="form-control">
+              <span className="mb-1 text-sm opacity-70">Property ID</span>
+              <input
+                className="input input-bordered font-mono text-sm"
+                value={form.propertyId}
+                onChange={(e) => onUpdateForm("propertyId", e.target.value)}
+                placeholder="prop-…"
+              />
+            </label>
+            <label className="form-control">
               <span className="mb-1 text-sm opacity-70">Hired</span>
               <input
                 type="date"
@@ -874,6 +911,7 @@ function DirectoryPanel({
               <th>Name</th>
               <th>Department</th>
               <th>Category</th>
+              <th>Property</th>
               <th>Title</th>
               <th>Status</th>
               <th>Hired</th>
@@ -883,13 +921,13 @@ function DirectoryPanel({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} className="opacity-60">
+                <td colSpan={9} className="opacity-60">
                   Loading employees…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="opacity-60">
+                <td colSpan={9} className="opacity-60">
                   No employees match these filters.
                 </td>
               </tr>
@@ -903,6 +941,10 @@ function DirectoryPanel({
                   </td>
                   <td>{departmentLabel(emp.department)}</td>
                   <td className="text-sm">{categoryLabel(emp.category)}</td>
+                  <td className="text-sm">
+                    {emp.propertyName ||
+                      (emp.category === "corporate" ? "Corporate" : "—")}
+                  </td>
                   <td className="text-sm">{emp.jobTitle || "—"}</td>
                   <td>
                     <span
@@ -1528,6 +1570,43 @@ function PayrollPanel({
               <p className="font-medium sm:col-span-2">
                 {editingStubId ? "Edit pay stub" : "Add pay stub"}
               </p>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm sm:col-span-2"
+                disabled={!selected?.payRate}
+                onClick={() => {
+                  if (!selected) return;
+                  const end = new Date();
+                  const start = new Date();
+                  if (selected.payFrequency === "weekly") {
+                    start.setDate(end.getDate() - 6);
+                  } else if (selected.payFrequency === "monthly") {
+                    start.setDate(1);
+                  } else if (selected.payFrequency === "semimonthly") {
+                    start.setDate(end.getDate() >= 16 ? 16 : 1);
+                  } else {
+                    start.setDate(end.getDate() - 13);
+                  }
+                  const draft = stubFromEmployeePayProfile(selected, {
+                    start: start.toISOString().slice(0, 10),
+                    end: end.toISOString().slice(0, 10),
+                    payDate: end.toISOString().slice(0, 10),
+                  });
+                  setStubForm({
+                    periodStart: draft.periodStart,
+                    periodEnd: draft.periodEnd,
+                    payDate: draft.payDate,
+                    grossPay: draft.grossPay,
+                    deductions: draft.deductions,
+                    netPay: draft.netPay,
+                    hoursWorked: draft.hoursWorked,
+                    status: draft.status,
+                    notes: draft.notes,
+                  });
+                }}
+              >
+                Fill amounts from pay profile
+              </button>
               <label className="form-control">
                 <span className="mb-1 text-xs opacity-70">Period start</span>
                 <input

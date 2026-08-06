@@ -74,7 +74,8 @@ export default function WelcomePage() {
                   Property owner
                 </p>
                 <p className="mt-1 text-sm opacity-70">
-                  Log in with your Harborline account, or apply for owner access.
+                  Log in or create an account, submit properties for management,
+                  and view contracts.
                 </p>
               </div>
             </div>

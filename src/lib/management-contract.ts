@@ -21,9 +21,19 @@ export type PropertyTenant = {
   phone: string;
   leaseStart: string;
   leaseEnd: string;
+  /** Contracted / in-place monthly rent (or asking rent when vacant). */
   monthlyRent: string;
   sqft: string;
   status: "active" | "notice" | "vacant";
+  /** Floor plan label from FMR schedule (Studio, 1 bedroom, Office suite…). */
+  floorPlan?: string;
+  /** Fair-market rent from comps at publish time. */
+  fairMarketRent?: string;
+  /** Asking rent offered to prospects (defaults to FMR). */
+  askingRent?: string;
+  bedrooms?: string;
+  rentPerSfMo?: string;
+  sourceApplicationId?: string;
 };
 
 export type ManagementContractDraft = {
@@ -128,7 +138,12 @@ export function emptyPropertyTenant(
     leaseEnd: "",
     monthlyRent: "",
     sqft: "",
-    status: "active",
+    status: "vacant",
+    floorPlan: "",
+    fairMarketRent: "",
+    askingRent: "",
+    bedrooms: "",
+    rentPerSfMo: "",
   };
 }
 

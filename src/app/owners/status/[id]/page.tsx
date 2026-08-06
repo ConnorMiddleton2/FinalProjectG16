@@ -8,6 +8,7 @@ import {
   getOwnerApplicationDetailForEmail,
   listOwnerProposedContracts,
 } from "@/lib/owner-application-portal";
+import { OwnerApplicationPropertySummary } from "@/components/OwnerApplicationPropertySummary";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -124,16 +125,8 @@ export default async function OwnerApplicationDetailPage({
             ) : (
               <ul className="space-y-2">
                 {app.properties.map((p, i) => (
-                  <li
-                    key={`${p.location}-${i}`}
-                    className="rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/40 px-3 py-2 text-sm"
-                  >
-                    <p className="font-medium">{p.location || "Location TBD"}</p>
-                    <p className="owner-muted text-xs">
-                      {[p.category, p.squareFeet ? `${p.squareFeet} SF` : ""]
-                        .filter(Boolean)
-                        .join(" · ") || "Details pending"}
-                    </p>
+                  <li key={`${p.propertyName || p.location || i}-${i}`}>
+                    <OwnerApplicationPropertySummary property={p} />
                   </li>
                 ))}
               </ul>

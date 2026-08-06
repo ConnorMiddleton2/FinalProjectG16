@@ -243,7 +243,31 @@ export function TenantDashboard() {
             <input
               type="number"
               className="input input-bordered input-sm w-full bg-white"
-              placeholder="Pending due"
+              placeholder="Monthly rent"
+              value={form.monthlyRent || ""}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  monthlyRent: Number(e.target.value) || 0,
+                }))
+              }
+            />
+            <input
+              type="number"
+              className="input input-bordered input-sm w-full bg-white"
+              placeholder="Sq ft"
+              value={form.sqft || ""}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  sqft: Number(e.target.value) || 0,
+                }))
+              }
+            />
+            <input
+              type="number"
+              className="input input-bordered input-sm w-full bg-white"
+              placeholder="Balance due"
               value={form.pendingDue || ""}
               onChange={(e) =>
                 setForm((f) => ({
@@ -270,6 +294,14 @@ export function TenantDashboard() {
               value={form.dateLeased}
               onChange={(e) =>
                 setForm((f) => ({ ...f, dateLeased: e.target.value }))
+              }
+            />
+            <input
+              type="date"
+              className="input input-bordered input-sm w-full bg-white"
+              value={form.leaseEnd || ""}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, leaseEnd: e.target.value }))
               }
             />
             <button type="submit" className="btn btn-neutral btn-sm">
@@ -378,15 +410,16 @@ export function TenantDashboard() {
                   <th>Tenant</th>
                   <th>Category</th>
                   <th>Property leased</th>
-                  <th>Pending due</th>
-                  <th>Age</th>
-                  <th>Date leased</th>
+                  <th>Sq ft</th>
+                  <th>Monthly rent</th>
+                  <th>Balance due</th>
+                  <th>Lease term</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTenants.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center opacity-60">
+                    <td colSpan={7} className="py-10 text-center opacity-60">
                       No tenants match these filters.
                     </td>
                   </tr>
@@ -419,6 +452,10 @@ export function TenantDashboard() {
                         </select>
                       </td>
                       <td>{t.propertyLeased}</td>
+                      <td className="opacity-80">
+                        {t.sqft ? t.sqft.toLocaleString() : "—"}
+                      </td>
+                      <td>{formatCurrency(t.monthlyRent || 0)}</td>
                       <td
                         className={
                           t.pendingDue > 0
@@ -428,8 +465,15 @@ export function TenantDashboard() {
                       >
                         {formatCurrency(t.pendingDue)}
                       </td>
-                      <td>{t.ageYears} yrs</td>
-                      <td>{formatLeaseDate(t.dateLeased)}</td>
+                      <td className="text-xs">
+                        <p>{formatLeaseDate(t.dateLeased)}</p>
+                        {t.leaseEnd ? (
+                          <p className="opacity-60">
+                            → {formatLeaseDate(t.leaseEnd)}
+                          </p>
+                        ) : null}
+                        <p className="opacity-50">{t.ageYears} yrs tenure</p>
+                      </td>
                     </tr>
                   ))
                 )}

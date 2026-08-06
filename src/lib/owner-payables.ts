@@ -359,66 +359,8 @@ const REMITTANCE_EXCEPTIONS: Record<string, RemittanceException> = {
 };
 
 export function seedOwnerPayables(): OwnerPayable[] {
-  const rows: OwnerPayable[] = [];
-
-  for (let monthsAgo = SEED_MONTHS - 1; monthsAgo >= 0; monthsAgo -= 1) {
-    for (const contract of OWNER_CONTRACTS) {
-      const exception = REMITTANCE_EXCEPTIONS[`${monthsAgo}:${contract.code}`];
-      const grossRentCollected = seededRentCollected(
-        contract.property,
-        monthsAgo
-      );
-      const managementFeeAmount = feeAmountFromPercent(grossRentCollected);
-      const reimbursableExpenses =
-        contract.reimbursableExpenses[monthsAgo] ??
-        contract.reimbursableExpenses[0];
-      const reservesWithheld = contract.monthlyReserve;
-      const amount = computeNetDue({
-        grossRentCollected,
-        managementFeeAmount,
-        reimbursableExpenses,
-        reservesWithheld,
-      });
-      const paid = exception ? (exception.paid ?? amount) : amount;
-      const slug = monthSlug(monthsAgo);
-      const paymentId = `OWN-${slug}-${contract.code}`;
-      const invoiceDate = monthDay(monthsAgo, 1);
-
-      rows.push({
-        id: `op-${slug}-${contract.code}`.toLowerCase(),
-        paymentId,
-        ownerName: contract.ownerName,
-        ownerId: contract.ownerId,
-        property: contract.property,
-        period: monthPeriodLabel(monthsAgo),
-        paymentType: "monthly_distribution",
-        grossRentCollected,
-        managementFeePercent: MANAGEMENT_FEE_PERCENT,
-        managementFeeAmount,
-        reimbursableExpenses,
-        reservesWithheld,
-        amount,
-        amountPaid: paid,
-        onHold: false,
-        statementApproved: true,
-        invoiceDate,
-        dueDate: monthDay(monthsAgo, 15),
-        paymentMethod: exception?.method ?? "ach",
-        paymentReference:
-          exception?.reference ??
-          (amount > 0 && paid >= amount
-            ? `ACH-${slug.replace("-", "")}${contract.code}`
-            : ""),
-        fileName: `${paymentId.toLowerCase()}-owner-statement.pdf`,
-        notes:
-          exception?.notes ??
-          "Monthly owner distribution remitted after Harborline's 10% management fee, property expenses, and reserves.",
-        createdAt: invoiceDate,
-      });
-    }
-  }
-
-  return [...rows, ...specialOwnerPayables()];
+  // Portfolio data lives in shared_records (scripts/seed-portfolio.mjs).
+  return [];
 }
 
 /** One-off owner payables that sit outside the recurring rent distribution. */

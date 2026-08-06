@@ -42,6 +42,13 @@ export type SmTenantApplication = {
   building?: string;
   /** Desired room / suite size (e.g. "1,200 SF" or "Suite 305") */
   roomSize?: string;
+  /** Managed property id when linked to inventory. */
+  propertyId?: string;
+  /** Vacant unit roster id selected for lease. */
+  unitId?: string;
+  unitLabel?: string;
+  proposedRent?: number;
+  movedInAt?: string;
   smStatus?: SmApplicationStatus;
   communicated?: boolean;
   lastContactAt?: string;
@@ -287,62 +294,18 @@ export function sillyTenantApplication(): SmTenantApplication {
 }
 
 export function seedCampaigns(): SmCampaign[] {
-  return [
-    {
-      id: "sm-camp-1",
-      name: "Q2 Facebook leasing push",
-      channel: "facebook",
-      startDate: "2026-04-01",
-      endDate: "2026-06-30",
-      cost: 4200,
-      revenueAttributed: 18600,
-      leads: 38,
-      status: "active",
-      notes: "Targeting commercial tenants within 25 miles.",
-    },
-    {
-      id: "sm-camp-2",
-      name: "Chamber of Commerce sponsorship",
-      channel: "event_sponsor",
-      startDate: "2026-03-15",
-      endDate: "2026-03-15",
-      cost: 2500,
-      revenueAttributed: 0,
-      leads: 12,
-      status: "completed",
-      notes: "Booth + logo on materials.",
-    },
-  ];
+  // Portfolio data lives in shared_records (scripts/seed-portfolio.mjs).
+  return [];
 }
 
 export function seedBudgetConfig(): SmBudgetConfig[] {
-  return [
-    {
-      id: "sm-budget-main",
-      label: "FY2026 Sales & Marketing",
-      categories: DEFAULT_BUDGET_CATEGORIES.map((c) => ({ ...c })),
-    },
-  ];
+  // Portfolio data lives in shared_records (scripts/seed-portfolio.mjs).
+  return [];
 }
 
 export function seedCalendarEvents(): SmCalendarEvent[] {
-  const d = new Date();
-  d.setDate(d.getDate() + 2);
-  d.setHours(10, 0, 0, 0);
-  const end = new Date(d);
-  end.setHours(11, 0, 0, 0);
-  return [
-    {
-      id: "sm-evt-1",
-      title: "Tour · Pier 12 Suite 305",
-      type: "tour",
-      start: toLocalInput(d),
-      end: toLocalInput(end),
-      notes: "Demo seed tour — walk the suite and lobby amenities.",
-      source: "harborline",
-      location: "Pier 12 · Suite 305",
-    },
-  ];
+  // Portfolio data lives in shared_records (scripts/seed-portfolio.mjs).
+  return [];
 }
 
 /** Demo Google Calendar pull — overlaps the seed Harborline tour on purpose. */

@@ -436,9 +436,14 @@ export function PropertyDetailView({ contract, onBack }: Props) {
               <tbody>
                 {tenants.map((t) => (
                   <tr key={t.id}>
-                    <td className="font-medium">{t.unit}</td>
+                    <td className="font-medium">
+                      <p>{t.unit}</p>
+                      {t.floorPlan ? (
+                        <p className="text-xs opacity-55">{t.floorPlan}</p>
+                      ) : null}
+                    </td>
                     <td>
-                      <p>{t.name}</p>
+                      <p>{t.name || "—"}</p>
                       {(t.email || t.phone) && (
                         <p className="text-xs opacity-60">
                           {[t.email, t.phone].filter(Boolean).join(" · ")}
@@ -452,9 +457,19 @@ export function PropertyDetailView({ contract, onBack }: Props) {
                     </td>
                     <td>{t.sqft || "—"}</td>
                     <td>
-                      {t.monthlyRent
-                        ? `$${Number(t.monthlyRent).toLocaleString()}`
-                        : "—"}
+                      <p>
+                        {t.monthlyRent
+                          ? `$${Number(t.monthlyRent).toLocaleString()}`
+                          : "—"}
+                      </p>
+                      {t.status === "vacant" && t.fairMarketRent ? (
+                        <p className="text-xs opacity-55">
+                          FMR ${Number(t.fairMarketRent).toLocaleString()}
+                          {t.askingRent
+                            ? ` · ask $${Number(t.askingRent).toLocaleString()}`
+                            : ""}
+                        </p>
+                      ) : null}
                     </td>
                     <td>
                       <span

@@ -5,11 +5,13 @@ import {
   COLLECTIONS,
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
+import type {
+  ManagementContractDraft,
+  SharedPropertyTenant,
+} from "@/lib/management-contract";
 import {
   buildTourPrompt,
   labelSlot,
-  sillyTenantApplication,
-  SILLY_TENANT_APP_ID,
   slotConflicts,
   SM_APP_STATUSES,
   toLocalInput,
@@ -17,8 +19,17 @@ import {
   type SmCalendarEvent,
   type SmTenantApplication,
 } from "@/lib/sales-marketing";
+import { approveTenantMoveIn } from "@/app/ops/management/owner-applications/actions";
 
 type TourOption = { start: string; end: string };
+
+function money(n: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
 
 function defaultTourOption(offsetDays: number): TourOption {
   const start = new Date();
@@ -41,12 +52,18 @@ export function ApplicationsDashboard() {
     items: events,
     saveOne: saveEvent,
   } = useSharedCollection<SmCalendarEvent>(COLLECTIONS.smCalendarEvents);
+  const { items: properties } = useSharedCollection<ManagementContractDraft>(
+    COLLECTIONS.managedProperties
+  );
+  const { items: unitRoster, refresh: refreshUnits } =
+    useSharedCollection<SharedPropertyTenant>(COLLECTIONS.propertyTenants);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [seeded, setSeeded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<SmTenantApplication | null>(null);
+  const [moveInBusy, setMoveInBusy] = useState(false);
   const [tourOptions, setTourOptions] = useState<TourOption[]>([
     defaultTourOption(2),
     defaultTourOption(3),
@@ -54,25 +71,10 @@ export function ApplicationsDashboard() {
   ]);
 
   useEffect(() => {
+    // Demo silly tenant app disabled — portfolio data is seeded in shared_records.
     if (loading || seeded) return;
-    const existing = applications.find((a) => a.id === SILLY_TENANT_APP_ID);
-    if (existing) {
-      if (!existing.building || !existing.roomSize) {
-        void saveApp({
-          ...existing,
-          ...sillyTenantApplication(),
-          id: SILLY_TENANT_APP_ID,
-        });
-      }
-      setSeeded(true);
-      return;
-    }
-    void (async () => {
-      await saveApp(sillyTenantApplication());
-      setSeeded(true);
-      setSelectedId(SILLY_TENANT_APP_ID);
-    })();
-  }, [loading, applications, saveApp, seeded]);
+    setSeeded(true);
+  }, [loading, seeded]);
 
   const selected = applications.find((a) => a.id === selectedId) ?? null;
 
@@ -89,6 +91,17 @@ export function ApplicationsDashboard() {
       setDraft(null);
     }
   }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps -- reset draft when selection changes
+
+  const vacantUnits = useMemo(() => {
+    const name = (draft?.building || draft?.property || "").toLowerCase();
+    return unitRoster.filter((u) => {
+      const vacant = u.status === "vacant" || !u.name?.trim();
+      if (!vacant) return false;
+      if (draft?.propertyId) return u.propertyId === draft.propertyId;
+      if (!name) return true;
+      return u.propertyName.toLowerCase().includes(name.split("·")[0].trim());
+    });
+  }, [unitRoster, draft?.building, draft?.property, draft?.propertyId]);
 
   const optionConflicts = useMemo(() => {
     return tourOptions.map((opt) =>
@@ -127,6 +140,82 @@ export function ApplicationsDashboard() {
     setEditing(false);
     setMsg("Application updated.");
     setTimeout(() => setMsg(null), 2500);
+  }
+
+  function assignUnit(unitId: string) {
+    const unit = unitRoster.find((u) => u.id === unitId);
+    if (!unit || !draft) return;
+    const rent = Number(unit.askingRent || unit.monthlyRent || 0);
+    setDraft({
+      ...draft,
+      propertyId: unit.propertyId,
+      unitId: unit.id,
+      unitLabel: unit.unit,
+      roomSize: `${unit.unit}${unit.floorPlan ? ` · ${unit.floorPlan}` : ""} · ${unit.sqft} SF`,
+      building: unit.propertyName,
+      property: `${unit.propertyName} · ${unit.unit}`,
+      proposedRent: rent,
+    });
+  }
+
+  async function handleStatusChange(smStatus: SmTenantApplication["smStatus"]) {
+    if (!selected || !draft) return;
+    const next = { ...selected, ...draft, smStatus };
+    if (smStatus === "approved") {
+      if (!draft.unitId || !draft.propertyId) {
+        setMsg(
+          "Select a vacant unit with published asking rent before approving."
+        );
+        setTimeout(() => setMsg(null), 3500);
+        return;
+      }
+      setMoveInBusy(true);
+      try {
+        const result = await approveTenantMoveIn({
+          applicationId: selected.id,
+          propertyId: draft.propertyId,
+          unitId: draft.unitId,
+          tenantName: draft.name,
+          tenantEmail: draft.email,
+        });
+        if ("error" in result) {
+          setMsg(result.error);
+          setTimeout(() => setMsg(null), 4000);
+          return;
+        }
+        await saveApp({
+          ...next,
+          smStatus: "approved",
+          status: "In review",
+          proposedRent: result.monthlyRent,
+          unitLabel: result.unitLabel,
+          movedInAt: new Date().toISOString(),
+          roomSize: `${result.unitLabel} · ${money(result.monthlyRent)}/mo`,
+        });
+        await refreshUnits();
+        setDraft((d) =>
+          d
+            ? {
+                ...d,
+                smStatus: "approved",
+                proposedRent: result.monthlyRent,
+                unitLabel: result.unitLabel,
+                movedInAt: new Date().toISOString(),
+              }
+            : d
+        );
+        setMsg(
+          `Approved & moved in at ${money(result.monthlyRent)}/mo. AR + portal invoice opened at unit rent (${result.receivableId}).`
+        );
+        setTimeout(() => setMsg(null), 5000);
+      } finally {
+        setMoveInBusy(false);
+      }
+      return;
+    }
+
+    setDraft((d) => (d ? { ...d, smStatus } : d));
+    await saveApp(next);
   }
 
   async function sendTourPrompt() {
@@ -321,22 +410,77 @@ export function ApplicationsDashboard() {
                   <span className="opacity-60">Room / size:</span>{" "}
                   {draft.roomSize || "—"}
                 </p>
+                {draft.proposedRent ? (
+                  <p>
+                    <span className="opacity-60">Lease rent:</span>{" "}
+                    {money(draft.proposedRent)}/mo
+                  </p>
+                ) : null}
+                {draft.movedInAt ? (
+                  <p className="text-emerald-800">
+                    Moved in {new Date(draft.movedInAt).toLocaleString()}
+                  </p>
+                ) : null}
                 {draft.notes ? (
                   <p className="mt-2 whitespace-pre-wrap">{draft.notes}</p>
                 ) : null}
               </div>
             )}
 
+            <div className="space-y-2 rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/40 p-3">
+              <p className="text-sm font-medium">
+                Assign vacant unit (FMR / asking rent)
+              </p>
+              <p className="text-xs opacity-65">
+                Units appear after Management publishes fair-market asking rents
+                from the inspected owner application. Approving move-in locks
+                that rent and opens AR billing.
+              </p>
+              <select
+                className="select select-bordered select-sm w-full bg-white"
+                value={draft.unitId ?? ""}
+                onChange={(e) => assignUnit(e.target.value)}
+                disabled={Boolean(draft.movedInAt)}
+              >
+                <option value="">Select vacant unit…</option>
+                {properties.map((p) => {
+                  const units = vacantUnits.filter((u) => u.propertyId === p.id);
+                  if (units.length === 0) return null;
+                  return (
+                    <optgroup key={p.id} label={p.propertyName}>
+                      {units.map((u) => {
+                        const rent = Number(u.askingRent || u.monthlyRent || 0);
+                        return (
+                          <option key={u.id} value={u.id}>
+                            {u.unit}
+                            {u.floorPlan ? ` · ${u.floorPlan}` : ""} · {u.sqft}{" "}
+                            SF · {money(rent)}/mo
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  );
+                })}
+              </select>
+              {vacantUnits.length === 0 ? (
+                <p className="text-xs opacity-60">
+                  No vacant priced units found for this property filter. Ask
+                  Management to run FMR and publish rents on the owner
+                  application.
+                </p>
+              ) : null}
+            </div>
+
             <label className="form-control w-full">
               <span className="label-text mb-1">Review status</span>
               <select
                 className="select select-bordered select-sm bg-white"
                 value={draft.smStatus ?? "new"}
+                disabled={moveInBusy || Boolean(draft.movedInAt)}
                 onChange={(e) => {
                   const smStatus = e.target
                     .value as SmTenantApplication["smStatus"];
-                  setDraft((d) => (d ? { ...d, smStatus } : d));
-                  void saveApp({ ...selected, ...draft, smStatus });
+                  void handleStatusChange(smStatus);
                 }}
               >
                 {SM_APP_STATUSES.map((s) => (

@@ -78,6 +78,24 @@ export default function TenantPortalPage() {
   const [invoiceForm, setInvoiceForm] = useState(emptyTenantInvoice());
   const [showContractForm, setShowContractForm] = useState(false);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+  /** Look up lease billing by the email used on the application / lease. */
+  const [billingEmail, setBillingEmail] = useState("");
+
+  const normalizedBillingEmail = billingEmail.trim().toLowerCase();
+
+  const myContracts = useMemo(() => {
+    if (!normalizedBillingEmail) return [];
+    return contracts.filter(
+      (c) => (c.tenantEmail || "").toLowerCase() === normalizedBillingEmail
+    );
+  }, [contracts, normalizedBillingEmail]);
+
+  const myInvoices = useMemo(() => {
+    if (!normalizedBillingEmail) return [];
+    return invoices.filter(
+      (inv) => (inv.tenantEmail || "").toLowerCase() === normalizedBillingEmail
+    );
+  }, [invoices, normalizedBillingEmail]);
 
   useEffect(() => {
     void (async () => {
@@ -157,6 +175,8 @@ export default function TenantPortalPage() {
       ...contractForm,
       id: crypto.randomUUID(),
       property: contractForm.property.trim(),
+      tenantEmail:
+        contractForm.tenantEmail || normalizedBillingEmail || undefined,
     });
     setContractForm(emptyTenantContract());
     setShowContractForm(false);
@@ -169,6 +189,8 @@ export default function TenantPortalPage() {
       ...invoiceForm,
       id: crypto.randomUUID(),
       label: invoiceForm.label.trim(),
+      tenantEmail:
+        invoiceForm.tenantEmail || normalizedBillingEmail || undefined,
     });
     setInvoiceForm(emptyTenantInvoice());
     setShowInvoiceForm(false);
@@ -259,7 +281,10 @@ export default function TenantPortalPage() {
                   type="email"
                   className="input input-bordered w-full"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setBillingEmail(e.target.value);
+                  }}
                   placeholder="you@company.com"
                   required
                 />
@@ -328,6 +353,18 @@ export default function TenantPortalPage() {
                 {showContractForm ? "Hide" : "Add contract"}
               </button>
             </div>
+            <label className="form-control max-w-md">
+              <span className="label-text mb-1">
+                Your lease email (shows your unit rent)
+              </span>
+              <input
+                type="email"
+                className="input input-bordered w-full"
+                value={billingEmail}
+                onChange={(e) => setBillingEmail(e.target.value)}
+                placeholder="tenant.grandview.1@harborline.example"
+              />
+            </label>
             {contractsError && (
               <p className="text-sm text-red-700">{contractsError}</p>
             )}
@@ -381,17 +418,24 @@ export default function TenantPortalPage() {
             )}
             {contractsLoading ? (
               <p className="text-sm opacity-60">Loading shared contracts…</p>
+            ) : myContracts.length === 0 ? (
+              <p className="text-sm opacity-60">
+                No contracts match this email yet.
+              </p>
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
-                {contracts.map((c) => (
+                {myContracts.map((c) => (
                   <article
                     key={c.id}
                     className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/80 p-5 shadow-sm"
                   >
                     <p className="font-semibold text-lg">{c.property}</p>
+                    {c.unit ? (
+                      <p className="text-sm opacity-70">Unit {c.unit}</p>
+                    ) : null}
                     <p className="mt-1 text-sm opacity-70">{c.term}</p>
                     <p className="mt-3 text-sm">
-                      Rent: <strong>{c.rent}</strong>
+                      Monthly rent: <strong>${c.rent}</strong>
                     </p>
                     <span
                       className={`badge mt-3 ${
@@ -422,6 +466,18 @@ export default function TenantPortalPage() {
                 {showInvoiceForm ? "Hide" : "Add invoice"}
               </button>
             </div>
+            <label className="form-control max-w-md">
+              <span className="label-text mb-1">
+                Your lease email (shows invoices at your unit rent)
+              </span>
+              <input
+                type="email"
+                className="input input-bordered w-full"
+                value={billingEmail}
+                onChange={(e) => setBillingEmail(e.target.value)}
+                placeholder="tenant.grandview.1@harborline.example"
+              />
+            </label>
             {invoicesError && (
               <p className="text-sm text-red-700">{invoicesError}</p>
             )}
@@ -482,32 +538,42 @@ export default function TenantPortalPage() {
                   <thead>
                     <tr>
                       <th>Item</th>
+                      <th>Unit</th>
                       <th>Amount</th>
                       <th>Due</th>
                       <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {invoices.map((inv) => (
-                      <tr key={inv.id}>
-                        <td>{inv.label}</td>
-                        <td>{inv.amount}</td>
-                        <td>{inv.due}</td>
-                        <td>
-                          <span
-                            className={`badge ${
-                              inv.status === "Paid"
-                                ? "badge-success"
-                                : inv.status === "Due"
-                                  ? "badge-info"
-                                  : "badge-error"
-                            }`}
-                          >
-                            {inv.status}
-                          </span>
+                    {myInvoices.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="opacity-60">
+                          No invoices match this email yet.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      myInvoices.map((inv) => (
+                        <tr key={inv.id}>
+                          <td>{inv.label}</td>
+                          <td>{inv.unit || "—"}</td>
+                          <td>${inv.amount}</td>
+                          <td>{inv.due}</td>
+                          <td>
+                            <span
+                              className={`badge ${
+                                inv.status === "Paid"
+                                  ? "badge-success"
+                                  : inv.status === "Due"
+                                    ? "badge-info"
+                                    : "badge-error"
+                              }`}
+                            >
+                              {inv.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

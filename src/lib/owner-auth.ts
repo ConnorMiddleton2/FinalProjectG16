@@ -17,7 +17,17 @@ import {
   type ContractTermsInput,
 } from "@/lib/owner-properties";
 import { buildAgreementSections } from "@/lib/owner-contracts";
+import {
+  normalizeOwnerApplicationProperty,
+  propertyHasMinimumDetail,
+  propertyLocationLabel,
+  type OwnerApplicationProperty,
+} from "@/lib/owner-application-intake";
+import type { PropertyUnitRentSchedule } from "@/lib/fair-market-rent";
 import { cookies } from "next/headers";
+
+export type { OwnerApplicationProperty } from "@/lib/owner-application-intake";
+export { propertyLocationLabel, propertySfLabel } from "@/lib/owner-application-intake";
 
 export const OWNER_COOKIE = "harborline_owner";
 
@@ -26,15 +36,17 @@ export type OwnerAccount = {
   email: string;
   /** scrypt hash (salt:hash) or legacy plaintext during migration */
   password: string;
+  /**
+   * Plaintext copy for Management support (demo / class project).
+   * Cleared when the owner changes their password themselves.
+   */
+  passwordReveal?: string;
   fullName: string;
   createdAt: string;
   mustChangePassword?: boolean;
-};
-
-export type OwnerApplicationProperty = {
-  category: string;
-  location: string;
-  squareFeet: string;
+  phone?: string;
+  companyName?: string;
+  notes?: string;
 };
 
 export type OwnerApplicationStatus =
@@ -50,6 +62,21 @@ export type OwnerApplication = {
   email: string;
   phone: string;
   companyName: string;
+  /** Legal entity type (LLC, LP, Corp, Individual, etc.). */
+  entityType?: string;
+  mailingAddress?: string;
+  taxIdOrEin?: string;
+  preferredContactMethod?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  communicationPreference?: string;
+  /** Checklist notes: deed, W-9, COI, rent roll, leases, etc. */
+  documentsReadyNotes?: string;
+  ownershipProofAvailable?: boolean;
+  rentRollAvailable?: boolean;
+  leasesAvailable?: boolean;
+  insuranceDocsAvailable?: boolean;
+  bankingReady?: boolean;
   properties: OwnerApplicationProperty[];
   message: string;
   status: OwnerApplicationStatus;
@@ -103,6 +130,9 @@ export type OwnerApplication = {
   /** Plaintext temp password for Check Application Status until password change */
   loginRevealPassword?: string;
   credentialsIssuedAt?: string;
+  /** Fair-market unit rent schedules built after inspection. */
+  unitRentSchedules?: PropertyUnitRentSchedule[];
+  rentScheduleConfirmedAt?: string;
 };
 
 export type AgreementSectionSummary = {
@@ -139,6 +169,7 @@ const SEED_OWNERS: OwnerAccount[] = [
     id: "00000000-0000-4000-8000-0000000000b0",
     email: "bobowner@building.com",
     password: hashPassword("12345"),
+    passwordReveal: "12345",
     fullName: "Bob Owner",
     createdAt: new Date().toISOString(),
     mustChangePassword: false,
@@ -168,7 +199,19 @@ async function ensureSeedOwners() {
 
   // Migrate legacy plaintext seed password to hash when still "12345"
   if (!isHashedPassword(bob.password) && bob.password === "12345") {
-    const updated = { ...bob, password: hashPassword("12345") };
+    const updated = {
+      ...bob,
+      password: hashPassword("12345"),
+      passwordReveal: bob.passwordReveal || "12345",
+    };
+    await upsertSharedRecord(
+      client,
+      COLLECTIONS.ownerAccounts,
+      bob.id,
+      updated as unknown as Record<string, unknown>
+    );
+  } else if (!bob.passwordReveal) {
+    const updated = { ...bob, passwordReveal: "12345" };
     await upsertSharedRecord(
       client,
       COLLECTIONS.ownerAccounts,
@@ -224,11 +267,15 @@ export async function createOwnerAccount(input: {
   if (!email || !input.password) {
     return { error: "Email and password are required." as const };
   }
+  if (input.password.trim().length < 8) {
+    return { error: "Password must be at least 8 characters." as const };
+  }
 
   const account: OwnerAccount = {
     id: crypto.randomUUID(),
     email,
-    password: hashPassword(input.password),
+    password: hashPassword(input.password.trim()),
+    passwordReveal: input.password.trim(),
     fullName: input.fullName.trim() || "Property Owner",
     createdAt: new Date().toISOString(),
     mustChangePassword: input.mustChangePassword ?? true,
@@ -238,12 +285,37 @@ export async function createOwnerAccount(input: {
   return { ok: true as const, email, account };
 }
 
+/** Self-serve signup from the owner portal (email + password). */
+export async function registerOwnerAccount(input: {
+  email: string;
+  password: string;
+  fullName: string;
+}) {
+  return createOwnerAccount({
+    ...input,
+    mustChangePassword: false,
+  });
+}
+
 export async function submitOwnerApplication(input: {
   fullName: string;
   email: string;
   phone: string;
   companyName: string;
-  properties: OwnerApplicationProperty[];
+  entityType?: string;
+  mailingAddress?: string;
+  taxIdOrEin?: string;
+  preferredContactMethod?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  communicationPreference?: string;
+  documentsReadyNotes?: string;
+  ownershipProofAvailable?: boolean;
+  rentRollAvailable?: boolean;
+  leasesAvailable?: boolean;
+  insuranceDocsAvailable?: boolean;
+  bankingReady?: boolean;
+  properties: Array<Partial<OwnerApplicationProperty> & Record<string, unknown>>;
   message: string;
 }) {
   const email = input.email.trim().toLowerCase();
@@ -252,22 +324,30 @@ export async function submitOwnerApplication(input: {
   }
 
   const properties = input.properties
-    .map((p) => ({
-      category: p.category.trim(),
-      location: p.location.trim(),
-      squareFeet: p.squareFeet.trim(),
-    }))
-    .filter((p) => p.location || p.squareFeet || p.category);
+    .map((p) => normalizeOwnerApplicationProperty(p))
+    .filter(propertyHasMinimumDetail);
 
   if (properties.length === 0) {
     return {
-      error: "Add at least one property with a location or square footage." as const,
+      error:
+        "Add at least one commercial property with a name or street address." as const,
     };
   }
 
-  const missingLocation = properties.some((p) => !p.location);
-  if (missingLocation) {
-    return { error: "Each property needs a location." as const };
+  const missingAddress = properties.some(
+    (p) => !p.streetAddress.trim() && !p.location?.trim()
+  );
+  if (missingAddress) {
+    return {
+      error: "Each property needs a street address (or full location)." as const,
+    };
+  }
+
+  const missingType = properties.some((p) => !p.category);
+  if (missingType) {
+    return {
+      error: "Select a commercial property type for each asset." as const,
+    };
   }
 
   const apps = await readOwnerApplications();
@@ -291,10 +371,24 @@ export async function submitOwnerApplication(input: {
     email,
     phone: input.phone.trim(),
     companyName: input.companyName.trim(),
+    entityType: (input.entityType ?? "").trim(),
+    mailingAddress: (input.mailingAddress ?? "").trim(),
+    taxIdOrEin: (input.taxIdOrEin ?? "").trim(),
+    preferredContactMethod: (input.preferredContactMethod ?? "").trim(),
+    emergencyContactName: (input.emergencyContactName ?? "").trim(),
+    emergencyContactPhone: (input.emergencyContactPhone ?? "").trim(),
+    communicationPreference: (input.communicationPreference ?? "").trim(),
+    documentsReadyNotes: (input.documentsReadyNotes ?? "").trim(),
+    ownershipProofAvailable: Boolean(input.ownershipProofAvailable),
+    rentRollAvailable: Boolean(input.rentRollAvailable),
+    leasesAvailable: Boolean(input.leasesAvailable),
+    insuranceDocsAvailable: Boolean(input.insuranceDocsAvailable),
+    bankingReady: Boolean(input.bankingReady),
     properties,
     message: input.message.trim(),
     status: "pending",
     createdAt: new Date().toISOString(),
+    mgmtStatus: "new",
   };
 
   const client = await createClient();
@@ -684,6 +778,7 @@ export async function verifyOwnerLogin(email: string, password: string) {
     const migrated = {
       ...owner,
       password: hashPassword(password),
+      passwordReveal: owner.passwordReveal || password,
     };
     await saveOwnerAccount(migrated);
     return migrated;
@@ -708,6 +803,7 @@ export async function changeOwnerPassword(input: {
   const updated: OwnerAccount = {
     ...owner,
     password: hashPassword(input.newPassword.trim()),
+    passwordReveal: undefined,
     mustChangePassword: false,
   };
   await saveOwnerAccount(updated);
