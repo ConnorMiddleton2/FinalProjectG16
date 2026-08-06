@@ -34,6 +34,7 @@ import {
   resolveTenantManagedPropertyId,
   VACANT_UNITS_HELPER,
 } from "@/lib/property-live-metrics";
+import { RequestOwnerApprovalForm } from "@/components/RequestOwnerApprovalForm";
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -296,6 +297,10 @@ export function PropertyDetailView({ contract, onBack }: Props) {
             />
             <Row label="Fee structure" value={feeLabel} />
           </dl>
+          <RequestOwnerApprovalForm
+            propertyId={contract.id}
+            approvalThreshold={contract.ownerApprovalThreshold}
+          />
         </DetailBlock>
 
         <DetailBlock title="Tenant activity">

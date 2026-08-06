@@ -55,6 +55,8 @@ export type ManagementContractDraft = {
   ownerEntityType: string;
   ownerContactName: string;
   ownerEmail: string;
+  /** Links managed property to cookie-auth owner_accounts row when known. */
+  ownerAccountId: string;
   ownerPhone: string;
   ownerMailingAddress: string;
   contractStartDate: string;
@@ -62,6 +64,8 @@ export type ManagementContractDraft = {
   renewalOptions: string;
   terminationNoticeDays: string;
   exclusiveManagement: boolean;
+  /** Dollar amount above which Harborline must seek owner spend approval. Empty = use app default. */
+  ownerApprovalThreshold: string;
 
   // Fee structure
   feeStructure: FeeStructure;
@@ -95,6 +99,11 @@ export type ManagementContractDraft = {
 
   /** Optional tenant roster attached to a managed property (legacy nested field). */
   tenants?: PropertyTenant[];
+
+  /** Set when provisioned from an owner application awaiting signature. */
+  sourceApplicationId?: string;
+  ownerSignedAt?: string;
+  ownerSignatureName?: string;
 };
 
 /** Shared property-roster row keyed by managed property id. */
@@ -150,6 +159,7 @@ export const emptyManagementContract = (): Omit<
   ownerEntityType: "LLC",
   ownerContactName: "",
   ownerEmail: "",
+  ownerAccountId: "",
   ownerPhone: "",
   ownerMailingAddress: "",
   contractStartDate: "",
@@ -157,6 +167,7 @@ export const emptyManagementContract = (): Omit<
   renewalOptions: "",
   terminationNoticeDays: "30",
   exclusiveManagement: true,
+  ownerApprovalThreshold: "2500",
 
   feeStructure: "percent_collections",
   feePercent: "4",

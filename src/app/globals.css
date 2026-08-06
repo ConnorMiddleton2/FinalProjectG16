@@ -10,6 +10,8 @@
   --harbor-mist: #d7eef2;
   --harbor-sand: #f3efe6;
   --harbor-glow: #f0c27a;
+  --harbor-card: rgba(255, 255, 255, 0.92);
+  --harbor-focus: #1f7a8c;
 }
 
 html,
@@ -24,6 +26,216 @@ body {
 
 .font-display {
   font-family: var(--font-display), Georgia, serif;
+}
+
+/* —— Owner portal design system —— */
+.owner-page-bg {
+  background: linear-gradient(180deg, #f3efe6 0%, #e8f4f6 55%, #d7eef2 100%);
+}
+
+.owner-auth-bg {
+  background: linear-gradient(165deg, #f3efe6 0%, #d7eef2 50%, #e8f4f6 100%);
+}
+
+.owner-card {
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--harbor-deep) 12%, transparent);
+  background: var(--harbor-card);
+  box-shadow: 0 1px 2px rgba(11, 42, 50, 0.06);
+}
+
+.owner-card-interactive {
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
+}
+
+.owner-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--harbor-mid) 45%, transparent);
+  box-shadow: 0 8px 20px rgba(11, 42, 50, 0.1);
+}
+
+.owner-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid transparent;
+  background: var(--harbor-deep);
+  color: var(--harbor-sand);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.owner-btn-primary:hover:not(:disabled) {
+  background: var(--harbor-ink);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(11, 42, 50, 0.18);
+}
+
+.owner-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.owner-btn-primary-sm {
+  min-height: 2.5rem;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8125rem;
+}
+
+.owner-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--harbor-deep) 22%, transparent);
+  background: transparent;
+  color: var(--harbor-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.owner-btn-secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--harbor-mist) 70%, white);
+  border-color: var(--harbor-mid);
+  transform: translateY(-1px);
+}
+
+.owner-btn-secondary-sm {
+  min-height: 2.5rem;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8125rem;
+}
+
+.owner-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, #b91c1c 35%, transparent);
+  background: transparent;
+  color: #b91c1c;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.owner-btn-danger:hover:not(:disabled) {
+  background: #fef2f2;
+  transform: translateY(-1px);
+}
+
+.owner-input {
+  width: 100%;
+  min-height: 2.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--harbor-deep) 18%, transparent);
+  background: white;
+  padding: 0.5rem 0.85rem;
+  color: var(--harbor-ink);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.owner-input:focus {
+  border-color: var(--harbor-mid);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--harbor-mid) 25%, transparent);
+}
+
+.owner-label {
+  margin-bottom: 0.35rem;
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--harbor-ink) 70%, transparent);
+}
+
+.owner-muted {
+  color: color-mix(in srgb, var(--harbor-ink) 65%, transparent);
+}
+
+.owner-section-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--harbor-ink);
+}
+
+.owner-badge-pulse {
+  animation: owner-badge-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes owner-badge-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes owner-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.owner-skeleton {
+  border-radius: 0.75rem;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--harbor-mist) 80%, #fff) 25%,
+    color-mix(in srgb, var(--harbor-sand) 90%, #fff) 50%,
+    color-mix(in srgb, var(--harbor-mist) 80%, #fff) 75%
+  );
+  background-size: 200% 100%;
+  animation: owner-shimmer 1.4s ease-in-out infinite;
+}
+
+.owner-stagger > *:nth-child(1) {
+  animation-delay: 0.04s;
+}
+.owner-stagger > *:nth-child(2) {
+  animation-delay: 0.09s;
+}
+.owner-stagger > *:nth-child(3) {
+  animation-delay: 0.14s;
+}
+.owner-stagger > *:nth-child(4) {
+  animation-delay: 0.19s;
+}
+.owner-stagger > *:nth-child(5) {
+  animation-delay: 0.24s;
+}
+.owner-stagger > *:nth-child(6) {
+  animation-delay: 0.29s;
+}
+
+.owner-stagger > * {
+  animation: welcome-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes welcome-rise {
@@ -71,4 +283,43 @@ body {
 
 .welcome-wash {
   animation: welcome-wash 8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-rise,
+  .welcome-rise-delay,
+  .welcome-drift,
+  .welcome-wash,
+  .owner-stagger > *,
+  .owner-badge-pulse,
+  .owner-skeleton,
+  .owner-card-interactive,
+  .owner-btn-primary,
+  .owner-btn-secondary,
+  .owner-btn-danger {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .owner-card-interactive:hover,
+  .owner-btn-primary:hover:not(:disabled),
+  .owner-btn-secondary:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
 }

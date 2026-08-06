@@ -4,6 +4,7 @@ export const COLLECTIONS = {
   managedProperties: "managed_properties",
   ownerApplications: "owner_applications",
   ownerAccounts: "owner_accounts",
+  ownerApprovals: "owner_approvals",
   workOrders: "work_orders",
   vendors: "vendors",
   budgetLines: "budget_lines",
@@ -13,17 +14,35 @@ export const COLLECTIONS = {
   propertyTenants: "property_tenants",
   tenantContracts: "tenant_contracts",
   tenantInvoices: "tenant_invoices",
+  payableInvoices: "payable_invoices",
+  ownerPayables: "owner_payables",
   /**
    * AR teammate rent ledger — Collections may READ only.
    * Never write or mutate this collection from Collections UI.
    */
   rentalReceivables: "rental_receivables",
+  miscellaneousReceivables: "miscellaneous_receivables",
   /** Collections weekly notices (simulated delivery only). */
   collectionsNotices: "collections_notices",
   /** Per-tenant pause / dispute / payment-plan / review controls. */
   collectionsAccountState: "collections_account_state",
   /** 90-day management-review alerts (internal only). */
   managementAlerts: "management_alerts",
+  smCampaigns: "sm_campaigns",
+  smCalendarEvents: "sm_calendar_events",
+  smBudgetConfig: "sm_budget_config",
+  smReceipts: "sm_receipts",
+  ownerContracts: "owner_contracts",
+  departmentExpenses: "department_expenses",
+  departmentBudgets: "department_budgets",
+  propertyBudgetPlans: "property_budget_plans",
+  propertyBudgetPacks: "property_budget_packs",
+  apPayables: "ap_payables",
+  missedPayments: "missed_payments",
+  capitalExpenditures: "capital_expenditures",
+  hrEmployees: "hr_employees",
+  hrPayStubs: "hr_pay_stubs",
+  hrTimePunches: "hr_time_punches",
 } as const;
 
 export type SharedCollection =
