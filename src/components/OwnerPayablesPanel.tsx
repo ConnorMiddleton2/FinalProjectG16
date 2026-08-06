@@ -20,10 +20,12 @@ import {
 } from "@/hooks/useSharedCollection";
 import {
   balanceOf,
-  companySpread,
+  computeNetDue,
   daysLate,
   emptyOwnerPayableForm,
+  feeAmountFromPercent,
   isOverdue,
+  MANAGEMENT_FEE_PERCENT,
   money,
   ownerPayableStatusLabel,
   ownerPaymentMethodLabel,
@@ -82,8 +84,7 @@ export function OwnerPayablesPanel() {
     let onHold = 0;
     let openCount = 0;
     let awaitingApproval = 0;
-    let rentalIncome = 0;
-    let contractualOwnerCost = 0;
+    let managementFeeIncome = 0;
 
     for (const row of payables) {
       const balance = balanceOf(row);
@@ -96,8 +97,7 @@ export function OwnerPayablesPanel() {
         awaitingApproval += balance;
       }
       if (row.paymentType === "monthly_distribution") {
-        rentalIncome += row.rentalIncomeCollected;
-        contractualOwnerCost += row.amount;
+        managementFeeIncome += row.managementFeeAmount;
       }
       if (isOverdue(row, today)) {
         overdue += balance;
@@ -117,7 +117,7 @@ export function OwnerPayablesPanel() {
       onHold: round2(onHold),
       openCount,
       awaitingApproval: round2(awaitingApproval),
-      grossSpread: round2(rentalIncome - contractualOwnerCost),
+      managementFeeIncome: round2(managementFeeIncome),
     };
   }, [payables, today]);
 
@@ -207,10 +207,28 @@ export function OwnerPayablesPanel() {
       return;
     }
 
-    const amount = parsePositiveAmount(form.amount);
-    if (amount === null) {
+    const grossRentCollected =
+      parseNonNegativeAmount(form.grossRentCollected) ?? 0;
+    const reimbursableExpenses =
+      parseNonNegativeAmount(form.reimbursableExpenses) ?? 0;
+    const reservesWithheld =
+      parseNonNegativeAmount(form.reservesWithheld) ?? 0;
+    const managementFeeAmount = feeAmountFromPercent(grossRentCollected);
+    const amount =
+      form.paymentType === "monthly_distribution"
+        ? computeNetDue({
+            grossRentCollected,
+            managementFeeAmount,
+            reimbursableExpenses,
+            reservesWithheld,
+          })
+        : parsePositiveAmount(form.amount);
+
+    if (amount === null || amount <= 0) {
       setFormError(
-        "Fixed contractual amount owed must be a positive dollar amount."
+        form.paymentType === "monthly_distribution"
+          ? "The rental income must exceed the 10% management fee, reimbursable expenses, and reserves withheld."
+          : "Amount owed must be a positive dollar amount."
       );
       return;
     }
@@ -222,7 +240,7 @@ export function OwnerPayablesPanel() {
     }
     if (amountPaid > amount) {
       setFormError(
-        "Amount paid cannot be more than the fixed contractual amount owed."
+        "Amount paid cannot be more than the net amount owed."
       );
       return;
     }
@@ -255,8 +273,17 @@ export function OwnerPayablesPanel() {
       property,
       period,
       paymentType: form.paymentType,
-      rentalIncomeCollected:
-        parseNonNegativeAmount(form.rentalIncomeCollected) ?? 0,
+      grossRentCollected,
+      managementFeePercent:
+        form.paymentType === "monthly_distribution"
+          ? MANAGEMENT_FEE_PERCENT
+          : 0,
+      managementFeeAmount:
+        form.paymentType === "monthly_distribution"
+          ? managementFeeAmount
+          : 0,
+      reimbursableExpenses,
+      reservesWithheld,
       amount,
       amountPaid: amountPaid ?? 0,
       onHold: form.onHold,
@@ -353,10 +380,9 @@ export function OwnerPayablesPanel() {
                 to date
               </p>
               <p className="mt-1 text-xs text-[var(--harbor-ink)]/50">
-                Fixed owner amounts and rental collections are entered manually
-                for now. After teammates merge their modules to main, rental
-                income and final property profitability can be wired to live
-                totals.
+                Monthly distributions equal rental income collected, less
+                Harborline&apos;s 10% management fee, reimbursable property
+                expenses, and reserves withheld.
               </p>
             </div>
 
@@ -419,17 +445,13 @@ export function OwnerPayablesPanel() {
             </div>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-emerald-900/70">
-                Company gross spread
+                Management fee income
               </p>
-              <p
-                className={`mt-1 text-2xl font-semibold tabular-nums ${
-                  totals.grossSpread < 0 ? "text-red-800" : "text-emerald-800"
-                }`}
-              >
-                {money(totals.grossSpread)}
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-800">
+                {money(totals.managementFeeIncome)}
               </p>
               <p className="text-xs text-emerald-900/70">
-                Rental income less fixed owner payments, before operating costs
+                Harborline&apos;s 10% of rental income
               </p>
             </div>
           </div>
@@ -445,7 +467,7 @@ export function OwnerPayablesPanel() {
           <table className="table">
             <thead>
               <tr>
-                <th className="text-right">Fixed amount</th>
+                <th className="text-right">Net owed</th>
                 <th className="text-right">Paid</th>
                 <th className="text-right">Balance</th>
                 <th>Status</th>
@@ -698,52 +720,98 @@ export function OwnerPayablesPanel() {
 
             <div className="rounded-xl border border-[var(--harbor-deep)]/15 bg-white/80 p-4">
               <p className="text-sm font-semibold text-[var(--harbor-ink)]">
-                Fixed owner contract and rental spread
+                Owner remittance waterfall
               </p>
               <p className="mt-1 text-xs opacity-60">
-                The owner payment is fixed for the period. Rental income is
-                recorded only to show Harborline&apos;s gross spread before
-                operating expenses.
+                Harborline earns 10% of rental income. The owner receives the
+                remaining amount after reimbursable property expenses and
+                reserves withheld.
               </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <label className="form-control w-full">
                   <span className="mb-1 text-sm opacity-70">
-                    Rental income collected
+                    Total rental income collected
                   </span>
                   <CurrencyInput
-                    value={form.rentalIncomeCollected}
-                    onChange={(v) => updateForm("rentalIncomeCollected", v)}
+                    value={form.grossRentCollected}
+                    onChange={(v) => updateForm("grossRentCollected", v)}
+                    placeholder="0.00"
+                    allowZero
+                  />
+                </label>
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 px-4 py-3">
+                  <span className="mb-1 text-sm opacity-70">
+                    Harborline management fee (10%)
+                  </span>
+                  <p className="text-xl font-semibold tabular-nums text-emerald-800">
+                    {money(
+                      feeAmountFromPercent(
+                        parseNonNegativeAmount(form.grossRentCollected) ?? 0
+                      )
+                    )}
+                  </p>
+                  <span className="text-xs opacity-55">
+                    Calculated automatically; the rate cannot be changed.
+                  </span>
+                </div>
+                <label className="form-control w-full">
+                  <span className="mb-1 text-sm opacity-70">
+                    Reimbursable property expenses
+                  </span>
+                  <CurrencyInput
+                    value={form.reimbursableExpenses}
+                    onChange={(v) => updateForm("reimbursableExpenses", v)}
                     placeholder="0.00"
                     allowZero
                   />
                 </label>
                 <label className="form-control w-full">
                   <span className="mb-1 text-sm opacity-70">
-                    Fixed contractual amount owed{" "}
-                    <span className="text-red-600">*</span>
+                    Reserves withheld
                   </span>
                   <CurrencyInput
-                    value={form.amount}
-                    onChange={(v) => updateForm("amount", v)}
+                    value={form.reservesWithheld}
+                    onChange={(v) => updateForm("reservesWithheld", v)}
                     placeholder="0.00"
-                    required
+                    allowZero
                   />
                 </label>
                 <div className="rounded-lg border border-[var(--harbor-mid)]/25 bg-[var(--harbor-mist)]/50 px-4 py-3">
                   <span className="mb-1 text-sm opacity-70">
-                    Company gross spread
+                    Net amount due to owner
                   </span>
                   <p className="text-xl font-semibold tabular-nums">
                     {money(
-                      (parseNonNegativeAmount(form.rentalIncomeCollected) ?? 0) -
-                        (parseNonNegativeAmount(form.amount) ?? 0)
+                      computeNetDue({
+                        grossRentCollected:
+                          parseNonNegativeAmount(form.grossRentCollected) ?? 0,
+                        managementFeeAmount: feeAmountFromPercent(
+                          parseNonNegativeAmount(form.grossRentCollected) ?? 0
+                        ),
+                        reimbursableExpenses:
+                          parseNonNegativeAmount(form.reimbursableExpenses) ?? 0,
+                        reservesWithheld:
+                          parseNonNegativeAmount(form.reservesWithheld) ?? 0,
+                      })
                     )}
                   </p>
                   <span className="text-xs opacity-55">
-                    Rental income less fixed owner amount; operating expenses
-                    are not yet deducted.
+                    Rental income − 10% fee − expenses − reserves.
                   </span>
                 </div>
+                {form.paymentType !== "monthly_distribution" ? (
+                  <label className="form-control w-full">
+                    <span className="mb-1 text-sm opacity-70">
+                      Manual amount owed <span className="text-red-600">*</span>
+                    </span>
+                    <CurrencyInput
+                      value={form.amount}
+                      onChange={(v) => updateForm("amount", v)}
+                      placeholder="0.00"
+                      required
+                    />
+                  </label>
+                ) : null}
               </div>
             </div>
 
@@ -940,36 +1008,46 @@ export function OwnerPayablesPanel() {
 
               <div className="rounded-xl border border-[var(--harbor-deep)]/15 bg-white px-4 py-3 text-sm">
                 <p className="text-xs font-medium uppercase tracking-wide opacity-55">
-                  Fixed owner contract economics
+                  Owner remittance waterfall
                 </p>
                 <dl className="mt-2 space-y-1">
                   <div className="flex justify-between gap-3">
-                    <dt className="opacity-60">Rental income collected</dt>
+                    <dt className="opacity-60">Total rental income</dt>
                     <dd className="tabular-nums">
-                      {money(viewing.rentalIncomeCollected)}
+                      {money(viewing.grossRentCollected)}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="opacity-60">Fixed amount owed to owner</dt>
+                    <dt className="opacity-60">
+                      Harborline management fee ({viewing.managementFeePercent}%)
+                    </dt>
                     <dd className="tabular-nums text-red-700">
-                      −{money(viewing.amount)}
+                      −{money(viewing.managementFeeAmount)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="opacity-60">Reimbursable expenses</dt>
+                    <dd className="tabular-nums text-red-700">
+                      −{money(viewing.reimbursableExpenses)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="opacity-60">Reserves withheld</dt>
+                    <dd className="tabular-nums text-red-700">
+                      −{money(viewing.reservesWithheld)}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-3 border-t border-base-300 pt-2 font-semibold">
-                    <dt>Harborline gross spread</dt>
-                    <dd
-                      className={`tabular-nums ${
-                        companySpread(viewing) < 0 ? "text-red-700" : "text-emerald-700"
-                      }`}
-                    >
-                      {money(companySpread(viewing))}
+                    <dt>Net amount due to owner</dt>
+                    <dd className="tabular-nums text-[var(--harbor-ink)]">
+                      {money(viewing.amount)}
                     </dd>
                   </div>
                 </dl>
                 <p className="mt-2 text-xs opacity-55">
-                  Operating expenses are not deducted here; final property
-                  profitability will be connected after the team&apos;s modules
-                  are merged.
+                  Harborline&apos;s income is the 10% management fee. Expenses
+                  and reserves reduce the owner distribution but are not
+                  additional Harborline income.
                 </p>
               </div>
 
