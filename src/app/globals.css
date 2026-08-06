@@ -36,9 +36,232 @@ body {
   outline-offset: 2px;
 }
 
+/*
+ * Force classic closed dropdowns. DaisyUI `.select` + Chromium `appearance: base-select`
+ * was expanding every <option> into a visible list and pushing form actions off-screen.
+ * Same for `.input` / `.textarea` + `appearance: none`, which can look like typing boxes
+ * but fail to accept keyboard input in some Chromium builds.
+ */
+.portal-native-select {
+  appearance: auto !important;
+  -webkit-appearance: menulist !important;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-height: 2.75rem;
+  height: 2.75rem;
+  padding: 0.5rem 2.25rem 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--harbor-deep) 20%, transparent);
+  background-color: #fff;
+  background-image: none;
+  color: var(--harbor-ink);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portal-native-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.portal-native-select option {
+  display: block;
+  color: var(--harbor-ink);
+  background: #fff;
+}
+
+.portal-native-input,
+.portal-native-textarea {
+  appearance: auto !important;
+  -webkit-appearance: auto !important;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--harbor-deep) 20%, transparent);
+  background-color: #fff;
+  color: var(--harbor-ink);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  pointer-events: auto;
+  user-select: text;
+}
+
+.portal-native-input {
+  min-height: 2.75rem;
+  height: 2.75rem;
+}
+
+.portal-native-textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.portal-native-input:disabled,
+.portal-native-textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background-color: color-mix(in srgb, var(--harbor-sand) 70%, #fff);
+}
+
+/* Native checkbox — DaisyUI `.checkbox` can report as readonly and feel untoggleable. */
+.portal-native-checkbox {
+  appearance: auto !important;
+  -webkit-appearance: checkbox !important;
+  width: 1.1rem;
+  height: 1.1rem;
+  min-width: 1.1rem;
+  margin-top: 0.2rem;
+  accent-color: var(--harbor-mid);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.portal-native-input:focus,
+.portal-native-textarea:focus,
+.portal-native-select:focus {
+  outline: 2px solid var(--harbor-focus);
+  outline-offset: 2px;
+  border-color: color-mix(in srgb, var(--harbor-mid) 55%, transparent);
+}
+
 .portal-tap {
   min-height: 2.75rem;
   min-width: 2.75rem;
+}
+
+/* —— Tenant portal design system —— */
+.portal-page-bg {
+  background: linear-gradient(180deg, #f3efe6 0%, #e8f4f6 55%, #d7eef2 100%);
+}
+
+.portal-card {
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--harbor-deep) 12%, transparent);
+  background: var(--harbor-card);
+  box-shadow: 0 1px 2px rgba(11, 42, 50, 0.06);
+}
+
+.portal-card-interactive {
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
+}
+
+.portal-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--harbor-mid) 45%, transparent);
+  box-shadow: 0 8px 20px rgba(11, 42, 50, 0.1);
+}
+
+.portal-section-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--harbor-ink);
+  letter-spacing: -0.01em;
+}
+
+.portal-muted {
+  color: var(--harbor-muted);
+}
+
+.portal-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.75rem;
+  padding: 0.15rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  border: 1px solid transparent;
+}
+
+.portal-status-neutral {
+  background: color-mix(in srgb, var(--harbor-mist) 70%, white);
+  color: var(--harbor-ink);
+  border-color: color-mix(in srgb, var(--harbor-deep) 12%, transparent);
+}
+
+.portal-status-success {
+  background: color-mix(in srgb, #16a34a 12%, white);
+  color: #146c36;
+  border-color: color-mix(in srgb, #16a34a 22%, transparent);
+}
+
+.portal-status-warning {
+  background: color-mix(in srgb, #d97706 14%, white);
+  color: #8a4b08;
+  border-color: color-mix(in srgb, #d97706 24%, transparent);
+}
+
+.portal-status-danger {
+  background: color-mix(in srgb, #dc2626 12%, white);
+  color: #9f1d1d;
+  border-color: color-mix(in srgb, #dc2626 22%, transparent);
+}
+
+.portal-status-info {
+  background: color-mix(in srgb, var(--harbor-mid) 14%, white);
+  color: var(--harbor-deep);
+  border-color: color-mix(in srgb, var(--harbor-mid) 28%, transparent);
+}
+
+.portal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.portal-btn-primary {
+  border: 1px solid transparent;
+  background: var(--harbor-deep);
+  color: var(--harbor-sand);
+}
+
+.portal-btn-primary:hover:not(:disabled) {
+  background: var(--harbor-ink);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(11, 42, 50, 0.18);
+}
+
+.portal-btn-secondary {
+  border: 1px solid color-mix(in srgb, var(--harbor-deep) 22%, transparent);
+  background: transparent;
+  color: var(--harbor-ink);
+}
+
+.portal-btn-secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--harbor-mist) 70%, white);
+  border-color: var(--harbor-mid);
+  transform: translateY(-1px);
+}
+
+.portal-empty {
+  border-radius: 0.75rem;
+  border: 1px dashed color-mix(in srgb, var(--harbor-deep) 22%, transparent);
+  background: color-mix(in srgb, var(--harbor-sand) 55%, white);
+  padding: 1rem 0.85rem;
+  font-size: 0.875rem;
+  color: color-mix(in srgb, var(--harbor-ink) 62%, transparent);
 }
 
 /* —— Owner portal design system —— */
@@ -318,7 +541,10 @@ body {
   .owner-card-interactive,
   .owner-btn-primary,
   .owner-btn-secondary,
-  .owner-btn-danger {
+  .owner-btn-danger,
+  .portal-card-interactive,
+  .portal-btn-primary,
+  .portal-btn-secondary {
     animation: none !important;
     transition: none !important;
   }
@@ -326,6 +552,9 @@ body {
   .owner-card-interactive:hover,
   .owner-btn-primary:hover:not(:disabled),
   .owner-btn-secondary:hover:not(:disabled),
+  .portal-card-interactive:hover,
+  .portal-btn-primary:hover:not(:disabled),
+  .portal-btn-secondary:hover:not(:disabled),
   .portal-motion-safe:hover {
     transform: none !important;
   }

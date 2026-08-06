@@ -32,6 +32,8 @@ const TYPE_OPTIONS: Array<{ value: "all" | PaymentType; label: string }> = [
   { value: "all", label: "All types" },
   { value: "Rent", label: "Rent" },
   { value: "Late fee", label: "Late fee" },
+  { value: "Fee", label: "Fee" },
+  { value: "Credit", label: "Credit" },
   { value: "Deposit", label: "Deposit" },
   { value: "Autopay", label: "Autopay" },
   { value: "Other", label: "Other" },

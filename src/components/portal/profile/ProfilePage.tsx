@@ -14,6 +14,11 @@ import {
 } from "lucide-react";
 import { useTenantProfile } from "@/hooks/useTenantProfile";
 import { leaseStatusClass } from "@/lib/portal/lease-format";
+import {
+  occupancyClassLabel,
+  portalPropertyTypeLabel,
+  spaceNoun,
+} from "@/lib/portal/occupancy";
 import type {
   CommunicationPreferences,
   EmergencyContact,
@@ -173,7 +178,8 @@ export function ProfilePage() {
             {profile.preferredName || profile.legalName}
           </h2>
           <p className="mt-1 text-sm text-[var(--harbor-muted)]">
-            {profile.propertyName} · {profile.unitNumber}
+            {profile.propertyName} · {profile.unitNumber} ·{" "}
+            {occupancyClassLabel(profile.occupancyClass)}
           </p>
         </div>
         {!editing ? (
@@ -342,7 +348,14 @@ function IdentitySection({ profile }: { profile: TenantProfile }) {
         <ReadOnlyItem label="Legal name" value={profile.legalName} />
         <ReadOnlyItem label="Tenant ID" value={profile.tenantId} />
         <ReadOnlyItem label="Property" value={profile.propertyName} />
-        <ReadOnlyItem label="Unit" value={profile.unitNumber} />
+        <ReadOnlyItem
+          label={spaceNoun(profile.occupancyClass)}
+          value={profile.unitNumber}
+        />
+        <ReadOnlyItem
+          label="Property class"
+          value={`${occupancyClassLabel(profile.occupancyClass)} · ${portalPropertyTypeLabel(profile.propertyType)}`}
+        />
         <div>
           <dt className="text-xs font-medium uppercase tracking-wide text-[var(--harbor-muted)]">
             Lease status

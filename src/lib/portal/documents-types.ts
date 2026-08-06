@@ -42,6 +42,10 @@ export type TenantDocument = {
   /** Short tenant-facing preview body when preview is supported */
   previewText: string;
   description: string;
+  /** When true, tenant must acknowledge before or after download. */
+  requiresAcknowledgment?: boolean;
+  /** Optional display label for acknowledgment requirement. */
+  acknowledgmentLabel?: string;
 };
 
 export type DocumentFilters = {

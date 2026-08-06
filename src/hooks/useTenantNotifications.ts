@@ -1,13 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { isNotificationRead } from "@/lib/portal/notifications-read-store";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getPortalTenantSessionClient } from "@/lib/portal/auth-client";
+import {
+  isNotificationRead,
+  notificationReadStoragePrefix,
+} from "@/lib/portal/notifications-read-store";
 import type {
   NotificationFilter,
   NotificationsLoadState,
   PortalNotification,
   PortalNotificationWithRead,
 } from "@/lib/portal/notifications-types";
+import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import {
   getNotificationsDemoFixture,
   getUnreadNotificationCount,
@@ -18,11 +23,12 @@ import {
 } from "@/lib/portal/services/notificationService";
 
 function withReadState(
-  notifications: PortalNotification[]
+  notifications: PortalNotification[],
+  tenantScopeId: string
 ): PortalNotificationWithRead[] {
   return notifications.map((item) => ({
     ...item,
-    read: isNotificationRead(item.id),
+    read: isNotificationRead(item.id, tenantScopeId),
   }));
 }
 
@@ -46,6 +52,7 @@ export function useTenantNotifications() {
   const [filter, setFilter] = useState<NotificationFilter>("all");
   const [readVersion, setReadVersion] = useState(0);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const tenantScopeRef = useRef<string | null>(null);
 
   const applyData = useCallback(
     (notifications: PortalNotification[], source: "live" | "mock") => {
@@ -65,6 +72,8 @@ export function useTenantNotifications() {
   const load = useCallback(async () => {
     setState({ status: "loading" });
     try {
+      const session = await getPortalTenantSessionClient();
+      tenantScopeRef.current = session?.tenantScopeId ?? null;
       const result = await listNotifications();
       if (!result.ok) {
         setState({ status: "error", message: result.error.message });
@@ -85,9 +94,15 @@ export function useTenantNotifications() {
     }
   }, [applyData]);
 
-  const loadDemoData = useCallback(() => {
+  const loadDemoData = useCallback(async () => {
+    const session = await getPortalTenantSessionClient();
+    if (!session || !sessionOwnsDemoFixtures(session)) {
+      void load();
+      return;
+    }
+    tenantScopeRef.current = session.tenantScopeId;
     applyData(getNotificationsDemoFixture(), "mock");
-  }, [applyData]);
+  }, [applyData, load]);
 
   useEffect(() => {
     void load();
@@ -101,7 +116,11 @@ export function useTenantNotifications() {
   const items = useMemo(() => {
     if (state.status !== "success") return [] as PortalNotificationWithRead[];
     void readVersion;
-    return withReadState(state.notifications).sort((a, b) =>
+    const scopeId = tenantScopeRef.current;
+    if (!scopeId) {
+      return state.notifications.map((item) => ({ ...item, read: true }));
+    }
+    return withReadState(state.notifications, scopeId).sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt)
     );
   }, [state, readVersion]);
@@ -168,7 +187,7 @@ export function useTenantNotifications() {
     unreadCount,
     actionMessage,
     reload: () => void load(),
-    loadDemoData,
+    loadDemoData: () => void loadDemoData(),
     markRead,
     markUnread,
     markAllRead,
@@ -189,7 +208,12 @@ export function useNotificationUnreadBadge() {
   useEffect(() => {
     refresh();
     function onStorage(event: StorageEvent) {
-      if (event.key === "harborline.portal.notificationRead.v1") refresh();
+      if (
+        event.key &&
+        event.key.startsWith(notificationReadStoragePrefix())
+      ) {
+        refresh();
+      }
     }
     function onLocalChange() {
       refresh();

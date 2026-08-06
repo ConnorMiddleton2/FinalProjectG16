@@ -13,12 +13,19 @@ export type MaintenanceUpdateKind =
   | "schedule"
   | "tenant";
 
+export type MaintenanceUpdateVisibility = "tenant" | "internal";
+
 export type MaintenanceStatusUpdate = {
   id: string;
   kind: MaintenanceUpdateKind;
   message: string;
   createdAt: string;
   author: string;
+  /**
+   * Tenant portal must only render `tenant` updates.
+   * Internal employee notes stay out of API responses to tenants.
+   */
+  visibility?: MaintenanceUpdateVisibility;
 };
 
 export type MaintenanceRequestDetail = {
@@ -34,7 +41,11 @@ export type MaintenanceRequestDetail = {
   submittedOn: string;
   submittedAtLabel: string;
   scheduledOn: string | null;
+  /** Human-readable appointment window when scheduled (tenant-facing). */
+  appointmentWindow: string | null;
   technicianName: string | null;
+  technicianCompany: string | null;
+  technicianPhone: string | null;
   lastUpdate: string;
   contactName: string;
   contactPhone: string;
@@ -59,3 +70,15 @@ export type MaintenanceDetailLoadState =
   | { status: "error"; message: string }
   | { status: "empty"; message: string }
   | { status: "success"; detail: MaintenanceRequestDetail };
+
+/** Strip internal employee notes before any tenant-facing response. */
+export function toTenantFacingMaintenanceDetail(
+  detail: MaintenanceRequestDetail
+): MaintenanceRequestDetail {
+  return {
+    ...detail,
+    updates: detail.updates.filter(
+      (entry) => (entry.visibility ?? "tenant") === "tenant"
+    ),
+  };
+}

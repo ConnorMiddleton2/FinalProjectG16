@@ -1,3 +1,10 @@
+import type {
+  OccupancyClass,
+  PortalPropertyType,
+} from "@/lib/portal/occupancy";
+
+export type { OccupancyClass, PortalPropertyType } from "@/lib/portal/occupancy";
+
 export type LeaseStatus =
   | "Active"
   | "Expiring soon"
@@ -8,7 +15,13 @@ export type LeaseStatus =
 export type LeaseOccupant = {
   id: string;
   name: string;
-  role: "Primary tenant" | "Co-tenant" | "Occupant" | "Authorized occupant";
+  role:
+    | "Primary tenant"
+    | "Co-tenant"
+    | "Occupant"
+    | "Authorized occupant"
+    | "Business contact"
+    | "Guarantor";
 };
 
 export type LeaseParkingInfo = {
@@ -32,6 +45,9 @@ export type LeaseInformation = {
   id: string;
   leaseNumber: string;
   status: LeaseStatus;
+  /** Personal residence lease or commercial suite lease. */
+  occupancyClass: OccupancyClass;
+  propertyType: PortalPropertyType;
   propertyName: string;
   propertyAddress: string;
   unitNumber: string;

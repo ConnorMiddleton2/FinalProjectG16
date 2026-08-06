@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getPortalTenantSessionClient } from "@/lib/portal/auth-client";
 import type {
   PaymentsFilters,
   PaymentsLoadState,
   PaymentsOverview,
   PaymentTransaction,
 } from "@/lib/portal/payments-types";
+import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import {
   getEmptyPaymentsOverviewFixture,
   getPaymentsOverview,
@@ -117,12 +119,26 @@ export function useTenantPayments() {
   }, [applyData]);
 
   const loadDemoData = useCallback(() => {
-    applyData(getPaymentsOverviewDemoFixture(), "mock");
-  }, [applyData]);
+    void (async () => {
+      const session = await getPortalTenantSessionClient();
+      if (!session || !sessionOwnsDemoFixtures(session)) {
+        void load();
+        return;
+      }
+      applyData(getPaymentsOverviewDemoFixture(), "mock");
+    })();
+  }, [applyData, load]);
 
   const loadEmptyDemo = useCallback(() => {
-    applyData(getEmptyPaymentsOverviewFixture(), "mock");
-  }, [applyData]);
+    void (async () => {
+      const session = await getPortalTenantSessionClient();
+      if (!session || !sessionOwnsDemoFixtures(session)) {
+        void load();
+        return;
+      }
+      applyData(getEmptyPaymentsOverviewFixture(), "mock");
+    })();
+  }, [applyData, load]);
 
   useEffect(() => {
     void load();

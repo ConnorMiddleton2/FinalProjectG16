@@ -77,6 +77,8 @@ export async function getTenant(): Promise<ServiceResult<Tenant>> {
           legalName: auth.data.displayName,
           propertyName: "Unlinked property",
           unitNumber: "—",
+          occupancyClass: "personal",
+          propertyType: "other",
           tenantId: auth.data.tenantScopeId,
           leaseStatus: "Active",
           preferredName: auth.data.displayName,
@@ -110,7 +112,16 @@ export async function getTenant(): Promise<ServiceResult<Tenant>> {
 }
 
 export async function updateTenant(
-  identity: Pick<Tenant, "legalName" | "tenantId" | "propertyName" | "unitNumber" | "leaseStatus">,
+  identity: Pick<
+    Tenant,
+    | "legalName"
+    | "tenantId"
+    | "propertyName"
+    | "unitNumber"
+    | "occupancyClass"
+    | "propertyType"
+    | "leaseStatus"
+  >,
   editable: TenantProfileEditable
 ): Promise<ServiceResult<Tenant>> {
   const forced = assertNotForcedError("updateTenant");

@@ -1,3 +1,8 @@
+import type {
+  OccupancyClass,
+  PortalPropertyType,
+} from "@/lib/portal/occupancy";
+
 export type PaymentStatus = "Paid" | "Due" | "Overdue" | "Processing";
 
 export type MaintenanceStatus =
@@ -54,6 +59,8 @@ export type PropertyAnnouncement = {
 export type LeaseSummary = {
   propertyName: string;
   unit: string;
+  occupancyClass: OccupancyClass;
+  propertyType: PortalPropertyType;
   term: string;
   monthlyRent: string;
   securityDeposit: string;

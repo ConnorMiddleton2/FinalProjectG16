@@ -43,9 +43,10 @@ export async function listAnnouncements(): Promise<
     if (!sessionOwnsDemoFixtures(auth.data)) {
       return ok([], "mock");
     }
+    const scopeId = auth.data.tenantScopeId;
     const items = getMockAnnouncements().map((item) => ({
       ...item,
-      read: isAnnouncementRead(item.id),
+      read: isAnnouncementRead(item.id, scopeId),
     }));
     return ok(items, "mock");
   } catch (err) {
@@ -67,7 +68,7 @@ export async function markAnnouncementAsRead(
   if (!auth.ok) return auth;
 
   try {
-    markAnnouncementRead(id);
+    markAnnouncementRead(id, auth.data.tenantScopeId);
     return ok({ id }, "mock");
   } catch (err) {
     return failFromUnknown(err, "Could not mark announcement as read.");
@@ -84,7 +85,7 @@ export async function markAnnouncementAsUnread(
   if (!auth.ok) return auth;
 
   try {
-    markAnnouncementUnread(id);
+    markAnnouncementUnread(id, auth.data.tenantScopeId);
     return ok({ id }, "mock");
   } catch (err) {
     return failFromUnknown(err, "Could not mark announcement as unread.");
@@ -101,7 +102,7 @@ export async function markAllAnnouncementsAsRead(
   if (!auth.ok) return auth;
 
   try {
-    markAllAnnouncementsRead(ids);
+    markAllAnnouncementsRead(ids, auth.data.tenantScopeId);
     return ok({ count: ids.length }, "mock");
   } catch (err) {
     return failFromUnknown(err, "Could not mark announcements as read.");

@@ -41,7 +41,7 @@ For every read and write of tenant data, constrain by the resolved tenant id:
 - Server layout (`src/app/portal/(tenant)/layout.tsx`) requires `profiles.role === 'tenant'` via `requirePortalTenant` (`src/lib/portal/auth-server.ts`).
 - Services refuse calls without a portal session (`requirePortalServiceSession`) and filter mock fixtures by `tenantScopeId`.
 - Local sessionStorage keys are namespaced by `tenantScopeId` so one browser profile cannot read another tenant’s cached portal data.
-- `/portal/apply` stays public for future-tenant applications.
+- `/portal/apply` requires the same current-tenant (or demo) session as other private portal routes and filters records to the signed-in account.
 - `/portal/unauthorized` explains wrong-role access.
 
 Replace mock services (`BACKEND_TODO`) with APIs that enforce the table above.

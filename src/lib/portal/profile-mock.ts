@@ -6,6 +6,8 @@ export function getMockTenantProfile(): TenantProfile {
     legalName: "Alexandra Marie Tenant",
     propertyName: "Pier 12 Commerce",
     unitNumber: "Suite 210",
+    occupancyClass: "commercial",
+    propertyType: "office",
     tenantId: "TN-P12-210-001",
     leaseStatus: "Active",
     preferredName: "Alex Tenant",
@@ -25,9 +27,9 @@ export function getMockTenantProfile(): TenantProfile {
       parkingPermit: "Hangtag #P12-210-A",
     },
     pets: {
-      hasPets: true,
-      summary: "One approved dog",
-      details: "One dog under 40 lb. Pet rent on file.",
+      hasPets: false,
+      summary: "Service animals only",
+      details: "Commercial suite — pets are not permitted except service animals.",
     },
     communication: {
       emailUpdates: true,

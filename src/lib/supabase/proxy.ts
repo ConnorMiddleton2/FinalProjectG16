@@ -3,8 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   isPortalPrivatePath,
   isPortalPublicPath,
+  portalLoginRedirect,
   PORTAL_HOME_PATH,
-  PORTAL_LOGIN_PATH,
 } from "@/lib/portal/auth";
 import {
   PORTAL_DEMO_CLIENT_COOKIE,
@@ -48,7 +48,12 @@ export async function updateSession(request: NextRequest) {
     request.cookies.get(PORTAL_DEMO_COOKIE)?.value
   );
   const isLoginOrSignup =
-    path.startsWith("/login") || path.startsWith("/signup");
+    path.startsWith("/login") ||
+    path.startsWith("/signup") ||
+    path.startsWith("/portal/login") ||
+    path.startsWith("/portal/signup") ||
+    path.startsWith("/portal/reset-password") ||
+    path.startsWith("/auth/callback");
 
   const isPublic =
     path === "/" ||
@@ -56,7 +61,8 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/team") ||
     path.startsWith("/owners") ||
     path.startsWith("/login") ||
-    path.startsWith("/signup");
+    path.startsWith("/signup") ||
+    path.startsWith("/auth/callback");
 
   const hasOwnerCookie = Boolean(request.cookies.get("harborline_owner")?.value);
 
@@ -75,9 +81,8 @@ export async function updateSession(request: NextRequest) {
   if (!url || !key) {
     if (isPortalPrivatePath(path) && !hasPortalDemo) {
       const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = PORTAL_LOGIN_PATH;
-      redirectUrl.searchParams.set("next", path);
-      return NextResponse.redirect(redirectUrl);
+      const target = portalLoginRedirect(path || PORTAL_HOME_PATH);
+      return NextResponse.redirect(new URL(target, request.url));
     }
     const response = NextResponse.next({ request });
     if (isLoginOrSignup) {
@@ -120,10 +125,8 @@ export async function updateSession(request: NextRequest) {
 
     // Private current-tenant portal: Supabase tenant user OR demo cookie.
     if (isPortalPrivatePath(path) && !user && !hasPortalDemo) {
-      const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = PORTAL_LOGIN_PATH;
-      redirectUrl.searchParams.set("next", path || PORTAL_HOME_PATH);
-      return NextResponse.redirect(redirectUrl);
+      const target = portalLoginRedirect(path || PORTAL_HOME_PATH);
+      return NextResponse.redirect(new URL(target, request.url));
     }
 
     const isAppRoute =
@@ -141,10 +144,17 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(redirectUrl);
     }
 
-    // Never skip the login form for demo-cookie sessions — user must see
-    // prefilled credentials and click Log in. Only real Supabase sessions
-    // skip /login (to their workspace or portal next URL).
-    if (user && isLoginOrSignup) {
+    // Always show the tenant portal login/signup forms.
+    // Do not auto-skip them for an existing Supabase session — tenants need
+    // an explicit sign-in / create-account prompt. Workspace `/login` still skips.
+    if (
+      user &&
+      isLoginOrSignup &&
+      !path.startsWith("/auth/callback") &&
+      !path.startsWith("/portal/reset-password") &&
+      !path.startsWith("/portal/login") &&
+      !path.startsWith("/portal/signup")
+    ) {
       const redirectUrl = request.nextUrl.clone();
       const next = request.nextUrl.searchParams.get("next");
       if (next && isPortalPrivatePath(next)) {

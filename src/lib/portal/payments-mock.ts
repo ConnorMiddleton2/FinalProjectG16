@@ -3,7 +3,7 @@ import type { PaymentsOverview } from "@/lib/portal/payments-types";
 /** Isolated mock data for Current Tenant Payments — no full card/bank numbers. */
 export function getMockPaymentsOverview(): PaymentsOverview {
   return {
-    currentBalance: "$4,875.00",
+    currentBalance: "$4,850.00",
     amountDue: "$4,800.00",
     dueDate: "May 1, 2026",
     paymentStatus: "Due",
@@ -20,6 +20,29 @@ export function getMockPaymentsOverview(): PaymentsOverview {
       kind: "Card",
       isDefault: true,
     },
+    ledger: [
+      {
+        id: "led-1",
+        label: "May rent · Pier 12 · Suite 210",
+        amount: "$4,800.00",
+        kind: "charge",
+        date: "May 1, 2026",
+      },
+      {
+        id: "led-2",
+        label: "Late fee (April grace period)",
+        amount: "$75.00",
+        kind: "fee",
+        date: "Apr 6, 2026",
+      },
+      {
+        id: "led-3",
+        label: "Courtesy credit · heating and cooling outage",
+        amount: "-$25.00",
+        kind: "credit",
+        date: "Apr 28, 2026",
+      },
+    ],
     transactions: [
       {
         id: "txn-1",
@@ -72,7 +95,7 @@ export function getMockPaymentsOverview(): PaymentsOverview {
         date: "2026-01-05",
         displayDate: "Jan 5, 2026",
         status: "Paid",
-        type: "Deposit",
+        type: "Credit",
         methodSummary: "Ledger adjustment",
         receiptAvailable: false,
       },
@@ -86,6 +109,17 @@ export function getMockPaymentsOverview(): PaymentsOverview {
         type: "Rent",
         methodSummary: "Not paid",
         receiptAvailable: false,
+      },
+      {
+        id: "txn-7",
+        label: "Amenity access fob replacement",
+        amount: "$35.00",
+        date: "2026-03-15",
+        displayDate: "Mar 15, 2026",
+        status: "Paid",
+        type: "Fee",
+        methodSummary: "Visa •••• 4242",
+        receiptAvailable: true,
       },
     ],
   };
@@ -104,6 +138,7 @@ export function getEmptyPaymentsOverview(): PaymentsOverview {
       methodLabel: null,
     },
     savedMethod: null,
+    ledger: [],
     transactions: [],
   };
 }

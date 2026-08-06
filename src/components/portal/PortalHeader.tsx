@@ -139,9 +139,9 @@ export function PortalHeader({
         <div className="flex items-center gap-1 sm:gap-2">
           <Link
             href="/"
-            className="btn btn-ghost min-h-11 hidden text-[var(--harbor-sand)] portal-focus sm:inline-flex"
+            className="btn btn-ghost min-h-11 text-[var(--harbor-sand)] portal-focus"
           >
-            Welcome
+            Website home
           </Link>
           <Link
             href={PORTAL_HELP_HREF}
@@ -203,6 +203,14 @@ export function PortalHeader({
                   onClick={() => setProfileOpen(false)}
                 >
                   Profile
+                </Link>
+                <Link
+                  href="/"
+                  role="menuitem"
+                  className="flex min-h-11 items-center rounded-lg px-3 text-sm hover:bg-[var(--harbor-mist)]/80 portal-focus"
+                  onClick={() => setProfileOpen(false)}
+                >
+                  Website home
                 </Link>
                 {!isSignedIn ? (
                   <Link

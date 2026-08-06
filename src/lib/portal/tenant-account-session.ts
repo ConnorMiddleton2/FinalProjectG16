@@ -6,12 +6,15 @@ import type { TenantAccount } from "@/lib/tenant-portal-accounts";
 export function portalSessionFromTenantAccount(
   account: TenantAccount
 ): PortalTenantSession {
+  const lifecycle: PortalTenantSession["lifecycle"] =
+    account.status === "active" ? "current" : "future";
   return {
     userId: account.id,
     email: account.email,
     displayName: account.fullName || account.email.split("@")[0] || "Tenant",
     role: CURRENT_TENANT_ROLE,
     tenantScopeId: `tenant-acct-${account.id}`,
+    lifecycle,
     accountStatus: account.status,
     propertyId: account.propertyId || undefined,
     propertyName: account.propertyName || undefined,

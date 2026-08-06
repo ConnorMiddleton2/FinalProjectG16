@@ -42,3 +42,6 @@ export * from "@/lib/portal/services/renewalService";
 export * from "@/lib/portal/services/moveOutService";
 export * from "@/lib/portal/services/dashboardService";
 export * from "@/lib/portal/services/notificationService";
+export * from "@/lib/portal/services/insuranceService";
+export * from "@/lib/portal/services/chargesService";
+export * from "@/lib/portal/services/pushPreferencesService";

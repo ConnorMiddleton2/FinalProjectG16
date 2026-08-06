@@ -42,7 +42,7 @@ export function getMockConversations(): PortalConversation[] {
     },
     {
       id: "conv-2",
-      subject: "HVAC work order update",
+      subject: "Heating and cooling work order update",
       category: "Maintenance Follow-Up",
       lastMessageAt: "2026-04-26T11:05:00",
       preview: "Vendor diagnostic is scheduled for May 2.",
@@ -53,7 +53,7 @@ export function getMockConversations(): PortalConversation[] {
           conversationId: "conv-2",
           senderRole: "tenant",
           senderName: "Alex Tenant",
-          body: "Following up on request MR-2026-0142 (HVAC not cooling). Any ETA for a visit?",
+          body: "Following up on request MR-2026-0142 (heating and cooling not working). Any ETA for a visit?",
           sentAt: "2026-04-24T16:20:00",
           attachments: [],
           deliveryStatus: "sent",

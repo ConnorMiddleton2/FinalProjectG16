@@ -49,7 +49,7 @@ export function getMockAnnouncements(): TenantAnnouncement[] {
       expirationDate: null,
       priority: "Normal",
       message:
-        "The Pier 12 package room is now open weekdays 8:00 a.m.–6:00 p.m. and Saturdays 9:00 a.m.–1:00 p.m. Bring photo ID to pick up. Oversized deliveries still require dock appointments.",
+        "The Pier 12 package room is now open weekdays 8:00 a.m.–6:00 p.m. and Saturdays 9:00 a.m.–1:00 p.m. Bring photo identification to pick up. Oversized deliveries still require dock appointments.",
       attachment: null,
     },
     {
@@ -154,6 +154,28 @@ export function getMockAnnouncements(): TenantAnnouncement[] {
         fileType: "PDF",
         fileSizeLabel: "84 KB",
       },
+    },
+    {
+      id: "ann-13",
+      title: "Lease renewal window opens soon",
+      category: "Lease updates",
+      publishDate: "2026-04-26",
+      expirationDate: "2026-09-30",
+      priority: "High",
+      message:
+        "Your Pier 12 · Suite 210 lease renewal window opens this summer. Review your current lease in Documents, then submit a renewal request under Lease when you are ready. Management will confirm terms before any signed renewal appears in your document center.",
+      attachment: null,
+    },
+    {
+      id: "ann-14",
+      title: "Heating and cooling filter maintenance corridor notice",
+      category: "Service interruptions",
+      publishDate: "2026-04-24",
+      expirationDate: "2026-05-03",
+      priority: "Normal",
+      message:
+        "Building heating and cooling filter service is scheduled for May 1–2 on floors 2–3. Expect short temperature swings while technicians work. If your suite has an open maintenance request, you will also see updates under Maintenance.",
+      attachment: null,
     },
   ];
 }

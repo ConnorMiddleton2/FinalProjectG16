@@ -5,9 +5,21 @@ export type { PaymentStatus };
 export type PaymentType =
   | "Rent"
   | "Late fee"
+  | "Fee"
+  | "Credit"
   | "Deposit"
   | "Other"
   | "Autopay";
+
+export type LedgerLineKind = "charge" | "fee" | "credit";
+
+export type PaymentLedgerLine = {
+  id: string;
+  label: string;
+  amount: string;
+  kind: LedgerLineKind;
+  date: string;
+};
 
 export type SavedPaymentMethodSummary = {
   id: string;
@@ -45,6 +57,8 @@ export type PaymentsOverview = {
   lateFee: string | null;
   autopay: AutopayStatus;
   savedMethod: SavedPaymentMethodSummary | null;
+  /** Open charges, fees, and credits that make up the current balance. */
+  ledger: PaymentLedgerLine[];
   transactions: PaymentTransaction[];
 };
 

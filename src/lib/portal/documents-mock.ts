@@ -25,6 +25,8 @@ export function getAllMockDocuments(): TenantDocument[] {
       description: "Fully executed commercial suite lease.",
       previewText:
         "Commercial Suite Lease — Pier 12 · Suite 210\nTerm: Jan 1, 2026 – Dec 31, 2027\nMonthly rent: $4,800.00\nSecurity deposit: $4,800.00\n\nTenant-facing summary only.",
+      requiresAcknowledgment: true,
+      acknowledgmentLabel: "I acknowledge I have received and can access my lease agreement.",
     },
     {
       id: "doc-lease-2",
@@ -38,6 +40,8 @@ export function getAllMockDocuments(): TenantDocument[] {
       description: "Parking assignment addendum.",
       previewText:
         "Parking Addendum\nSpaces B-14 and B-15 · Garage Level B\nHangtags P12-210-A / P12-210-B.",
+      requiresAcknowledgment: true,
+      acknowledgmentLabel: "I acknowledge the parking addendum terms.",
     },
     {
       id: "doc-receipt-1",
@@ -142,6 +146,8 @@ export function getAllMockDocuments(): TenantDocument[] {
       description: "Signed move-in inspection report.",
       previewText:
         "Move-In Inspection Report\nNo major deficiencies noted.\nMinor scuff on corridor-side door noted by tenant.",
+      requiresAcknowledgment: true,
+      acknowledgmentLabel: "I acknowledge this move-in inspection report.",
     },
     {
       id: "doc-notice-1",
@@ -155,6 +161,8 @@ export function getAllMockDocuments(): TenantDocument[] {
       description: "Scheduled fire drill notice.",
       previewText:
         "Fire Drill Notice\nMay 8, 2026 · 10:00 AM\nExpect brief alarms. No evacuation required unless directed.",
+      requiresAcknowledgment: true,
+      acknowledgmentLabel: "I acknowledge I have read this fire drill notice.",
     },
     {
       id: "doc-notice-2",

@@ -50,7 +50,7 @@ export function getMockTenantDashboard(): TenantDashboardData {
     activeMaintenance: [
       {
         id: "maint-1",
-        title: "HVAC not cooling in suite",
+        title: "Heating and cooling not working in suite",
         location: "Pier 12 · Suite 210",
         status: "In progress",
         updatedAt: "Apr 28, 2026",
@@ -86,6 +86,8 @@ export function getMockTenantDashboard(): TenantDashboardData {
     lease: {
       propertyName: "Pier 12 Commerce",
       unit: "Suite 210",
+      occupancyClass: "commercial",
+      propertyType: "office",
       term: "Jan 1, 2026 – Dec 31, 2027",
       monthlyRent: "$4,800.00",
       securityDeposit: "$4,800.00",

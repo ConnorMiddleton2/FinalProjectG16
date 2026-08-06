@@ -130,8 +130,14 @@ export function NotificationCenterPage() {
         role="status"
       >
         In-portal notifications
-        {state.source === "mock" ? " (demo)" : ""}. Email, SMS, and push delivery
-        are not used here.
+        {state.source === "mock" ? " (demo)" : ""}. Payment, maintenance, lease,
+        and property alerts stay here — email, SMS, and push are not used.
+        {unreadCount > 0 ? (
+          <>
+            {" "}
+            <span className="font-medium">{unreadCount} unread</span>.
+          </>
+        ) : null}
       </div>
 
       {actionMessage ? (

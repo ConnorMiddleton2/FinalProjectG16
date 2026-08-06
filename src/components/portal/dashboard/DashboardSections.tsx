@@ -1,6 +1,11 @@
 import Link from "next/link";
 import type { TenantDashboardData } from "@/lib/portal/dashboard-types";
 import {
+  occupancyClassLabel,
+  portalPropertyTypeLabel,
+  spaceNoun,
+} from "@/lib/portal/occupancy";
+import {
   maintenanceStatusClass,
   paymentStatusClass,
 } from "@/lib/portal/dashboard-status";
@@ -258,7 +263,14 @@ function LeaseSummarySection({
         <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[
             { label: "Property", value: lease.propertyName },
-            { label: "Unit", value: lease.unit },
+            {
+              label: spaceNoun(lease.occupancyClass),
+              value: lease.unit,
+            },
+            {
+              label: "Class",
+              value: `${occupancyClassLabel(lease.occupancyClass)} · ${portalPropertyTypeLabel(lease.propertyType)}`,
+            },
             { label: "Term", value: lease.term },
             { label: "Monthly rent", value: lease.monthlyRent },
             { label: "Security deposit", value: lease.securityDeposit },

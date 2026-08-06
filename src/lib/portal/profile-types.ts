@@ -1,3 +1,8 @@
+import type {
+  OccupancyClass,
+  PortalPropertyType,
+} from "@/lib/portal/occupancy";
+
 export type PreferredContactMethod =
   | "email"
   | "phone"
@@ -16,6 +21,8 @@ export type TenantProfileIdentity = {
   legalName: string;
   propertyName: string;
   unitNumber: string;
+  occupancyClass: OccupancyClass;
+  propertyType: PortalPropertyType;
   tenantId: string;
   leaseStatus: LeaseStatusLabel;
 };

@@ -8,7 +8,7 @@ export function getMockMaintenanceRequests(): MaintenanceRequest[] {
       requestNumber: "MR-2026-0142",
       category: "Heating or Cooling",
       priority: "High",
-      title: "HVAC not cooling in suite",
+      title: "Heating and cooling not working in suite",
       submittedOn: "2026-04-22",
       status: "Open",
       scheduledOn: null,
