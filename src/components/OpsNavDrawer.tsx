@@ -12,9 +12,16 @@ import {
   OPS_WINDOWS,
 } from "@/lib/ops-windows";
 
+function isOpsHome(pathname: string) {
+  return pathname === "/ops" || pathname === "/ops/";
+}
+
 /**
  * Shared navigation for every team member window so switching dashboards does
  * not require returning to the operations console first.
+ *
+ * On Operations home the panel stays pinned open. Navigating to a department
+ * minimizes it to the left-edge Windows tab so it can be pulled out later.
  */
 export function OpsNavDrawer({
   allowedModules,
@@ -23,48 +30,130 @@ export function OpsNavDrawer({
   allowedModules: HrOpsModule[] | null;
 }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const onHome = isOpsHome(pathname);
+  const [open, setOpen] = useState(onHome);
   const [shownPath, setShownPath] = useState(pathname);
   const windows = filterOpsWindows(OPS_WINDOWS, allowedModules);
 
-  // Close once navigation actually commits, so the menu stays up while a slower
-  // window is still loading instead of leaving the user on the old page.
+  // Pin open on home; minimize once navigation to another window commits.
   if (shownPath !== pathname) {
     setShownPath(pathname);
-    setOpen(false);
+    setOpen(isOpsHome(pathname));
   }
 
   useEffect(() => {
     if (!open) return;
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape" && !onHome) setOpen(false);
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
+  }, [open, onHome]);
 
   const current = windows.find((item) =>
     isOpsWindowActive(pathname, item.href)
   );
 
+  const panel = (
+    <nav
+      aria-label="Team member windows"
+      className={`relative flex h-full w-72 max-w-[85vw] flex-col bg-[var(--harbor-ink)] text-[var(--harbor-sand)] shadow-2xl ${
+        onHome && open ? "border-r border-[var(--harbor-sand)]/15" : ""
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3 border-b border-[var(--harbor-sand)]/15 px-5 py-4">
+        <div>
+          <p className="font-display text-2xl leading-tight">Harborline</p>
+          <p className="text-xs opacity-70">
+            Team member windows
+            {current ? ` · ${current.label}` : ""}
+          </p>
+        </div>
+        {!onHome ? (
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label="Close menu"
+            className="btn btn-sm btn-ghost btn-circle text-[var(--harbor-sand)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+
+      <ul className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+        {windows.map(({ href, label, hint, icon: Icon }) => {
+          const active = isOpsWindowActive(pathname, href);
+          return (
+            <li key={href}>
+              <Link
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className={`flex items-start gap-3 rounded-xl px-3 py-2.5 transition ${
+                  active
+                    ? "bg-[var(--harbor-sand)] text-[var(--harbor-ink)]"
+                    : "hover:bg-[var(--harbor-sand)]/10"
+                }`}
+              >
+                <Icon className="mt-0.5 h-5 w-5 shrink-0 opacity-80" />
+                <span>
+                  <span className="block text-sm font-semibold">{label}</span>
+                  <span
+                    className={`block text-xs ${
+                      active ? "opacity-60" : "opacity-55"
+                    }`}
+                  >
+                    {hint}
+                  </span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+
+      <form
+        action={teamLogout}
+        className="border-t border-[var(--harbor-sand)]/15 px-5 py-4"
+      >
+        <button
+          type="submit"
+          className="btn btn-sm btn-ghost w-full justify-start gap-2 text-[var(--harbor-sand)]"
+        >
+          <LogOut className="h-4 w-4" />
+          Sign out
+        </button>
+      </form>
+    </nav>
+  );
+
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-expanded={open}
-        aria-label="Open the team member window menu"
-        className="fixed left-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-2 rounded-r-xl border border-l-0 border-[var(--harbor-sand)]/20 bg-[var(--harbor-ink)] py-4 pl-2 pr-3 text-[var(--harbor-sand)] shadow-lg transition hover:pr-4"
-      >
-        <PanelLeftOpen className="h-5 w-5" />
-        <span className="text-xs font-semibold uppercase tracking-wide [writing-mode:vertical-rl]">
-          Windows
-        </span>
-      </button>
+      {/* Edge tab — shown when the menu is minimized */}
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-expanded={false}
+          aria-label="Open the team member window menu"
+          className="fixed left-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-2 rounded-r-xl border border-l-0 border-[var(--harbor-sand)]/20 bg-[var(--harbor-ink)] py-4 pl-2 pr-3 text-[var(--harbor-sand)] shadow-lg transition hover:pr-4"
+        >
+          <PanelLeftOpen className="h-5 w-5" />
+          <span className="text-xs font-semibold uppercase tracking-wide [writing-mode:vertical-rl]">
+            Windows
+          </span>
+        </button>
+      ) : null}
 
-      {open ? (
+      {/* Pinned sidebar on Operations home */}
+      {open && onHome ? (
+        <div className="fixed inset-y-0 left-0 z-40">{panel}</div>
+      ) : null}
+
+      {/* Pull-out overlay when opened off the home page */}
+      {open && !onHome ? (
         <div className="fixed inset-0 z-50 flex">
           <button
             type="button"
@@ -72,75 +161,7 @@ export function OpsNavDrawer({
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-[var(--harbor-ink)]/55"
           />
-
-          <nav
-            aria-label="Team member windows"
-            className="relative flex h-full w-80 max-w-[85vw] flex-col bg-[var(--harbor-ink)] text-[var(--harbor-sand)] shadow-2xl"
-          >
-            <div className="flex items-start justify-between gap-3 border-b border-[var(--harbor-sand)]/15 px-5 py-4">
-              <div>
-                <p className="font-display text-2xl leading-tight">Harborline</p>
-                <p className="text-xs opacity-70">
-                  Team member windows
-                  {current ? ` · ${current.label}` : ""}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Close menu"
-                className="btn btn-sm btn-ghost btn-circle text-[var(--harbor-sand)]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <ul className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-              {windows.map(({ href, label, hint, icon: Icon }) => {
-                const active = isOpsWindowActive(pathname, href);
-                return (
-                  <li key={href}>
-                    <Link
-                      href={href}
-                      aria-current={active ? "page" : undefined}
-                      className={`flex items-start gap-3 rounded-xl px-3 py-2.5 transition ${
-                        active
-                          ? "bg-[var(--harbor-sand)] text-[var(--harbor-ink)]"
-                          : "hover:bg-[var(--harbor-sand)]/10"
-                      }`}
-                    >
-                      <Icon className="mt-0.5 h-5 w-5 shrink-0 opacity-80" />
-                      <span>
-                        <span className="block text-sm font-semibold">
-                          {label}
-                        </span>
-                        <span
-                          className={`block text-xs ${
-                            active ? "opacity-60" : "opacity-55"
-                          }`}
-                        >
-                          {hint}
-                        </span>
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <form
-              action={teamLogout}
-              className="border-t border-[var(--harbor-sand)]/15 px-5 py-4"
-            >
-              <button
-                type="submit"
-                className="btn btn-sm btn-ghost w-full justify-start gap-2 text-[var(--harbor-sand)]"
-              >
-                <LogOut className="h-4 w-4" />
-                Sign out
-              </button>
-            </form>
-          </nav>
+          <div className="relative z-10">{panel}</div>
         </div>
       ) : null}
     </>
