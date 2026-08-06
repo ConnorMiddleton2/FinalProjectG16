@@ -4,6 +4,11 @@ import {
   normalizeSmCode,
   SM_CATEGORY_TO_CODE,
 } from "@/lib/sales-marketing";
+import {
+  normalizeDocumentApproval,
+  normalizeMaintenanceDocument,
+  type MaintenanceDocument,
+} from "@/lib/maintenance";
 
 export type OwnerContract = {
   id: string;
@@ -217,7 +222,7 @@ export type ApPayableStatus =
 export type ApPayable = {
   id: string;
   sourceExpenseId: string;
-  source: "department" | "sales_marketing";
+  source: "department" | "sales_marketing" | "maintenance";
   department: DepartmentKey | "sales_marketing";
   departmentLabel: string;
   code: string;
@@ -1104,7 +1109,7 @@ Please reply with a few times that work over the next two weeks, or confirm a ca
 
 export type UnifiedExpense = {
   id: string;
-  source: "department" | "sales_marketing";
+  source: "department" | "sales_marketing" | "maintenance";
   departmentLabel: string;
   code: string;
   vendor: string;
@@ -1113,8 +1118,42 @@ export type UnifiedExpense = {
   fileName: string;
   status: "pending" | "approved" | "declined";
   submittedAt: string;
-  raw: DepartmentExpense | SmReceipt;
+  raw: DepartmentExpense | SmReceipt | MaintenanceDocument;
 };
+
+export function maintenanceDocToUnified(doc: MaintenanceDocument): UnifiedExpense {
+  const n = normalizeMaintenanceDocument(doc);
+  const approval = normalizeDocumentApproval(n);
+  const status =
+    approval.approvalStatus === "approved"
+      ? "approved"
+      : approval.approvalStatus === "rejected"
+        ? "declined"
+        : "pending";
+  const description = [
+    n.notes,
+    n.workOrderId ? `Work order: ${n.workOrderId}` : "",
+    n.property ? `Property: ${n.property}` : "",
+    n.kind === "invoice" ? "Invoice" : "Receipt",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return {
+    id: `maint:${n.id}`,
+    source: "maintenance",
+    departmentLabel: "Maintenance",
+    code: n.invoiceNumber.trim() || n.id,
+    vendor: n.vendorName,
+    amount: typeof n.amount === "number" ? n.amount : Number(n.amount) || 0,
+    description,
+    fileName: n.fileName,
+    status,
+    submittedAt:
+      approval.submittedForApprovalAt || n.submittedAt || new Date().toISOString(),
+    raw: n,
+  };
+}
 
 export function smReceiptToUnified(r: SmReceipt): UnifiedExpense {
   return {
@@ -1153,7 +1192,9 @@ export function unifiedExpenseToApPayable(row: UnifiedExpense): ApPayable {
   const department: ApPayable["department"] =
     row.source === "sales_marketing"
       ? "sales_marketing"
-      : (row.raw as DepartmentExpense).department;
+      : row.source === "maintenance"
+        ? "maintenance"
+        : (row.raw as DepartmentExpense).department;
 
   return {
     id: crypto.randomUUID(),

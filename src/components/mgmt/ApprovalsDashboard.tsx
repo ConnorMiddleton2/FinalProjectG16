@@ -5,8 +5,24 @@ import {
   COLLECTIONS,
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
+import { applyDocumentApproval } from "@/lib/document-approval";
+import { queueApPayableAndSyncToOperatingExpense } from "@/lib/ap-queue-sync";
+import { seedPayableInvoices, type PayableInvoice } from "@/lib/accounts-payable";
+import {
+  budgetLinesChanged,
+  computeBudgetLinesFromDocuments,
+  syncWorkOrdersForDocuments,
+} from "@/lib/maintenance-approval-sync";
+import {
+  maintenanceDocumentForwardsToAp,
+  seedBudget,
+  seedDocuments,
+  seedWorkOrders,
+  type MaintenanceDocument,
+} from "@/lib/maintenance";
 import {
   deptExpenseToUnified,
+  maintenanceDocToUnified,
   money,
   seedApPayables,
   seedDepartmentExpenses,
@@ -24,6 +40,18 @@ import {
 } from "@/lib/sales-marketing";
 import { ChevronRight } from "lucide-react";
 
+function allUnifiedRows(
+  deptItems: DepartmentExpense[],
+  smItems: SmReceipt[],
+  maintDocs: MaintenanceDocument[]
+): UnifiedExpense[] {
+  return [
+    ...deptItems.map(deptExpenseToUnified),
+    ...smItems.map(smReceiptToUnified),
+    ...maintDocs.map(maintenanceDocToUnified),
+  ];
+}
+
 export function ApprovalsDashboard() {
   const {
     items: deptItems,
@@ -38,6 +66,22 @@ export function ApprovalsDashboard() {
     saveOne: saveSm,
     loading: smLoading,
   } = useSharedCollection<SmReceipt>(COLLECTIONS.smReceipts);
+  const {
+    items: maintDocs,
+    saveOne: saveMaintDoc,
+    loading: maintLoading,
+  } = useSharedCollection<MaintenanceDocument>(
+    COLLECTIONS.maintenanceDocuments,
+    seedDocuments
+  );
+  const {
+    items: workOrders,
+    saveAll: saveWorkOrders,
+  } = useSharedCollection(COLLECTIONS.workOrders, seedWorkOrders);
+  const {
+    items: budgetLines,
+    saveAll: saveBudgetAll,
+  } = useSharedCollection(COLLECTIONS.budgetLines, seedBudget);
   const { items: budgetConfigs } = useSharedCollection<SmBudgetConfig>(
     COLLECTIONS.smBudgetConfig,
     seedBudgetConfig
@@ -46,40 +90,118 @@ export function ApprovalsDashboard() {
     items: apItems,
     saveOne: saveAp,
   } = useSharedCollection<ApPayable>(COLLECTIONS.apPayables, seedApPayables);
+  const {
+    items: payableInvoices,
+    saveOne: savePayableInvoice,
+  } = useSharedCollection<PayableInvoice>(
+    COLLECTIONS.payableInvoices,
+    seedPayableInvoices
+  );
 
   const [filter, setFilter] = useState<"pending" | "all">("pending");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
+  const allRows = useMemo(
+    () => allUnifiedRows(deptItems, smItems, maintDocs),
+    [deptItems, smItems, maintDocs]
+  );
+
   const unified = useMemo(() => {
-    const rows: UnifiedExpense[] = [
-      ...deptItems.map(deptExpenseToUnified),
-      ...smItems.map(smReceiptToUnified),
-    ].sort(
+    const rows = [...allRows].sort(
       (a, b) =>
         new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
     );
     return filter === "pending"
       ? rows.filter((r) => r.status === "pending")
       : rows;
-  }, [deptItems, smItems, filter]);
+  }, [allRows, filter]);
 
   const selected =
-    unified.find((r) => r.id === selectedId) ??
-    [...deptItems.map(deptExpenseToUnified), ...smItems.map(smReceiptToUnified)].find(
-      (r) => r.id === selectedId
-    ) ??
-    null;
+    allRows.find((r) => r.id === selectedId) ?? null;
+
+  const selectedMaint =
+    selected?.source === "maintenance"
+      ? (selected.raw as MaintenanceDocument)
+      : null;
+  const selectedMaintForwardsToAp =
+    selectedMaint != null && maintenanceDocumentForwardsToAp(selectedMaint);
 
   const alreadyQueued = useMemo(() => {
     if (!selected) return false;
+    if (selected.source === "maintenance" && selectedMaintForwardsToAp === false) {
+      return false;
+    }
     return apItems.some((p) => p.sourceExpenseId === selected.id);
-  }, [apItems, selected]);
+  }, [apItems, selected, selectedMaintForwardsToAp]);
+
+  async function syncMaintenanceSideEffects(nextDocs: MaintenanceDocument[]) {
+    const nextOrders = syncWorkOrdersForDocuments(workOrders, nextDocs);
+    const ordersChanged = nextOrders.some(
+      (o, i) =>
+        o.actualCost !== workOrders[i]?.actualCost ||
+        o.status !== workOrders[i]?.status ||
+        o.completedAt !== workOrders[i]?.completedAt
+    );
+    if (ordersChanged) {
+      await saveWorkOrders(nextOrders);
+    }
+
+    const nextBudget = computeBudgetLinesFromDocuments(nextDocs, budgetLines);
+    if (budgetLinesChanged(budgetLines, nextBudget)) {
+      await saveBudgetAll(nextBudget);
+    }
+  }
 
   async function setStatus(
     row: UnifiedExpense,
     status: "approved" | "declined"
   ) {
+    if (row.source === "maintenance") {
+      const raw = row.raw as MaintenanceDocument;
+      const rejectionReason =
+        status === "declined"
+          ? window.prompt("Decline reason (optional):") ?? ""
+          : undefined;
+
+      const updated = applyDocumentApproval(raw, {
+        status: status === "approved" ? "approved" : "rejected",
+        approvedBy: "management",
+        rejectionReason,
+      });
+
+      await saveMaintDoc(updated);
+      const nextDocs = maintDocs.map((d) =>
+        d.id === updated.id ? updated : d
+      );
+      await syncMaintenanceSideEffects(nextDocs);
+
+      if (status === "approved") {
+        if (maintenanceDocumentForwardsToAp(updated)) {
+          const approvedRow = maintenanceDocToUnified(updated);
+          await queueApPayableAndSyncToOperatingExpense(
+            apItems,
+            saveAp,
+            payableInvoices,
+            savePayableInvoice,
+            () => unifiedExpenseToApPayable(approvedRow),
+            approvedRow.id
+          );
+          setMsg(
+            "Approved — Maintenance updated and sent to Accounts Payable."
+          );
+        } else {
+          setMsg(
+            "Approved — receipt applied to Maintenance budget (not sent to AP)."
+          );
+        }
+      } else {
+        setMsg("Declined — Maintenance has been notified via document status.");
+      }
+      setTimeout(() => setMsg(null), 3500);
+      return;
+    }
+
     if (row.source === "department") {
       const raw = row.raw as DepartmentExpense;
       await saveDept({
@@ -99,10 +221,14 @@ export function ApprovalsDashboard() {
     }
 
     if (status === "approved") {
-      const exists = apItems.some((p) => p.sourceExpenseId === row.id);
-      if (!exists) {
-        await saveAp(unifiedExpenseToApPayable(row));
-      }
+      await queueApPayableAndSyncToOperatingExpense(
+        apItems,
+        saveAp,
+        payableInvoices,
+        savePayableInvoice,
+        () => unifiedExpenseToApPayable(row),
+        row.id
+      );
       setMsg(
         "Approved — sent to Accounts Payable for payment processing."
       );
@@ -113,12 +239,22 @@ export function ApprovalsDashboard() {
   }
 
   const budget = normalizeBudgetConfig(budgetConfigs[0]);
+
+  function maintenanceApproveLabel(doc: MaintenanceDocument | null) {
+    if (!doc) return "Approve";
+    return maintenanceDocumentForwardsToAp(doc)
+      ? "Approve & send to AP"
+      : "Approve & apply to budget";
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="max-w-2xl text-sm opacity-65">
-          Click a receipt or invoice for full details. Approving solidifies
-          budget spend and forwards the item to Accounts Payable.
+          Click a receipt or invoice for full details. Maintenance{" "}
+          <strong>invoices</strong> go to Accounts Payable after approval;{" "}
+          <strong>receipts</strong> apply to the Maintenance budget only.
+          Department and S&amp;M items still forward to AP when approved.
         </p>
         <select
           className="select select-bordered select-sm bg-white"
@@ -137,11 +273,12 @@ export function ApprovalsDashboard() {
         </strong>
         <span className="opacity-55">
           {" "}
-          · Edit amounts under Management → Department budgets → Sales &amp; Marketing
+          · Edit amounts under Management → Department budgets → Sales &amp;
+          Marketing
         </span>
       </div>
 
-      {(deptLoading || smLoading) && (
+      {(deptLoading || smLoading || maintLoading) && (
         <p className="text-sm opacity-60">Loading expenses…</p>
       )}
       {msg && <p className="text-sm text-emerald-800">{msg}</p>}
@@ -253,17 +390,43 @@ export function ApprovalsDashboard() {
                       {(selected.raw as DepartmentExpense).department}
                     </dd>
                   </div>
-                ) : (
+                ) : selected.source === "sales_marketing" ? (
                   <div className="sm:col-span-2">
                     <dt className="text-xs opacity-55">Source</dt>
                     <dd>Sales &amp; Marketing receipt coding</dd>
                   </div>
-                )}
+                ) : selectedMaint ? (
+                  <>
+                    <div>
+                      <dt className="text-xs opacity-55">Type</dt>
+                      <dd className="capitalize">{selectedMaint.kind}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs opacity-55">Property</dt>
+                      <dd>{selectedMaint.property || "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs opacity-55">Work order</dt>
+                      <dd className="font-mono text-xs">
+                        {selectedMaint.workOrderId || "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs opacity-55">Due date</dt>
+                      <dd>{selectedMaint.dueDate || "—"}</dd>
+                    </div>
+                  </>
+                ) : null}
               </dl>
 
               {alreadyQueued ? (
                 <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
                   Already queued in Accounts Payable.
+                </p>
+              ) : selectedMaint && !selectedMaintForwardsToAp ? (
+                <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                  Maintenance receipts apply to budget after approval — they are
+                  not sent to Accounts Payable.
                 </p>
               ) : null}
 
@@ -274,7 +437,9 @@ export function ApprovalsDashboard() {
                     className="btn btn-neutral btn-sm"
                     onClick={() => void setStatus(selected, "approved")}
                   >
-                    Approve &amp; send to AP
+                    {selected.source === "maintenance"
+                      ? maintenanceApproveLabel(selectedMaint)
+                      : "Approve & send to AP"}
                   </button>
                   <button
                     type="button"
@@ -284,12 +449,21 @@ export function ApprovalsDashboard() {
                     Decline
                   </button>
                 </div>
-              ) : selected.status === "approved" && !alreadyQueued ? (
+              ) : selected.status === "approved" &&
+                !alreadyQueued &&
+                (selected.source !== "maintenance" || selectedMaintForwardsToAp) ? (
                 <button
                   type="button"
                   className="btn btn-outline btn-sm"
                   onClick={async () => {
-                    await saveAp(unifiedExpenseToApPayable(selected));
+                    await queueApPayableAndSyncToOperatingExpense(
+                      apItems,
+                      saveAp,
+                      payableInvoices,
+                      savePayableInvoice,
+                      () => unifiedExpenseToApPayable(selected),
+                      selected.id
+                    );
                     setMsg("Forwarded to Accounts Payable.");
                   }}
                 >
@@ -297,9 +471,11 @@ export function ApprovalsDashboard() {
                 </button>
               ) : null}
 
-              <a href="/ops/ap" className="link link-hover text-sm">
-                Open Accounts Payable →
-              </a>
+              {selectedMaintForwardsToAp || selected?.source !== "maintenance" ? (
+                <a href="/ops/ap" className="link link-hover text-sm">
+                  Open Accounts Payable →
+                </a>
+              ) : null}
             </div>
           )}
         </div>
