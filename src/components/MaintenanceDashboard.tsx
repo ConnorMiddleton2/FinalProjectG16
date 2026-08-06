@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ClipboardList,
@@ -14,6 +14,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import { BudgetFillBar } from "@/components/mgmt/BudgetFillBar";
 import { teamLogout } from "@/app/team/actions";
 import {
   COLLECTIONS,
@@ -38,7 +39,6 @@ import {
   WORK_ORDER_CATEGORIES,
   WORK_ORDER_PRIORITIES,
   WORK_ORDER_STATUSES,
-  type BudgetLine,
   type DocumentKind,
   type MaintenanceDocument,
   type MaintenanceDocumentForm,
@@ -60,10 +60,45 @@ import {
   round2,
   todayIso,
 } from "@/lib/money";
+import {
+  maintenanceBudgetViewLines,
+  normalizeMaintCategoryKey,
+  propertyNamesMatch,
+  seedDepartmentBudgets,
+  seedPropertyBudgetPacks,
+  type DepartmentBudget,
+  type PropertyBudgetPack,
+} from "@/lib/management";
 import type { ManagementContractDraft } from "@/lib/management-contract";
 
 type Panel = "new" | "ledger" | "vendors" | "budget" | "documents";
-type BudgetView = "budget" | "expenses" | "ytd";
+
+const NON_SPECIFIC_WORK_ORDER = "__none__";
+const MAX_DOC_FILE_BYTES = 1_200_000;
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function emptyExpenseForm() {
+  return {
+    kind: "invoice" as DocumentKind,
+    workOrderId: "",
+    lineId: "",
+    property: "",
+    category: "" as WorkOrderCategory | "",
+    vendorName: "",
+    amount: "",
+    note: "",
+    fileName: "",
+    fileDataUrl: "",
+  };
+}
 
 type EditingDocument = MaintenanceDocumentForm & {
   id: string;
@@ -117,12 +152,14 @@ export function MaintenanceDashboard() {
     items: vendors,
     saveOne: saveVendor,
   } = useSharedCollection<VendorRecord>(COLLECTIONS.vendors);
-  const {
-    items: budget,
-    setItems: setBudget,
-    saveOne: saveBudgetLine,
-    saveAll: saveBudgetAll,
-  } = useSharedCollection<BudgetLine>(COLLECTIONS.budgetLines);
+  const { items: deptBudgets } = useSharedCollection<DepartmentBudget>(
+    COLLECTIONS.departmentBudgets,
+    seedDepartmentBudgets
+  );
+  const { items: budgetPacks } = useSharedCollection<PropertyBudgetPack>(
+    COLLECTIONS.propertyBudgetPacks,
+    seedPropertyBudgetPacks
+  );
   const {
     items: rawDocuments,
     saveOne: saveDocumentRaw,
@@ -145,12 +182,12 @@ export function MaintenanceDashboard() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
-  const [expenseForm, setExpenseForm] = useState({
-    lineId: "",
-    amount: "",
-    note: "",
-  });
-  const [budgetView, setBudgetView] = useState<BudgetView>("budget");
+  const [expenseForm, setExpenseForm] = useState(emptyExpenseForm);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [expenseMsg, setExpenseMsg] = useState<string | null>(null);
+  const thisYear = new Date().getFullYear();
+  const [budgetPropertyId, setBudgetPropertyId] = useState("");
+  const [budgetFiscalYear, setBudgetFiscalYear] = useState(thisYear);
   const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editingDocument, setEditingDocument] =
@@ -209,59 +246,251 @@ export function MaintenanceDashboard() {
     [orders]
   );
 
-  const budgetSheetRows = useMemo(() => {
-    const lines = budget.filter((b) => b.category !== "all");
-    const totalBudget = lines.reduce((sum, b) => sum + b.budgetAmount, 0);
-    const totalSpent = lines.reduce((sum, b) => sum + b.spentAmount, 0);
-    const existingTotal = budget.find((b) => b.category === "all");
-    return [
-      ...lines,
-      {
-        id: existingTotal?.id ?? "total",
-        category: "all" as const,
-        label: existingTotal?.label ?? "Total maintenance budget",
-        budgetAmount: totalBudget,
-        spentAmount: totalSpent,
-        notes: existingTotal?.notes ?? "",
-      },
-    ];
-  }, [budget]);
-
-  const budgetLinesOnly = useMemo(
-    () => budgetSheetRows.filter((b) => b.category !== "all"),
-    [budgetSheetRows]
+  const budgetPropertyOptions = useMemo(
+    () =>
+      [...managedProperties]
+        .map((p) => ({
+          id: p.id,
+          name: p.propertyName?.trim() || "Untitled property",
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [managedProperties]
   );
 
+  useEffect(() => {
+    if (budgetPropertyId) return;
+    if (budgetPropertyOptions.length === 0) return;
+    setBudgetPropertyId(budgetPropertyOptions[0].id);
+  }, [budgetPropertyId, budgetPropertyOptions]);
+
+  const selectedBudgetProperty = budgetPropertyOptions.find(
+    (p) => p.id === budgetPropertyId
+  );
+
+  const budgetFiscalYears = useMemo(() => {
+    const years = new Set<number>();
+    for (const row of deptBudgets) {
+      if (row.department !== "maintenance") continue;
+      if (budgetPropertyId && row.propertyId !== budgetPropertyId) continue;
+      years.add(row.fiscalYear);
+    }
+    years.add(thisYear);
+    years.add(thisYear + 1);
+    years.add(thisYear - 1);
+    return Array.from(years).sort((a, b) => b - a);
+  }, [deptBudgets, budgetPropertyId, thisYear]);
+
+  useEffect(() => {
+    if (budgetFiscalYears.includes(budgetFiscalYear)) return;
+    if (budgetFiscalYears.length === 0) return;
+    setBudgetFiscalYear(budgetFiscalYears[0]);
+  }, [budgetFiscalYears, budgetFiscalYear]);
+
+  const mgmtBudgetLines = useMemo(() => {
+    if (!budgetPropertyId || !selectedBudgetProperty) return [];
+    return maintenanceBudgetViewLines({
+      items: deptBudgets,
+      packs: budgetPacks,
+      propertyId: budgetPropertyId,
+      propertyName: selectedBudgetProperty.name,
+      fiscalYear: budgetFiscalYear,
+    });
+  }, [
+    deptBudgets,
+    budgetPacks,
+    budgetPropertyId,
+    selectedBudgetProperty,
+    budgetFiscalYear,
+  ]);
+
+  /** Lines shaped for the fill-bar UI (amounts from Management; spend from docs). */
+  const budgetLinesOnly = useMemo(() => {
+    const propName = selectedBudgetProperty?.name ?? "";
+    return mgmtBudgetLines.map((line) => {
+      let approved = 0;
+      let pending = 0;
+      for (const d of documents) {
+        if (!d.applyToBudget) continue;
+        if (propName && !propertyNamesMatch(d.property, propName)) continue;
+        const dateStr = d.documentDate || d.submittedAt || "";
+        const y = new Date(dateStr).getFullYear();
+        if (Number.isFinite(y) && y !== budgetFiscalYear) continue;
+        const key = normalizeMaintCategoryKey(d.category || "");
+        if (d.budgetLineId !== line.id && key !== line.categoryKey) continue;
+        const status =
+          normalizeDocumentApproval(d).approvalStatus ?? "approved";
+        const amt = Number.isFinite(d.amount) ? d.amount : 0;
+        if (status === "approved") approved += amt;
+        else if (status === "pending") pending += amt;
+      }
+      return {
+        id: line.id,
+        category: line.categoryKey,
+        label: line.label,
+        budgetAmount: line.budgeted,
+        spentAmount: round2(approved),
+        pending: round2(pending),
+        notes: "",
+      };
+    });
+  }, [
+    mgmtBudgetLines,
+    documents,
+    selectedBudgetProperty,
+    budgetFiscalYear,
+  ]);
+
   const budgetTotals = useMemo(() => {
-    const total = budgetSheetRows.find((b) => b.category === "all");
-    const totalBudget = total?.budgetAmount ?? 0;
-    const totalSpent = total?.spentAmount ?? 0;
+    const totalBudget = budgetLinesOnly.reduce(
+      (s, l) => s + l.budgetAmount,
+      0
+    );
+    const totalSpent = budgetLinesOnly.reduce((s, l) => s + l.spentAmount, 0);
     const remaining = totalBudget - totalSpent;
     const pct = totalBudget
       ? Math.round((totalSpent / totalBudget) * 100)
       : 0;
     return { totalBudget, totalSpent, remaining, pct };
-  }, [budgetSheetRows]);
+  }, [budgetLinesOnly]);
 
-  const budgetSyncKeyRef = useRef("");
-  useEffect(() => {
-    if (ordersLoading) return;
-    const key = JSON.stringify({
-      docs: documents.map((d) => [
-        d.id,
-        d.applyToBudget,
-        d.budgetLineId,
-        d.amount,
-        d.workOrderId,
-        d.approvalStatus ?? "approved",
-      ]),
-      lineIds: budget.map((b) => b.id),
+  const pendingSpendTotal = useMemo(
+    () => budgetLinesOnly.reduce((s, l) => s + l.pending, 0),
+    [budgetLinesOnly]
+  );
+
+  const pendingSpendByLine = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const line of budgetLinesOnly) {
+      map.set(line.id, line.pending);
+    }
+    return map;
+  }, [budgetLinesOnly]);
+
+  const budgetExpenseDocs = useMemo(() => {
+    const propName = selectedBudgetProperty?.name ?? "";
+    return [...documents]
+      .filter((d) => {
+        if (!d.applyToBudget) return false;
+        if (propName && d.property && !propertyNamesMatch(d.property, propName))
+          return false;
+        const dateStr = d.documentDate || d.submittedAt || "";
+        const y = new Date(dateStr).getFullYear();
+        if (Number.isFinite(y) && y !== budgetFiscalYear) return false;
+        return true;
+      })
+      .sort((a, b) =>
+        (b.submittedAt || "").localeCompare(a.submittedAt || "")
+      );
+  }, [documents, selectedBudgetProperty, budgetFiscalYear]);
+
+  /** Budget categories for invoice forms (property from form + year from date). */
+  function codingLinesForProperty(
+    propertyName: string,
+    fiscalYear: number
+  ) {
+    const prop = budgetPropertyOptions.find((p) =>
+      propertyNamesMatch(p.name, propertyName)
+    );
+    if (!prop) {
+      return WORK_ORDER_CATEGORIES.map((c) => ({
+        id: `fallback-${c.value}`,
+        category: c.value,
+        label: c.label,
+        budgetAmount: 0,
+        spentAmount: 0,
+        pending: 0,
+        notes: "",
+      }));
+    }
+    const lines = maintenanceBudgetViewLines({
+      items: deptBudgets,
+      packs: budgetPacks,
+      propertyId: prop.id,
+      propertyName: prop.name,
+      fiscalYear,
     });
-    if (key === budgetSyncKeyRef.current) return;
-    budgetSyncKeyRef.current = key;
-    void syncBudgetSpendFromLedger(orders, documents, budget);
+    if (lines.length === 0) {
+      return WORK_ORDER_CATEGORIES.map((c) => ({
+        id: `fallback-${prop.id}-${fiscalYear}-${c.value}`,
+        category: c.value,
+        label: c.label,
+        budgetAmount: 0,
+        spentAmount: 0,
+        pending: 0,
+        notes: "",
+      }));
+    }
+    return lines.map((line) => ({
+      id: line.id,
+      category: line.categoryKey,
+      label: line.label,
+      budgetAmount: line.budgeted,
+      spentAmount: 0,
+      pending: 0,
+      notes: "",
+    }));
+  }
+
+  const docCodingLines = useMemo(() => {
+    const year = new Date(
+      docForm.invoiceDate || docForm.documentDate || todayIso()
+    ).getFullYear();
+    return codingLinesForProperty(docForm.property, year);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, documents, budget, ordersLoading]);
+  }, [
+    docForm.property,
+    docForm.invoiceDate,
+    docForm.documentDate,
+    deptBudgets,
+    budgetPacks,
+    budgetPropertyOptions,
+  ]);
+
+  const editDocCodingLines = useMemo(() => {
+    if (!editingDocument) return [];
+    const year = new Date(
+      editingDocument.invoiceDate ||
+        editingDocument.documentDate ||
+        todayIso()
+    ).getFullYear();
+    return codingLinesForProperty(editingDocument.property, year);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    editingDocument?.property,
+    editingDocument?.invoiceDate,
+    editingDocument?.documentDate,
+    deptBudgets,
+    budgetPacks,
+    budgetPropertyOptions,
+  ]);
+
+  function maintenanceBudgetCode(category: string) {
+    const codes: Record<string, string> = {
+      hvac: "HVAC",
+      plumbing: "PLMB",
+      electrical: "ELEC",
+      structural: "STRC",
+      janitorial: "JAN",
+      landscaping: "LAND",
+      security: "SEC",
+      appliance: "APPL",
+      appliances: "APPL",
+      general: "GEN",
+      other: "OTH",
+      housekeeping: "JAN",
+      painting_drywall: "STRC",
+      doors_locks: "STRC",
+      make_ready: "GEN",
+      emergency: "GEN",
+      amenities: "OTH",
+      pest_control: "OTH",
+    };
+    return (
+      codes[normalizeMaintCategoryKey(category)] ??
+      codes[category] ??
+      String(category).slice(0, 4).toUpperCase()
+    );
+  }
 
   const docsByWorkOrderId = useMemo(() => {
     const map = new Map<string, MaintenanceDocument[]>();
@@ -396,48 +625,17 @@ export function MaintenanceDashboard() {
   }
 
   async function syncBudgetSpendFromLedger(
-    _orderList: WorkOrder[],
-    docList: MaintenanceDocument[],
-    budgetList: BudgetLine[] = budget
+    _orderList?: WorkOrder[],
+    _docList?: MaintenanceDocument[]
   ) {
-    const spendByLine = new Map<string, number>();
-
-    for (const doc of docList) {
-      if (!doc.applyToBudget || !isDocumentApproved(doc)) continue;
-      const lineId = doc.budgetLineId?.trim();
-      const amount =
-        typeof doc.amount === "number" ? doc.amount : Number(doc.amount || 0);
-      if (!lineId || Number.isNaN(amount) || amount <= 0) continue;
-      spendByLine.set(
-        lineId,
-        round2((spendByLine.get(lineId) ?? 0) + amount)
-      );
-    }
-
-    let changed = false;
-    const next = budgetList.map((line) => {
-      if (line.category === "all") return line;
-      const spentAmount = spendByLine.get(line.id) ?? 0;
-      if (spentAmount !== line.spentAmount) changed = true;
-      return { ...line, spentAmount };
-    });
-
-    const lineSpent = next
-      .filter((l) => l.category !== "all")
-      .reduce((sum, l) => sum + l.spentAmount, 0);
-    const withTotals = next.map((line) => {
-      if (line.category !== "all") return line;
-      if (line.spentAmount !== lineSpent) changed = true;
-      return { ...line, spentAmount: lineSpent };
-    });
-
-    if (changed) {
-      await saveBudgetAll(withTotals);
-    }
+    // Spend is computed live from Management budgets + maintenance documents.
   }
 
-  function resolveBudgetLineForWorkOrder(order: WorkOrder, preferredId: string) {
-    const lines = budget.filter((b) => b.category !== "all");
+  function resolveBudgetLineForWorkOrder(
+    order: WorkOrder,
+    preferredId: string,
+    lines: Array<{ id: string; category: string }> = budgetLinesOnly
+  ) {
     if (preferredId && lines.some((l) => l.id === preferredId)) {
       return preferredId;
     }
@@ -447,7 +645,10 @@ export function MaintenanceDashboard() {
     ) {
       return order.budgetAppliedLineId;
     }
-    const byCategory = lines.find((l) => l.category === order.category);
+    const key = normalizeMaintCategoryKey(order.category);
+    const byCategory = lines.find(
+      (l) => normalizeMaintCategoryKey(String(l.category)) === key
+    );
     return byCategory?.id ?? lines[0]?.id ?? "";
   }
 
@@ -518,19 +719,52 @@ export function MaintenanceDashboard() {
   async function recordExpense(e: FormEvent) {
     e.preventDefault();
     const amount = parsePositiveAmount(expenseForm.amount);
-    if (!expenseForm.lineId || amount == null) return;
+    if (!expenseForm.lineId || amount == null) {
+      setExpenseMsg("Select a budget category and enter a valid amount.");
+      return;
+    }
+    if (!expenseForm.vendorName.trim()) {
+      setExpenseMsg("Payee / vendor is required.");
+      return;
+    }
+    if (!expenseForm.property.trim() && !selectedBudgetProperty?.name) {
+      setExpenseMsg("Location / property is required.");
+      return;
+    }
+    if (!expenseForm.workOrderId) {
+      setExpenseMsg("Select a work order or Non-specific.");
+      return;
+    }
 
-    const line = budget.find((b) => b.id === expenseForm.lineId);
+    const line = budgetLinesOnly.find((b) => b.id === expenseForm.lineId);
+    const linkedOrder =
+      expenseForm.workOrderId !== NON_SPECIFIC_WORK_ORDER
+        ? orders.find((o) => o.id === expenseForm.workOrderId)
+        : undefined;
+    if (
+      expenseForm.workOrderId !== NON_SPECIFIC_WORK_ORDER &&
+      !linkedOrder
+    ) {
+      setExpenseMsg("Selected work order was not found.");
+      return;
+    }
+
     const category =
-      line && line.category !== "all" ? line.category : ("" as const);
+      expenseForm.category ||
+      (line ? line.category : "") ||
+      linkedOrder?.category ||
+      "";
     const id = crypto.randomUUID();
     const day = todayIso();
     const receipt = submitDocumentForApproval(
       normalizeMaintenanceDocument({
         id,
-        kind: "receipt",
-        vendorName: "Manual expense",
-        property: "",
+        kind: expenseForm.kind,
+        vendorName: expenseForm.vendorName.trim(),
+        property:
+          expenseForm.property.trim() ||
+          selectedBudgetProperty?.name ||
+          "",
         amount,
         documentDate: day,
         invoiceDate: day,
@@ -540,11 +774,17 @@ export function MaintenanceDashboard() {
         amountPaid: 0,
         disputed: false,
         payableCategory: category
-          ? workOrderCategoryToPayableCategory(category)
+          ? workOrderCategoryToPayableCategory(
+              category as WorkOrderCategory | ""
+            )
           : "other",
-        workOrderId: "",
-        category: category || "",
-        fileName: "manual-expense",
+        workOrderId:
+          expenseForm.workOrderId === NON_SPECIFIC_WORK_ORDER
+            ? ""
+            : expenseForm.workOrderId,
+        category: (category as WorkOrderCategory | "") || "",
+        fileName: expenseForm.fileName.trim() || "manual-expense",
+        fileDataUrl: expenseForm.fileDataUrl || "",
         notes: expenseForm.note.trim() || "Posted from Budget dashboard",
         submittedAt: new Date().toISOString(),
         applyToBudget: true,
@@ -558,11 +798,89 @@ export function MaintenanceDashboard() {
     );
 
     await saveDocument(receipt);
-    await syncBudgetSpendFromLedger(orders, [receipt, ...documents]);
-    setExpenseForm({ lineId: "", amount: "", note: "" });
-    setBudgetView("expenses");
-    setSavedMsg("Expense submitted for approval and applied to budget.");
-    setTimeout(() => setSavedMsg(null), 3500);
+    if (linkedOrder) {
+      const nextDocs = [receipt, ...documents.filter((d) => d.id !== receipt.id)];
+      const actualCost = actualCostFromDocuments(linkedOrder.id, nextDocs);
+      await saveOrder({
+        ...linkedOrder,
+        priority: normalizePriority(linkedOrder.priority),
+        actualCost,
+        estimatedCost: "",
+        budgetAppliedAmount: "",
+        budgetAppliedLineId: "",
+      });
+      await syncBudgetSpendFromLedger(
+        [linkedOrder, ...orders.filter((o) => o.id !== linkedOrder.id)],
+        nextDocs
+      );
+    } else {
+      await syncBudgetSpendFromLedger(orders, [receipt, ...documents]);
+    }
+    const kindLabel =
+      expenseForm.kind === "invoice" ? "Invoice" : "Receipt";
+    setExpenseForm(emptyExpenseForm());
+    setShowExpenseForm(false);
+    setExpenseMsg(`${kindLabel} submitted for Management approval.`);
+    setTimeout(() => setExpenseMsg(null), 3000);
+  }
+
+  function onExpenseWorkOrderChange(workOrderId: string) {
+    if (!workOrderId || workOrderId === NON_SPECIFIC_WORK_ORDER) {
+      setExpenseForm((f) => ({
+        ...f,
+        workOrderId,
+        ...(workOrderId === NON_SPECIFIC_WORK_ORDER
+          ? {}
+          : { property: "", category: "", lineId: "" }),
+      }));
+      return;
+    }
+    const order = orders.find((o) => o.id === workOrderId);
+    if (!order) {
+      setExpenseForm((f) => ({ ...f, workOrderId }));
+      return;
+    }
+    const lineId = resolveBudgetLineForWorkOrder(order, "");
+    const line = budgetLinesOnly.find((b) => b.id === lineId);
+    setExpenseForm((f) => ({
+      ...f,
+      workOrderId,
+      property: order.property || selectedBudgetProperty?.name || f.property,
+      category: order.category,
+      lineId: lineId || f.lineId,
+      ...(line
+        ? { category: (line.category as WorkOrderCategory) || order.category }
+        : {}),
+    }));
+  }
+
+  async function onExpenseFileChange(file: File | undefined) {
+    if (!file) {
+      setExpenseForm((f) => ({ ...f, fileName: "", fileDataUrl: "" }));
+      return;
+    }
+    if (file.size > MAX_DOC_FILE_BYTES) {
+      setExpenseMsg(
+        "File is too large to store (max ~1.2MB). Choose a smaller PDF or image."
+      );
+      setExpenseForm((f) => ({
+        ...f,
+        fileName: file.name,
+        fileDataUrl: "",
+      }));
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setExpenseForm((f) => ({
+        ...f,
+        fileName: file.name,
+        fileDataUrl: dataUrl,
+      }));
+      setExpenseMsg(null);
+    } catch {
+      setExpenseMsg("Could not read the selected file.");
+    }
   }
 
   function updateDocForm<K extends keyof MaintenanceDocumentForm>(
@@ -574,20 +892,28 @@ export function MaintenanceDashboard() {
 
   async function handleSubmitDocument(e: FormEvent) {
     e.preventDefault();
-    if (!docForm.workOrderId.trim()) {
-      setSavedMsg("Select the work order this invoice or receipt belongs to.");
-      return;
+    const isNonSpecific =
+      !docForm.workOrderId.trim() ||
+      docForm.workOrderId === NON_SPECIFIC_WORK_ORDER;
+    if (!isNonSpecific) {
+      const linkedCheck = orders.find((o) => o.id === docForm.workOrderId);
+      if (!linkedCheck) {
+        setSavedMsg("Selected work order was not found in the ledger.");
+        return;
+      }
     }
     if (!docForm.vendorName.trim() || !docForm.amount.trim()) {
       setSavedMsg("Payee and amount are required for invoices/receipts.");
       return;
     }
-
-    const linkedOrder = orders.find((o) => o.id === docForm.workOrderId);
-    if (!linkedOrder) {
-      setSavedMsg("Selected work order was not found in the ledger.");
+    if (!docForm.property.trim()) {
+      setSavedMsg("Location / property is required.");
       return;
     }
+
+    const linkedOrder = isNonSpecific
+      ? undefined
+      : orders.find((o) => o.id === docForm.workOrderId);
 
     const amount = parsePositiveAmount(docForm.amount);
     if (amount == null) {
@@ -597,10 +923,23 @@ export function MaintenanceDashboard() {
 
     const budgetLineId =
       docForm.budgetLineId ||
-      resolveBudgetLineForWorkOrder(linkedOrder, "") ||
+      (linkedOrder
+        ? resolveBudgetLineForWorkOrder(linkedOrder, "", docCodingLines) || ""
+        : "") ||
       "";
+    if (!budgetLineId) {
+      setSavedMsg("Select a budget category to code this document to.");
+      return;
+    }
 
-    const category = docForm.category || linkedOrder.category;
+    const line =
+      docCodingLines.find((b) => b.id === budgetLineId) ??
+      budgetLinesOnly.find((b) => b.id === budgetLineId);
+    const category =
+      docForm.category ||
+      (line ? (line.category as WorkOrderCategory) : "") ||
+      linkedOrder?.category ||
+      "";
     const id = crypto.randomUUID();
     const invoiceDate = docForm.invoiceDate || docForm.documentDate || todayIso();
     const next: MaintenanceDocument = submitDocumentForApproval(
@@ -611,7 +950,8 @@ export function MaintenanceDashboard() {
         applyToBudget: true,
         budgetLineId,
         category,
-        property: docForm.property.trim() || linkedOrder.property,
+        property: docForm.property.trim(),
+        workOrderId: isNonSpecific ? "" : docForm.workOrderId,
         amount,
         amountPaid: parsePaidAmount(docForm.amountPaid) ?? 0,
         documentDate: invoiceDate,
@@ -622,6 +962,8 @@ export function MaintenanceDashboard() {
           generateMaintenanceInvoiceNumber(id),
         vendorId: docForm.vendorId,
         disputed: docForm.disputed,
+        fileName: docForm.fileName,
+        fileDataUrl: docForm.fileDataUrl || "",
         payableCategory:
           docForm.payableCategory ||
           workOrderCategoryToPayableCategory(category),
@@ -636,32 +978,38 @@ export function MaintenanceDashboard() {
     try {
       await saveDocument(next);
       const nextDocs = [next, ...documents.filter((d) => d.id !== next.id)];
-      const actualCost = actualCostFromDocuments(linkedOrder.id, nextDocs);
-      const updatedOrder: WorkOrder = {
-        ...linkedOrder,
-        priority: normalizePriority(linkedOrder.priority),
-        actualCost,
-        estimatedCost: "",
-        budgetAppliedAmount: "",
-        budgetAppliedLineId: "",
-        status: isDocumentApproved(next) ? "completed" : linkedOrder.status,
-        completedAt: isDocumentApproved(next)
-          ? linkedOrder.completedAt || todayIso()
-          : linkedOrder.completedAt,
-      };
-      await saveOrder(updatedOrder);
-      await syncBudgetSpendFromLedger(
-        [updatedOrder, ...orders.filter((o) => o.id !== updatedOrder.id)],
-        nextDocs
-      );
+      if (linkedOrder) {
+        const actualCost = actualCostFromDocuments(linkedOrder.id, nextDocs);
+        const updatedOrder: WorkOrder = {
+          ...linkedOrder,
+          priority: normalizePriority(linkedOrder.priority),
+          actualCost,
+          estimatedCost: "",
+          budgetAppliedAmount: "",
+          budgetAppliedLineId: "",
+          status: isDocumentApproved(next) ? "completed" : linkedOrder.status,
+          completedAt: isDocumentApproved(next)
+            ? linkedOrder.completedAt || todayIso()
+            : linkedOrder.completedAt,
+        };
+        await saveOrder(updatedOrder);
+        await syncBudgetSpendFromLedger(
+          [updatedOrder, ...orders.filter((o) => o.id !== updatedOrder.id)],
+          nextDocs
+        );
+        setHighlightId(updatedOrder.id);
+        setTimeout(() => setHighlightId(null), 6000);
+      } else {
+        await syncBudgetSpendFromLedger(orders, nextDocs);
+      }
 
       setDocForm(emptyDocument());
-      setHighlightId(updatedOrder.id);
       setSavedMsg(
-        `${docForm.kind === "invoice" ? "Invoice" : "Receipt"} submitted for approval, linked to "${updatedOrder.title}", and budget synced.`
+        `${docForm.kind === "invoice" ? "Invoice" : "Receipt"} submitted for approval${
+          linkedOrder ? `, linked to "${linkedOrder.title}"` : " (non-specific)"
+        }, and budget synced.`
       );
       setTimeout(() => setSavedMsg(null), 4000);
-      setTimeout(() => setHighlightId(null), 6000);
     } catch (err) {
       setSavedMsg(
         err instanceof Error ? err.message : "Could not save document."
@@ -670,6 +1018,13 @@ export function MaintenanceDashboard() {
   }
 
   function onDocumentWorkOrderChange(workOrderId: string) {
+    if (!workOrderId || workOrderId === NON_SPECIFIC_WORK_ORDER) {
+      setDocForm((prev) => ({
+        ...prev,
+        workOrderId,
+      }));
+      return;
+    }
     const order = orders.find((o) => o.id === workOrderId);
     if (!order) {
       updateDocForm("workOrderId", workOrderId);
@@ -682,8 +1037,43 @@ export function MaintenanceDashboard() {
       category: order.category,
       payableCategory: workOrderCategoryToPayableCategory(order.category),
       applyToBudget: true,
-      budgetLineId: resolveBudgetLineForWorkOrder(order, prev.budgetLineId),
+      budgetLineId: resolveBudgetLineForWorkOrder(
+        order,
+        prev.budgetLineId,
+        codingLinesForProperty(
+          order.property,
+          new Date(
+            prev.invoiceDate || prev.documentDate || todayIso()
+          ).getFullYear()
+        )
+      ),
     }));
+  }
+
+  async function onDocumentFileChange(file: File | undefined) {
+    if (!file) {
+      updateDocForm("fileName", "");
+      updateDocForm("fileDataUrl", "");
+      return;
+    }
+    if (file.size > MAX_DOC_FILE_BYTES) {
+      setSavedMsg(
+        "File is too large to store (max ~1.2MB). Choose a smaller PDF or image."
+      );
+      updateDocForm("fileName", file.name);
+      updateDocForm("fileDataUrl", "");
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setDocForm((prev) => ({
+        ...prev,
+        fileName: file.name,
+        fileDataUrl: dataUrl,
+      }));
+    } catch {
+      setSavedMsg("Could not read the selected file.");
+    }
   }
 
   function startEditDocument(doc: MaintenanceDocument) {
@@ -707,6 +1097,10 @@ export function MaintenanceDashboard() {
   }
 
   function onEditingDocumentWorkOrderChange(workOrderId: string) {
+    if (!workOrderId || workOrderId === NON_SPECIFIC_WORK_ORDER) {
+      updateEditingDocument("workOrderId", workOrderId);
+      return;
+    }
     const order = orders.find((o) => o.id === workOrderId);
     if (!order) {
       updateEditingDocument("workOrderId", workOrderId);
@@ -723,7 +1117,13 @@ export function MaintenanceDashboard() {
             applyToBudget: true,
             budgetLineId: resolveBudgetLineForWorkOrder(
               order,
-              prev.budgetLineId
+              prev.budgetLineId,
+              codingLinesForProperty(
+                order.property,
+                new Date(
+                  prev.invoiceDate || prev.documentDate || todayIso()
+                ).getFullYear()
+              )
             ),
           }
         : prev
@@ -734,22 +1134,30 @@ export function MaintenanceDashboard() {
     e.preventDefault();
     if (!editingDocument) return;
 
-    if (!editingDocument.workOrderId.trim()) {
-      setSavedMsg("Select the work order this invoice or receipt belongs to.");
-      return;
+    const isNonSpecific =
+      !editingDocument.workOrderId.trim() ||
+      editingDocument.workOrderId === NON_SPECIFIC_WORK_ORDER;
+    if (!isNonSpecific) {
+      const linkedCheck = orders.find(
+        (o) => o.id === editingDocument.workOrderId
+      );
+      if (!linkedCheck) {
+        setSavedMsg("Selected work order was not found in the ledger.");
+        return;
+      }
     }
     if (!editingDocument.vendorName.trim() || !editingDocument.amount.trim()) {
       setSavedMsg("Payee and amount are required for invoices/receipts.");
       return;
     }
-
-    const linkedOrder = orders.find(
-      (o) => o.id === editingDocument.workOrderId
-    );
-    if (!linkedOrder) {
-      setSavedMsg("Selected work order was not found in the ledger.");
+    if (!editingDocument.property.trim()) {
+      setSavedMsg("Location / property is required.");
       return;
     }
+
+    const linkedOrder = isNonSpecific
+      ? undefined
+      : orders.find((o) => o.id === editingDocument.workOrderId);
 
     const amount = parsePositiveAmount(editingDocument.amount);
     if (amount == null) {
@@ -762,10 +1170,27 @@ export function MaintenanceDashboard() {
 
     const budgetLineId =
       editingDocument.budgetLineId ||
-      resolveBudgetLineForWorkOrder(linkedOrder, "") ||
+      (linkedOrder
+        ? resolveBudgetLineForWorkOrder(
+            linkedOrder,
+            "",
+            editDocCodingLines
+          ) || ""
+        : "") ||
       "";
+    if (!budgetLineId) {
+      setSavedMsg("Select a budget category to code this document to.");
+      return;
+    }
 
-    const category = editingDocument.category || linkedOrder.category;
+    const line =
+      editDocCodingLines.find((b) => b.id === budgetLineId) ??
+      budgetLinesOnly.find((b) => b.id === budgetLineId);
+    const category =
+      editingDocument.category ||
+      (line ? (line.category as WorkOrderCategory) : "") ||
+      linkedOrder?.category ||
+      "";
     const invoiceDate =
       editingDocument.invoiceDate ||
       editingDocument.documentDate ||
@@ -779,7 +1204,8 @@ export function MaintenanceDashboard() {
         applyToBudget: true,
         budgetLineId,
         category,
-        property: editingDocument.property.trim() || linkedOrder.property,
+        property: editingDocument.property.trim(),
+        workOrderId: isNonSpecific ? "" : editingDocument.workOrderId,
         amount,
         amountPaid: parsePaidAmount(editingDocument.amountPaid) ?? 0,
         documentDate: invoiceDate,
@@ -791,6 +1217,8 @@ export function MaintenanceDashboard() {
           generateMaintenanceInvoiceNumber(editingDocument.id),
         vendorId: editingDocument.vendorId,
         disputed: editingDocument.disputed,
+        fileName: editingDocument.fileName,
+        fileDataUrl: editingDocument.fileDataUrl || "",
         payableCategory:
           editingDocument.payableCategory ||
           workOrderCategoryToPayableCategory(category),
@@ -811,25 +1239,29 @@ export function MaintenanceDashboard() {
 
       const orderUpdates: WorkOrder[] = [];
 
-      const newActual = actualCostFromDocuments(linkedOrder.id, nextDocs);
-      const updatedNewOrder: WorkOrder = {
-        ...linkedOrder,
-        priority: normalizePriority(linkedOrder.priority),
-        actualCost: newActual,
-        estimatedCost: "",
-        budgetAppliedAmount: "",
-        budgetAppliedLineId: "",
-        status: isDocumentApproved(updated) ? "completed" : linkedOrder.status,
-        completedAt: isDocumentApproved(updated)
-          ? linkedOrder.completedAt || new Date().toISOString().slice(0, 10)
-          : linkedOrder.completedAt,
-      };
-      orderUpdates.push(updatedNewOrder);
-      await saveOrder(updatedNewOrder);
+      if (linkedOrder) {
+        const newActual = actualCostFromDocuments(linkedOrder.id, nextDocs);
+        const updatedNewOrder: WorkOrder = {
+          ...linkedOrder,
+          priority: normalizePriority(linkedOrder.priority),
+          actualCost: newActual,
+          estimatedCost: "",
+          budgetAppliedAmount: "",
+          budgetAppliedLineId: "",
+          status: isDocumentApproved(updated)
+            ? "completed"
+            : linkedOrder.status,
+          completedAt: isDocumentApproved(updated)
+            ? linkedOrder.completedAt || new Date().toISOString().slice(0, 10)
+            : linkedOrder.completedAt,
+        };
+        orderUpdates.push(updatedNewOrder);
+        await saveOrder(updatedNewOrder);
+      }
 
       if (
         previousWorkOrderId &&
-        previousWorkOrderId !== linkedOrder.id
+        previousWorkOrderId !== (linkedOrder?.id ?? "")
       ) {
         const previousOrder = orders.find((o) => o.id === previousWorkOrderId);
         if (previousOrder) {
@@ -858,7 +1290,8 @@ export function MaintenanceDashboard() {
       setHighlightId(updated.id);
       setSavedMsg(
         `${updated.kind === "invoice" ? "Invoice" : "Receipt"} resubmitted for approval${
-          previousWorkOrderId && previousWorkOrderId !== linkedOrder.id
+          previousWorkOrderId &&
+          previousWorkOrderId !== (linkedOrder?.id ?? "")
             ? "; work order costs recomputed"
             : ""
         }, and budget synced.`
@@ -873,12 +1306,6 @@ export function MaintenanceDashboard() {
     } finally {
       setEditDocSaving(false);
     }
-  }
-
-  function patchBudgetLine(id: string, patch: Partial<BudgetLine>) {
-    setBudget((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, ...patch } : b))
-    );
   }
 
   const panels: { id: Panel; label: string; icon: typeof Wrench }[] = [
@@ -1786,539 +2213,349 @@ export function MaintenanceDashboard() {
         )}
 
         {panel === "budget" && (
-          <section className="space-y-4">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-[var(--harbor-ink)]">
-                  Maintenance budget
-                </h2>
-                <p className="mt-1 text-sm opacity-65">
-                  Track allocated budget versus recorded spend. Edit line items
-                  directly; record expenses anytime.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline"
-                onClick={() => {
-                  const used = new Set(
-                    budget
-                      .filter((b) => b.category !== "all")
-                      .map((b) => b.category)
-                  );
-                  const category =
-                    WORK_ORDER_CATEGORIES.find((c) => !used.has(c.value))
-                      ?.value ?? "general";
-                  const next: BudgetLine = {
-                    id: crypto.randomUUID(),
-                    category,
-                    label: categoryLabel(category),
-                    budgetAmount: 10000,
-                    spentAmount: 0,
-                    notes: "",
-                  };
-                  void saveBudgetLine(next);
-                  setBudgetView("budget");
-                }}
-              >
-                Add budget line
-              </button>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                {
-                  label: "Total budget",
-                  value: money(budgetTotals.totalBudget),
-                },
-                {
-                  label: "Spent YTD",
-                  value: money(budgetTotals.totalSpent),
-                },
-                {
-                  label: "Remaining",
-                  value: money(budgetTotals.remaining),
-                  warn: budgetTotals.remaining < 0,
-                },
-                {
-                  label: "% used",
-                  value: `${budgetTotals.pct}%`,
-                  warn: budgetTotals.pct > 100,
-                },
-              ].map((card) => (
-                <div
-                  key={card.label}
-                  className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 px-4 py-3 shadow-sm"
-                >
-                  <p className="text-xs uppercase tracking-wide opacity-55">
-                    {card.label}
-                  </p>
-                  <p
-                    className={`mt-1 text-xl font-semibold tabular-nums ${
-                      card.warn ? "text-error" : "text-[var(--harbor-ink)]"
-                    }`}
-                  >
-                    {card.value}
+          <section className="space-y-3">
+            <div className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/95 p-3 shadow-sm space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-semibold leading-tight text-[var(--harbor-ink)]">
+                    Maintenance budget
+                  </h2>
+                  <p className="text-[11px] opacity-60">
+                    Budgets pushed by Management by building &amp; year
                   </p>
                 </div>
-              ))}
-            </div>
-
-            <div className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 shadow-sm">
-              <div
-                className="flex flex-wrap gap-1 border-b border-[var(--harbor-deep)]/10 px-3 pt-3"
-                role="tablist"
-                aria-label="Budget views"
-              >
-                {(
-                  [
-                    { id: "budget", label: "Budget" },
-                    { id: "expenses", label: "Expenses" },
-                    { id: "ytd", label: "YTD Summary" },
-                  ] as const
-                ).map((tab) => {
-                  const active = budgetView === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      className={`rounded-t-lg px-4 py-2 text-sm font-medium transition-colors ${
-                        active
-                          ? "bg-[var(--harbor-mist)] text-[var(--harbor-ink)]"
-                          : "text-[var(--harbor-ink)]/55 hover:bg-base-200/70 hover:text-[var(--harbor-ink)]"
-                      }`}
-                      onClick={() => setBudgetView(tab.id)}
-                    >
-                      {tab.label}
-                    </button>
-                  );
-                })}
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    className="select select-bordered select-xs bg-white max-w-[12rem]"
+                    value={budgetPropertyId}
+                    onChange={(e) => setBudgetPropertyId(e.target.value)}
+                    aria-label="Property"
+                  >
+                    {budgetPropertyOptions.length === 0 ? (
+                      <option value="">No properties</option>
+                    ) : (
+                      budgetPropertyOptions.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <select
+                    className="select select-bordered select-xs bg-white"
+                    value={budgetFiscalYear}
+                    onChange={(e) =>
+                      setBudgetFiscalYear(Number(e.target.value))
+                    }
+                    aria-label="Fiscal year"
+                  >
+                    {budgetFiscalYears.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="rounded-lg border border-[#8aa3b5]/45 bg-[#d5dee5] px-3 py-1 text-right">
+                    <p className="text-[9px] uppercase tracking-wide opacity-55">
+                      Net budgeted
+                    </p>
+                    <p className="text-lg font-semibold leading-tight text-[#2f4556]">
+                      {money(budgetTotals.totalBudget)}
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div className="p-4" role="tabpanel">
-                {budgetView === "budget" && (
-                  <div className="overflow-x-auto">
-                    {budgetLinesOnly.length === 0 ? (
-                      <p className="text-sm opacity-60">
-                        No budget lines yet. Add a line to start tracking
-                        allocation versus spend.
-                      </p>
-                    ) : (
-                      <table className="table table-sm">
-                        <thead>
-                          <tr>
-                            <th>Line item</th>
-                            <th>Category</th>
-                            <th className="text-right">Budget</th>
-                            <th className="text-right">Spent</th>
-                            <th className="text-right">Remaining</th>
-                            <th className="text-right">% Used</th>
-                            <th>Notes</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {budgetSheetRows.map((line) => {
-                            const remaining =
-                              line.budgetAmount - line.spentAmount;
-                            const pct = line.budgetAmount
-                              ? Math.round(
-                                  (line.spentAmount / line.budgetAmount) * 100
-                                )
-                              : 0;
-                            const over = remaining < 0;
-                            const isTotal = line.category === "all";
-                            return (
-                              <tr
-                                key={line.id}
-                                className={isTotal ? "font-semibold" : undefined}
-                              >
-                                <td>
-                                  {isTotal ? (
-                                    line.label
-                                  ) : (
-                                    <input
-                                      className="input input-bordered input-sm w-full min-w-[10rem]"
-                                      value={line.label}
-                                      onChange={(e) =>
-                                        patchBudgetLine(line.id, {
-                                          label: e.target.value,
-                                        })
-                                      }
-                                      onBlur={(e) =>
-                                        void saveBudgetLine({
-                                          ...line,
-                                          label: e.target.value,
-                                        })
-                                      }
-                                    />
-                                  )}
-                                </td>
-                                <td className="whitespace-nowrap">
-                                  {isTotal ? (
-                                    "Total"
-                                  ) : (
-                                    <select
-                                      className="select select-bordered select-sm w-full min-w-[9rem]"
-                                      value={line.category}
-                                      onChange={(e) => {
-                                        const category = e.target
-                                          .value as WorkOrderCategory;
-                                        patchBudgetLine(line.id, { category });
-                                        void saveBudgetLine({
-                                          ...line,
-                                          category,
-                                        });
-                                      }}
-                                      aria-label={`Category for ${line.label}`}
-                                    >
-                                      {WORK_ORDER_CATEGORIES.map((c) => (
-                                        <option key={c.value} value={c.value}>
-                                          {c.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  )}
-                                </td>
-                                <td className="text-right tabular-nums">
-                                  {isTotal ? (
-                                    money(line.budgetAmount)
-                                  ) : (
-                                    <input
-                                      className="input input-bordered input-sm w-28 text-right"
-                                      value={line.budgetAmount}
-                                      onChange={(e) => {
-                                        const value = Number(e.target.value);
-                                        if (Number.isNaN(value)) return;
-                                        patchBudgetLine(line.id, {
-                                          budgetAmount: value,
-                                        });
-                                      }}
-                                      onBlur={(e) => {
-                                        const value = Number(e.target.value);
-                                        if (Number.isNaN(value)) return;
-                                        void saveBudgetLine({
-                                          ...line,
-                                          budgetAmount: value,
-                                        });
-                                      }}
-                                    />
-                                  )}
-                                </td>
-                                <td className="text-right tabular-nums">
-                                  {isTotal ? (
-                                    money(line.spentAmount)
-                                  ) : (
-                                    <input
-                                      className="input input-bordered input-sm w-28 text-right"
-                                      value={line.spentAmount}
-                                      onChange={(e) => {
-                                        const value = Number(e.target.value);
-                                        if (Number.isNaN(value)) return;
-                                        patchBudgetLine(line.id, {
-                                          spentAmount: value,
-                                        });
-                                      }}
-                                      onBlur={(e) => {
-                                        const value = Number(e.target.value);
-                                        if (Number.isNaN(value)) return;
-                                        void saveBudgetLine({
-                                          ...line,
-                                          spentAmount: value,
-                                        });
-                                      }}
-                                    />
-                                  )}
-                                </td>
-                                <td
-                                  className={`text-right tabular-nums ${
-                                    over ? "text-error" : ""
-                                  }`}
-                                >
-                                  {money(remaining)}
-                                </td>
-                                <td
-                                  className={`text-right tabular-nums ${
-                                    over ? "text-error" : ""
-                                  }`}
-                                >
-                                  {pct}%
-                                </td>
-                                <td>
-                                  <input
-                                    className="input input-bordered input-sm w-full min-w-[8rem]"
-                                    value={line.notes}
-                                    onChange={(e) =>
-                                      patchBudgetLine(line.id, {
-                                        notes: e.target.value,
-                                      })
-                                    }
-                                    onBlur={(e) =>
-                                      void saveBudgetLine({
-                                        ...line,
-                                        notes: e.target.value,
-                                      })
-                                    }
-                                  />
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                )}
+              <div>
+                <div className="mb-1 flex flex-wrap justify-between gap-2 text-[11px] font-medium">
+                  <span>Overall</span>
+                  <span>
+                    {money(budgetTotals.totalSpent)} approved ·{" "}
+                    {money(pendingSpendTotal)} pending ·{" "}
+                    {money(budgetTotals.totalBudget - budgetTotals.totalSpent)}{" "}
+                    left
+                  </span>
+                </div>
+                <BudgetFillBar
+                  budgeted={budgetTotals.totalBudget}
+                  approved={budgetTotals.totalSpent}
+                  pending={pendingSpendTotal}
+                />
+              </div>
 
-                {budgetView === "expenses" && (
-                  <div className="space-y-4">
-                    <p className="text-sm opacity-65">
-                      Spend by budget line. Use the form below to post a new
-                      expense.
-                    </p>
-                    {budgetLinesOnly.length === 0 ? (
-                      <p className="text-sm opacity-60">
-                        No budget lines yet. Add a line first, then record
-                        expenses against it.
-                      </p>
-                    ) : (
-                      <ul className="space-y-3">
-                        {[...budgetLinesOnly]
-                          .sort((a, b) => b.spentAmount - a.spentAmount)
-                          .map((line) => {
-                            const remaining =
-                              line.budgetAmount - line.spentAmount;
-                            const pct = line.budgetAmount
-                              ? Math.min(
-                                  100,
-                                  Math.round(
-                                    (line.spentAmount / line.budgetAmount) *
-                                      100
-                                  )
-                                )
-                              : 0;
-                            const over = remaining < 0;
-                            return (
-                              <li
-                                key={line.id}
-                                className="rounded-xl border border-base-300 px-3 py-3"
-                              >
-                                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                                  <div className="min-w-0 flex-1 space-y-1">
-                                    <p className="font-medium">{line.label}</p>
-                                    <select
-                                      className="select select-bordered select-xs w-full max-w-[14rem]"
-                                      value={line.category}
-                                      onChange={(e) => {
-                                        const category = e.target
-                                          .value as WorkOrderCategory;
-                                        patchBudgetLine(line.id, { category });
-                                        void saveBudgetLine({
-                                          ...line,
-                                          category,
-                                        });
-                                      }}
-                                      aria-label={`Category for ${line.label}`}
-                                    >
-                                      {WORK_ORDER_CATEGORIES.map((c) => (
-                                        <option key={c.value} value={c.value}>
-                                          {c.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    {line.notes ? (
-                                      <p className="text-xs opacity-55">
-                                        {line.notes}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                  <div className="text-right text-sm tabular-nums">
-                                    <p className="font-semibold">
-                                      {money(line.spentAmount)} spent
-                                    </p>
-                                    <p
-                                      className={
-                                        over ? "text-error" : "opacity-65"
-                                      }
-                                    >
-                                      {money(remaining)} of{" "}
-                                      {money(line.budgetAmount)} left
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--harbor-mist)]">
-                                  <div
-                                    className={`h-full rounded-full ${
-                                      over
-                                        ? "bg-error"
-                                        : "bg-[var(--harbor-mid)]"
-                                    }`}
-                                    style={{
-                                      width: `${over ? 100 : pct}%`,
-                                    }}
-                                  />
-                                </div>
-                              </li>
-                            );
-                          })}
-                      </ul>
-                    )}
-                  </div>
-                )}
-
-                {budgetView === "ytd" && (
-                  <div className="space-y-5">
-                    <div>
-                      <div className="mb-2 flex items-center justify-between text-sm">
-                        <span className="opacity-65">Overall usage</span>
-                        <span
-                          className={`font-medium tabular-nums ${
-                            budgetTotals.pct > 100 ? "text-error" : ""
-                          }`}
-                        >
-                          {budgetTotals.pct}% of{" "}
-                          {money(budgetTotals.totalBudget)}
-                        </span>
-                      </div>
-                      <div className="h-3 overflow-hidden rounded-full bg-[var(--harbor-mist)]">
-                        <div
-                          className={`h-full rounded-full ${
-                            budgetTotals.pct > 100
-                              ? "bg-error"
-                              : "bg-[var(--harbor-deep)]"
-                          }`}
-                          style={{
-                            width: `${Math.min(100, budgetTotals.pct)}%`,
-                          }}
+              <div className="space-y-1">
+                {budgetLinesOnly.length === 0 ? (
+                  <p className="py-2 text-center text-xs opacity-55">
+                    No Management budget for this building and year yet. Create
+                    one under Management → Department budgets.
+                  </p>
+                ) : (
+                  budgetLinesOnly.map((line) => {
+                    const pending = pendingSpendByLine.get(line.id) ?? 0;
+                    return (
+                      <div
+                        key={line.id}
+                        className="grid grid-cols-[4.25rem_1fr] items-center gap-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-mono text-[11px] font-bold leading-none text-[#2f4556]">
+                            {maintenanceBudgetCode(line.category)}
+                          </p>
+                          <p className="truncate text-[9px] leading-tight opacity-55">
+                            {line.label}
+                          </p>
+                        </div>
+                        <BudgetFillBar
+                          budgeted={line.budgetAmount}
+                          approved={line.spentAmount}
+                          pending={pending}
+                          compact
                         />
                       </div>
-                    </div>
-
-                    {budgetLinesOnly.length === 0 ? (
-                      <p className="text-sm opacity-60">
-                        Add budget lines to see a year-to-date comparison chart.
-                      </p>
-                    ) : (
-                      <div className="space-y-4">
-                        <p className="text-sm opacity-65">
-                          Budget vs spent by line (bars share the same scale).
-                        </p>
-                        {budgetLinesOnly.map((line) => {
-                          const maxScale = Math.max(
-                            ...budgetLinesOnly.map((l) =>
-                              Math.max(l.budgetAmount, l.spentAmount)
-                            ),
-                            1
-                          );
-                          const budgetWidth = Math.round(
-                            (line.budgetAmount / maxScale) * 100
-                          );
-                          const spentWidth = Math.round(
-                            (line.spentAmount / maxScale) * 100
-                          );
-                          const over = line.spentAmount > line.budgetAmount;
-                          return (
-                            <div key={line.id} className="space-y-1.5">
-                              <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-                                <span className="font-medium">
-                                  {line.label}
-                                </span>
-                                <span className="tabular-nums opacity-65">
-                                  {money(line.spentAmount)} /{" "}
-                                  {money(line.budgetAmount)}
-                                </span>
-                              </div>
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="w-14 shrink-0 text-[11px] uppercase tracking-wide opacity-45">
-                                    Budget
-                                  </span>
-                                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-base-200">
-                                    <div
-                                      className="h-full rounded-full bg-[var(--harbor-mist)]"
-                                      style={{ width: `${budgetWidth}%` }}
-                                    />
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="w-14 shrink-0 text-[11px] uppercase tracking-wide opacity-45">
-                                    Spent
-                                  </span>
-                                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-base-200">
-                                    <div
-                                      className={`h-full rounded-full ${
-                                        over
-                                          ? "bg-error"
-                                          : "bg-[var(--harbor-mid)]"
-                                      }`}
-                                      style={{ width: `${spentWidth}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                    );
+                  })
                 )}
               </div>
-            </div>
 
-            <form
-              onSubmit={recordExpense}
-              className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 p-5 shadow-sm space-y-3"
-            >
-              <h3 className="text-base font-semibold">Record expense</h3>
-              <p className="text-sm opacity-65">
-                Adds spend to a budget line and updates totals across all views.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <select
-                  className="select select-bordered w-full"
-                  value={expenseForm.lineId}
-                  onChange={(e) =>
-                    setExpenseForm((f) => ({ ...f, lineId: e.target.value }))
-                  }
-                  required
-                >
-                  <option value="">Select budget line</option>
-                  {budgetLinesOnly.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="input input-bordered w-full"
-                  placeholder="Amount ($)"
-                  value={expenseForm.amount}
-                  onChange={(e) =>
-                    setExpenseForm((f) => ({ ...f, amount: e.target.value }))
-                  }
-                  required
-                />
-                <input
-                  className="input input-bordered w-full sm:col-span-2"
-                  placeholder="Note (optional)"
-                  value={expenseForm.note}
-                  onChange={(e) =>
-                    setExpenseForm((f) => ({ ...f, note: e.target.value }))
-                  }
-                />
-                <button
-                  type="submit"
-                  className="btn btn-neutral btn-sm sm:col-span-2"
-                >
-                  Record expense
-                </button>
-                <p className="text-xs opacity-55 sm:col-span-2">
-                  Submitted to management for approval (auto-approved for now).
+              <div className="border-t border-base-200 pt-2 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">
+                    Invoice / receipt coding
+                  </h3>
+                  <button
+                    type="button"
+                    className="btn btn-neutral btn-xs"
+                    onClick={() => {
+                      setShowExpenseForm((v) => {
+                        if (!v && selectedBudgetProperty) {
+                          setExpenseForm((f) => ({
+                            ...f,
+                            property:
+                              f.property || selectedBudgetProperty.name,
+                          }));
+                        }
+                        return !v;
+                      });
+                    }}
+                  >
+                    {showExpenseForm ? "Hide" : "Submit invoice"}
+                  </button>
+                </div>
+
+                {expenseMsg && (
+                  <p className="text-xs text-emerald-800">{expenseMsg}</p>
+                )}
+
+                {showExpenseForm && (
+                  <form
+                    onSubmit={recordExpense}
+                    className="grid gap-1.5 rounded-lg border border-base-300 bg-base-100 p-2 sm:grid-cols-2"
+                  >
+                    <select
+                      className="select select-bordered select-xs bg-white"
+                      value={expenseForm.kind}
+                      onChange={(e) =>
+                        setExpenseForm((f) => ({
+                          ...f,
+                          kind: e.target.value as DocumentKind,
+                        }))
+                      }
+                    >
+                      <option value="invoice">Invoice</option>
+                      <option value="receipt">Receipt</option>
+                    </select>
+                    <select
+                      className="select select-bordered select-xs bg-white"
+                      value={expenseForm.workOrderId}
+                      onChange={(e) =>
+                        onExpenseWorkOrderChange(e.target.value)
+                      }
+                      required
+                    >
+                      <option value="">Work order</option>
+                      <option value={NON_SPECIFIC_WORK_ORDER}>
+                        Non-specific (not linked)
+                      </option>
+                      {orders.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.title} · {o.property}
+                          {o.unit ? ` · ${o.unit}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select select-bordered select-xs bg-white"
+                      value={
+                        selectedBudgetProperty?.name || expenseForm.property
+                      }
+                      onChange={(e) =>
+                        setExpenseForm((f) => ({
+                          ...f,
+                          property: e.target.value,
+                        }))
+                      }
+                      required
+                    >
+                      <option value="">Location / property</option>
+                      {selectedBudgetProperty ? (
+                        <option value={selectedBudgetProperty.name}>
+                          {selectedBudgetProperty.name}
+                        </option>
+                      ) : null}
+                      {properties.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="select select-bordered select-xs bg-white"
+                      value={expenseForm.lineId}
+                      onChange={(e) => {
+                        const lineId = e.target.value;
+                        const line = budgetLinesOnly.find((b) => b.id === lineId);
+                        setExpenseForm((f) => ({
+                          ...f,
+                          lineId,
+                          category: line
+                            ? (line.category as WorkOrderCategory)
+                            : f.category,
+                        }));
+                      }}
+                      required
+                    >
+                      <option value="">Budget category</option>
+                      {budgetLinesOnly.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {maintenanceBudgetCode(b.category)} · {b.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="input input-bordered input-xs bg-white"
+                      placeholder="Vendor / payee"
+                      value={expenseForm.vendorName}
+                      onChange={(e) =>
+                        setExpenseForm((f) => ({
+                          ...f,
+                          vendorName: e.target.value,
+                        }))
+                      }
+                      required
+                    />
+                    <input
+                      className="input input-bordered input-xs bg-white"
+                      placeholder="Amount"
+                      value={expenseForm.amount}
+                      onChange={(e) =>
+                        setExpenseForm((f) => ({
+                          ...f,
+                          amount: e.target.value,
+                        }))
+                      }
+                      required
+                    />
+                    <input
+                      className="input input-bordered input-xs bg-white sm:col-span-2"
+                      placeholder="Note (optional)"
+                      value={expenseForm.note}
+                      onChange={(e) =>
+                        setExpenseForm((f) => ({
+                          ...f,
+                          note: e.target.value,
+                        }))
+                      }
+                    />
+                    <label className="form-control w-full sm:col-span-2">
+                      <span className="mb-0.5 text-[10px] opacity-60">
+                        Upload invoice / receipt (optional, max ~1.2MB)
+                      </span>
+                      <input
+                        type="file"
+                        className="file-input file-input-bordered file-input-xs w-full bg-white"
+                        accept="image/*,.pdf"
+                        onChange={(e) =>
+                          void onExpenseFileChange(e.target.files?.[0])
+                        }
+                      />
+                      {expenseForm.fileName ? (
+                        <span className="mt-0.5 text-[10px] opacity-55">
+                          Selected: {expenseForm.fileName}
+                          {expenseForm.fileDataUrl ? " · attached" : ""}
+                        </span>
+                      ) : null}
+                    </label>
+                    <button
+                      type="submit"
+                      className="btn btn-neutral btn-xs sm:col-span-2"
+                    >
+                      Submit for approval
+                    </button>
+                  </form>
+                )}
+
+                <div className="max-h-28 overflow-y-auto rounded-lg border border-base-300">
+                  <table className="table table-xs">
+                    <thead>
+                      <tr>
+                        <th>Code</th>
+                        <th>Vendor</th>
+                        <th>$</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {budgetExpenseDocs.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={4}
+                            className="py-3 text-center opacity-55"
+                          >
+                            No expenses yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        budgetExpenseDocs.map((d) => {
+                          const line =
+                            budgetLinesOnly.find(
+                              (b) => b.id === d.budgetLineId
+                            ) ??
+                            budgetLinesOnly.find(
+                              (b) =>
+                                normalizeMaintCategoryKey(b.category) ===
+                                normalizeMaintCategoryKey(d.category || "")
+                            );
+                          const code = line
+                            ? maintenanceBudgetCode(line.category)
+                            : d.category
+                              ? maintenanceBudgetCode(d.category)
+                              : "—";
+                          const status =
+                            normalizeDocumentApproval(d).approvalStatus ??
+                            "approved";
+                          return (
+                            <tr key={d.id}>
+                              <td className="font-mono font-semibold">
+                                {code}
+                              </td>
+                              <td className="max-w-[10rem] truncate">
+                                {d.vendorName || "—"}
+                              </td>
+                              <td>{money(d.amount)}</td>
+                              <td className="capitalize">{status}</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[10px] opacity-50">
+                  Approvals happen in Management → Approve receipts &amp;
+                  invoices.
                 </p>
               </div>
-            </form>
+            </div>
           </section>
         )}
 
@@ -2343,8 +2580,7 @@ export function MaintenanceDashboard() {
                     <p className="mt-1 text-xs opacity-55">
                       Status:{" "}
                       {approvalStatusLabel(
-                        normalizeDocumentApproval(editingDocument)
-                          .approvalStatus!
+                        editingDocument.approvalStatus ?? "pending"
                       )}
                     </p>
                   </div>
@@ -2360,18 +2596,21 @@ export function MaintenanceDashboard() {
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="form-control w-full sm:col-span-2">
-                    <span className="mb-1 text-sm opacity-70">
-                      Work order (required)
-                    </span>
+                    <span className="mb-1 text-sm opacity-70">Work order</span>
                     <select
                       className="select select-bordered w-full"
-                      value={editingDocument.workOrderId}
+                      value={
+                        editingDocument.workOrderId || NON_SPECIFIC_WORK_ORDER
+                      }
                       onChange={(e) =>
                         onEditingDocumentWorkOrderChange(e.target.value)
                       }
                       required
                     >
                       <option value="">Select work order</option>
+                      <option value={NON_SPECIFIC_WORK_ORDER}>
+                        Non-specific (not linked to a work order)
+                      </option>
                       {orders.map((o) => (
                         <option key={o.id} value={o.id}>
                           {o.title} · {o.property}
@@ -2513,7 +2752,7 @@ export function MaintenanceDashboard() {
 
                   <label className="form-control w-full sm:col-span-2">
                     <span className="mb-1 text-sm opacity-70">
-                      Attach invoice / receipt file (optional)
+                      Upload invoice / receipt (optional, max ~1.2MB)
                     </span>
                     <input
                       type="file"
@@ -2521,19 +2760,40 @@ export function MaintenanceDashboard() {
                       accept="image/*,.pdf"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) {
-                          updateEditingDocument("fileName", file.name);
+                        if (!file) {
+                          updateEditingDocument("fileName", "");
+                          updateEditingDocument("fileDataUrl", "");
+                          return;
                         }
+                        if (file.size > MAX_DOC_FILE_BYTES) {
+                          setSavedMsg(
+                            "File is too large to store (max ~1.2MB)."
+                          );
+                          updateEditingDocument("fileName", file.name);
+                          updateEditingDocument("fileDataUrl", "");
+                          return;
+                        }
+                        void readFileAsDataUrl(file).then((dataUrl) => {
+                          setEditingDocument((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  fileName: file.name,
+                                  fileDataUrl: dataUrl,
+                                }
+                              : prev
+                          );
+                        });
                       }}
                     />
                     {editingDocument.fileName ? (
                       <span className="mt-1 text-xs opacity-60">
                         Current: {editingDocument.fileName}
+                        {editingDocument.fileDataUrl ? " · attached" : ""}
                       </span>
                     ) : (
                       <span className="mt-1 text-xs opacity-55">
-                        You can save without a file if you only need the amount
-                        on the work order.
+                        Optional — attach a PDF or image.
                       </span>
                     )}
                   </label>
@@ -2551,23 +2811,42 @@ export function MaintenanceDashboard() {
                   </label>
 
                   <label className="form-control w-full sm:col-span-2">
-                    <span className="mb-1 text-sm opacity-70">Budget line</span>
+                    <span className="mb-1 text-sm opacity-70">
+                      Budget category
+                    </span>
                     <select
                       className="select select-bordered w-full"
                       value={editingDocument.budgetLineId}
-                      onChange={(e) =>
-                        updateEditingDocument("budgetLineId", e.target.value)
-                      }
+                      onChange={(e) => {
+                        const budgetLineId = e.target.value;
+                        const line = editDocCodingLines.find(
+                          (b) => b.id === budgetLineId
+                        );
+                        setEditingDocument((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                budgetLineId,
+                                category: line
+                                  ? (line.category as WorkOrderCategory)
+                                  : prev.category,
+                                payableCategory: line
+                                  ? workOrderCategoryToPayableCategory(
+                                      line.category
+                                    )
+                                  : prev.payableCategory,
+                              }
+                            : prev
+                        );
+                      }}
                       required
                     >
-                      <option value="">Select budget line</option>
-                      {budget
-                        .filter((b) => b.category !== "all")
-                        .map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.label}
-                          </option>
-                        ))}
+                      <option value="">Select budget category</option>
+                      {editDocCodingLines.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {maintenanceBudgetCode(b.category)} · {b.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
                 </div>
@@ -2606,20 +2885,17 @@ export function MaintenanceDashboard() {
                 </h2>
               </div>
               <p className="text-sm opacity-65">
-                Link each invoice or receipt to an existing work order. That
-                sets the work order’s actual cost and updates budget spend. For
-                in-house jobs, record the store or payee where supplies were
-                bought (for example Home Depot).
+                Link to a work order when applicable, or choose non-specific.
+                Code spend to a Management budget category and optionally upload
+                the invoice or receipt file.
               </p>
               <p className="text-xs opacity-55">
-                Submitted to management for approval (auto-approved for now).
+                Submitted to management for approval.
               </p>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="form-control w-full sm:col-span-2">
-                  <span className="mb-1 text-sm opacity-70">
-                    Work order (required)
-                  </span>
+                  <span className="mb-1 text-sm opacity-70">Work order</span>
                   <select
                     className="select select-bordered w-full"
                     value={docForm.workOrderId}
@@ -2627,6 +2903,9 @@ export function MaintenanceDashboard() {
                     required
                   >
                     <option value="">Select work order</option>
+                    <option value={NON_SPECIFIC_WORK_ORDER}>
+                      Non-specific (not linked to a work order)
+                    </option>
                     {orders.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.title} · {o.property}
@@ -2636,7 +2915,7 @@ export function MaintenanceDashboard() {
                     ))}
                   </select>
                   <span className="mt-1 text-xs opacity-55">
-                    Chooses which ledger job this document updates.
+                    Linked documents update that job’s actual cost.
                   </span>
                 </label>
 
@@ -2725,31 +3004,57 @@ export function MaintenanceDashboard() {
                 </label>
 
                 <label className="form-control w-full">
-                  <span className="mb-1 text-sm opacity-70">Property</span>
-                  <input
-                    className="input input-bordered w-full"
+                  <span className="mb-1 text-sm opacity-70">
+                    Location / property
+                  </span>
+                  <select
+                    className="select select-bordered w-full"
                     value={docForm.property}
                     onChange={(e) => updateDocForm("property", e.target.value)}
-                    placeholder="Riverbend Commerce Center"
-                  />
+                    required
+                  >
+                    <option value="">Select location</option>
+                    {properties.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                    {docForm.property &&
+                    !properties.includes(docForm.property) ? (
+                      <option value={docForm.property}>{docForm.property}</option>
+                    ) : null}
+                  </select>
                 </label>
 
                 <label className="form-control w-full">
-                  <span className="mb-1 text-sm opacity-70">Category</span>
+                  <span className="mb-1 text-sm opacity-70">
+                    Budget category
+                  </span>
                   <select
                     className="select select-bordered w-full"
-                    value={docForm.category}
-                    onChange={(e) =>
-                      updateDocForm(
-                        "category",
-                        e.target.value as WorkOrderCategory | ""
-                      )
-                    }
+                    value={docForm.budgetLineId}
+                    onChange={(e) => {
+                      const budgetLineId = e.target.value;
+                      const line = docCodingLines.find(
+                        (b) => b.id === budgetLineId
+                      );
+                      setDocForm((prev) => ({
+                        ...prev,
+                        budgetLineId,
+                        category: line
+                          ? (line.category as WorkOrderCategory)
+                          : prev.category,
+                        payableCategory: line
+                          ? workOrderCategoryToPayableCategory(line.category)
+                          : prev.payableCategory,
+                      }));
+                    }}
+                    required
                   >
-                    <option value="">No category</option>
-                    {WORK_ORDER_CATEGORIES.map((c) => (
-                      <option key={c.value} value={c.value}>
-                        {c.label}
+                    <option value="">Select budget category</option>
+                    {docCodingLines.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {maintenanceBudgetCode(b.category)} · {b.label}
                       </option>
                     ))}
                   </select>
@@ -2757,25 +3062,24 @@ export function MaintenanceDashboard() {
 
                 <label className="form-control w-full sm:col-span-2">
                   <span className="mb-1 text-sm opacity-70">
-                    Attach invoice / receipt file (optional)
+                    Upload invoice / receipt (optional, max ~1.2MB)
                   </span>
                   <input
                     type="file"
                     className="file-input file-input-bordered w-full"
                     accept="image/*,.pdf"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      updateDocForm("fileName", file?.name ?? "");
-                    }}
+                    onChange={(e) =>
+                      void onDocumentFileChange(e.target.files?.[0])
+                    }
                   />
                   {docForm.fileName ? (
                     <span className="mt-1 text-xs opacity-60">
                       Selected: {docForm.fileName}
+                      {docForm.fileDataUrl ? " · attached" : ""}
                     </span>
                   ) : (
                     <span className="mt-1 text-xs opacity-55">
-                      You can submit without a file if you only need the amount
-                      on the work order.
+                      Optional — attach a PDF or image of the invoice/receipt.
                     </span>
                   )}
                 </label>
@@ -2788,31 +3092,6 @@ export function MaintenanceDashboard() {
                     onChange={(e) => updateDocForm("notes", e.target.value)}
                     placeholder="What was purchased or billed?"
                   />
-                </label>
-
-                <label className="form-control w-full sm:col-span-2">
-                  <span className="mb-1 text-sm opacity-70">Budget line</span>
-                  <select
-                    className="select select-bordered w-full"
-                    value={docForm.budgetLineId}
-                    onChange={(e) =>
-                      updateDocForm("budgetLineId", e.target.value)
-                    }
-                    required
-                  >
-                    <option value="">Select budget line</option>
-                    {budget
-                      .filter((b) => b.category !== "all")
-                      .map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.label}
-                        </option>
-                      ))}
-                  </select>
-                  <span className="mt-1 text-xs opacity-55">
-                    Amount is applied to this budget line and to the work
-                    order’s actual cost.
-                  </span>
                 </label>
               </div>
 
