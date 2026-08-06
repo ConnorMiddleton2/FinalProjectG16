@@ -12,6 +12,8 @@
   --harbor-glow: #f0c27a;
   --harbor-card: rgba(255, 255, 255, 0.92);
   --harbor-focus: #1f7a8c;
+  /* Muted body text ≥ ~4.5:1 on white / sand backgrounds */
+  --harbor-muted: color-mix(in srgb, var(--harbor-ink) 72%, white);
 }
 
 html,
@@ -26,6 +28,17 @@ body {
 
 .font-display {
   font-family: var(--font-display), Georgia, serif;
+}
+
+/* Portal keyboard focus ring */
+.portal-focus:focus-visible {
+  outline: 2px solid var(--harbor-focus);
+  outline-offset: 2px;
+}
+
+.portal-tap {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
 }
 
 /* —— Owner portal design system —— */
@@ -286,6 +299,15 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
   .welcome-rise,
   .welcome-rise-delay,
   .welcome-drift,
@@ -303,8 +325,9 @@ body {
 
   .owner-card-interactive:hover,
   .owner-btn-primary:hover:not(:disabled),
-  .owner-btn-secondary:hover:not(:disabled) {
-    transform: none;
+  .owner-btn-secondary:hover:not(:disabled),
+  .portal-motion-safe:hover {
+    transform: none !important;
   }
 }
 

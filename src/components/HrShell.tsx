@@ -242,41 +242,13 @@ export function HrDashboard() {
   function startEdit(emp: HrEmployee) {
     setCreating(false);
     setEditing(emp);
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } =
+      emp;
     setForm({
-      employeeId: emp.employeeId,
-      firstName: emp.firstName,
-      lastName: emp.lastName,
-      email: emp.email,
-      phone: emp.phone,
-      department: emp.department,
-      category: emp.category,
-      jobTitle: emp.jobTitle,
-      status: emp.status,
+      ...rest,
       propertyId: emp.propertyId || "",
       propertyName: emp.propertyName || "",
       moduleAccess: [...emp.moduleAccess],
-      passwordHash: emp.passwordHash,
-      temporaryPassword: emp.temporaryPassword,
-      mustResetPassword: emp.mustResetPassword,
-      payType: emp.payType,
-      payRate: emp.payRate,
-      payFrequency: emp.payFrequency,
-      payEffectiveDate: emp.payEffectiveDate,
-      federalWithholding: emp.federalWithholding,
-      stateWithholding: emp.stateWithholding,
-      deductionsNotes: emp.deductionsNotes,
-      directDepositBank: emp.directDepositBank,
-      directDepositAccountLast4: emp.directDepositAccountLast4,
-      directDepositRoutingLast4: emp.directDepositRoutingLast4,
-      payrollNotes: emp.payrollNotes,
-      contractTitle: emp.contractTitle,
-      contractStart: emp.contractStart,
-      contractEnd: emp.contractEnd,
-      contractFileName: emp.contractFileName,
-      contractNotes: emp.contractNotes,
-      hiredAt: emp.hiredAt,
-      terminatedAt: emp.terminatedAt,
-      notes: emp.notes,
     });
     setSelectedId(emp.id);
   }

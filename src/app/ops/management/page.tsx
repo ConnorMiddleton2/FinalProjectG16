@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { requireOpsModule } from "@/lib/team-auth";
 import { MgShell, tileClass } from "@/components/mgmt/MgShell";
+import { ManagementCollectionsPanel } from "@/components/ManagementCollectionsPanel";
 
 const categories = [
   {
@@ -87,6 +88,10 @@ export default async function ManagementHubPage() {
             </div>
           </Link>
         ))}
+      </div>
+
+      <div className="mt-8">
+        <ManagementCollectionsPanel />
       </div>
     </MgShell>
   );

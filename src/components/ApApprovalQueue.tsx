@@ -5,6 +5,8 @@ import {
   COLLECTIONS,
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
+import { useApQueueOperatingExpenseSync } from "@/hooks/useApQueueOperatingExpenseSync";
+import { syncApQueueToOperatingExpense } from "@/lib/ap-queue-sync";
 import {
   money,
   seedApPayables,
@@ -26,6 +28,8 @@ export function ApApprovalQueue() {
     loading,
     error,
   } = useSharedCollection<ApPayable>(COLLECTIONS.apPayables, seedApPayables);
+  const { payableInvoices, savePayableInvoice } =
+    useApQueueOperatingExpenseSync();
 
   const [filter, setFilter] = useState<"open" | "all">("open");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -48,14 +52,16 @@ export function ApApprovalQueue() {
     .reduce((s, r) => s + r.amount, 0);
 
   async function setStatus(row: ApPayable, status: ApPayableStatus) {
-    await saveOne({
+    const next = {
       ...row,
       status,
       paidAt: status === "paid" ? new Date().toISOString() : row.paidAt,
-    });
+    };
+    await saveOne(next);
+    await syncApQueueToOperatingExpense(next, payableInvoices, savePayableInvoice);
     setMsg(
       status === "paid"
-        ? "Marked paid."
+        ? "Marked paid and recorded under Operating expenses."
         : `Status updated to ${status.replaceAll("_", " ")}.`
     );
     setTimeout(() => setMsg(null), 2500);
@@ -66,7 +72,8 @@ export function ApApprovalQueue() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="max-w-2xl text-sm opacity-65">
           Invoices and receipts approved by Management land here for payment
-          processing.
+          processing. Queue rows sync to the Operating expenses tab; marking paid
+          updates the vendor invoice there.
         </p>
         <select
           className="select select-bordered select-sm bg-white"

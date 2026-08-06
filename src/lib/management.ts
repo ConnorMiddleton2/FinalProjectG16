@@ -4,6 +4,13 @@ import {
   normalizeSmCode,
   SM_CATEGORY_TO_CODE,
 } from "@/lib/sales-marketing";
+import {
+  normalizeDocumentApproval,
+  normalizeMaintenanceDocument,
+  type MaintenanceDocument,
+} from "@/lib/maintenance";
+import type { PayableCategory, PayableInvoice } from "@/lib/accounts-payable";
+import { addDaysIso, round2, todayIso } from "@/lib/money";
 
 export type OwnerContract = {
   id: string;
@@ -217,7 +224,7 @@ export type ApPayableStatus =
 export type ApPayable = {
   id: string;
   sourceExpenseId: string;
-  source: "department" | "sales_marketing";
+  source: "department" | "sales_marketing" | "maintenance";
   department: DepartmentKey | "sales_marketing";
   departmentLabel: string;
   code: string;
@@ -1126,7 +1133,7 @@ Please reply with a few times that work over the next two weeks, or confirm a ca
 
 export type UnifiedExpense = {
   id: string;
-  source: "department" | "sales_marketing";
+  source: "department" | "sales_marketing" | "maintenance";
   departmentLabel: string;
   code: string;
   vendor: string;
@@ -1135,8 +1142,42 @@ export type UnifiedExpense = {
   fileName: string;
   status: "pending" | "approved" | "declined";
   submittedAt: string;
-  raw: DepartmentExpense | SmReceipt;
+  raw: DepartmentExpense | SmReceipt | MaintenanceDocument;
 };
+
+export function maintenanceDocToUnified(doc: MaintenanceDocument): UnifiedExpense {
+  const n = normalizeMaintenanceDocument(doc);
+  const approval = normalizeDocumentApproval(n);
+  const status =
+    approval.approvalStatus === "approved"
+      ? "approved"
+      : approval.approvalStatus === "rejected"
+        ? "declined"
+        : "pending";
+  const description = [
+    n.notes,
+    n.workOrderId ? `Work order: ${n.workOrderId}` : "",
+    n.property ? `Property: ${n.property}` : "",
+    n.kind === "invoice" ? "Invoice" : "Receipt",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return {
+    id: `maint:${n.id}`,
+    source: "maintenance",
+    departmentLabel: "Maintenance",
+    code: n.invoiceNumber.trim() || n.id,
+    vendor: n.vendorName,
+    amount: typeof n.amount === "number" ? n.amount : Number(n.amount) || 0,
+    description,
+    fileName: n.fileName,
+    status,
+    submittedAt:
+      approval.submittedForApprovalAt || n.submittedAt || new Date().toISOString(),
+    raw: n,
+  };
+}
 
 export function smReceiptToUnified(r: SmReceipt): UnifiedExpense {
   return {
@@ -1175,7 +1216,9 @@ export function unifiedExpenseToApPayable(row: UnifiedExpense): ApPayable {
   const department: ApPayable["department"] =
     row.source === "sales_marketing"
       ? "sales_marketing"
-      : (row.raw as DepartmentExpense).department;
+      : row.source === "maintenance"
+        ? "maintenance"
+        : (row.raw as DepartmentExpense).department;
 
   return {
     id: crypto.randomUUID(),
@@ -1192,5 +1235,68 @@ export function unifiedExpenseToApPayable(row: UnifiedExpense): ApPayable {
     receivedAt: now,
     approvedByManagementAt: now,
     notes: "",
+  };
+}
+
+function departmentToPayableCategory(
+  department: ApPayable["department"]
+): PayableCategory {
+  switch (department) {
+    case "maintenance":
+      return "maintenance";
+    case "sales_marketing":
+      return "professional_fees";
+    case "human_resources":
+      return "professional_fees";
+    case "operations":
+      return "supplies";
+    case "accounts_payable":
+      return "other";
+    default:
+      return "other";
+  }
+}
+
+/** Stable operating-expense invoice id for a Management-approved expense. */
+export function payableInvoiceIdForExpense(sourceExpenseId: string) {
+  return `mgmt-inv:${sourceExpenseId}`;
+}
+
+/**
+ * Operating expense invoice for the A/P Operating expenses tab, created when
+ * Management approves a department / S&M expense.
+ */
+export function unifiedExpenseToPayableInvoice(
+  row: UnifiedExpense
+): PayableInvoice {
+  const invoiceDate = todayIso();
+  const department: ApPayable["department"] =
+    row.source === "sales_marketing"
+      ? "sales_marketing"
+      : (row.raw as DepartmentExpense).department;
+
+  return {
+    id: payableInvoiceIdForExpense(row.id),
+    invoiceNumber:
+      row.code.trim() ||
+      `MGMT-${row.id.replace(/[^a-zA-Z0-9]/g, "").slice(-8)}`,
+    vendorName: row.vendor,
+    vendorId: "",
+    category: departmentToPayableCategory(department),
+    property: "",
+    amount: round2(row.amount),
+    amountPaid: 0,
+    disputed: false,
+    invoiceDate,
+    dueDate: addDaysIso(invoiceDate, 30),
+    fileName: row.fileName,
+    notes: [
+      `Approved by Management · ${row.departmentLabel}`,
+      row.description,
+      `sourceExpenseId=${row.id}`,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    createdAt: new Date().toISOString(),
   };
 }

@@ -229,3 +229,36 @@ export function feeStructureLabel(value: FeeStructure) {
       return value;
   }
 }
+
+/** Parse numeric metrics stored as strings on management contracts. */
+export function parseMetricNumber(value: string | undefined | null): number {
+  if (value == null || value === "") return 0;
+  const n = Number(String(value).replace(/[,$%\s]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function formatMetricCurrency(
+  value: string | number | undefined,
+  emptyLabel = "—"
+): string {
+  const n = typeof value === "number" ? value : parseMetricNumber(value);
+  if (!n) return emptyLabel;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+export function formatPropertyAddress(c: ManagementContractDraft): string {
+  return [
+    c.streetAddress,
+    [c.city, c.state].filter(Boolean).join(", "),
+    c.zip,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Low occupancy threshold used by portfolio filters (percent). */
+export const LOW_OCCUPANCY_THRESHOLD = 85;

@@ -257,17 +257,36 @@ export const SEED_RENT_ROLL: Lease[] = [
   },
 ];
 
-/** Rent collected per property in a month, used to size owner remittances. */
-export function seededRentCollected(property: string, monthsAgo: number) {
+/**
+ * Sum of base rent collected for a property/period from live (or any)
+ * receivable rows — used to size owner remittances after A/R edits.
+ */
+export function rentCollectedFromReceivables(
+  rows: Pick<
+    Receivable,
+    "property" | "period" | "category" | "amountReceived"
+  >[],
+  property: string,
+  period: string
+) {
   return round2(
-    seedRentalReceivables()
+    rows
       .filter(
         (row) =>
           row.property === property &&
           row.category === "base_rent" &&
-          row.period === monthPeriodLabel(monthsAgo)
+          row.period === period
       )
       .reduce((sum, row) => sum + row.amountReceived, 0)
+  );
+}
+
+/** Rent collected per property in a seed month (from the in-memory rent roll). */
+export function seededRentCollected(property: string, monthsAgo: number) {
+  return rentCollectedFromReceivables(
+    seedRentalReceivables(),
+    property,
+    monthPeriodLabel(monthsAgo)
   );
 }
 

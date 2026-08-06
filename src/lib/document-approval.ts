@@ -8,7 +8,7 @@ import type {
  * Flip to false (or replace submitDocumentForApproval) when Management
  * owns real review at /ops/management.
  */
-export const AUTO_APPROVE_DOCUMENTS = true;
+export const AUTO_APPROVE_DOCUMENTS = false;
 
 const SYSTEM_AUTO_APPROVER = "system-auto";
 

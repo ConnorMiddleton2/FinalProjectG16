@@ -16,8 +16,18 @@ export const COLLECTIONS = {
   tenantInvoices: "tenant_invoices",
   payableInvoices: "payable_invoices",
   ownerPayables: "owner_payables",
+  /**
+   * AR teammate rent ledger — Collections may READ only.
+   * Never write or mutate this collection from Collections UI.
+   */
   rentalReceivables: "rental_receivables",
   miscellaneousReceivables: "miscellaneous_receivables",
+  /** Collections weekly notices (simulated delivery only). */
+  collectionsNotices: "collections_notices",
+  /** Per-tenant pause / dispute / payment-plan / review controls. */
+  collectionsAccountState: "collections_account_state",
+  /** 90-day management-review alerts (internal only). */
+  managementAlerts: "management_alerts",
   smCampaigns: "sm_campaigns",
   smCalendarEvents: "sm_calendar_events",
   smBudgetConfig: "sm_budget_config",

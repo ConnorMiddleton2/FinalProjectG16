@@ -19,13 +19,18 @@ import {
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
 import {
+  rentCollectedFromReceivables,
+  seedRentalReceivables,
+  type Receivable,
+} from "@/lib/accounts-receivable";
+import type { ManagementContractDraft } from "@/lib/management-contract";
+import {
+  applyLiveRentToRemittance,
   balanceOf,
   computeNetDue,
   daysLate,
   emptyOwnerPayableForm,
-  feeAmountFromPercent,
   isOverdue,
-  MANAGEMENT_FEE_PERCENT,
   money,
   ownerPayableStatusLabel,
   ownerPaymentMethodLabel,
@@ -35,6 +40,7 @@ import {
   parseNonNegativeAmount,
   parsePositiveAmount,
   normalizeOwnerPayable,
+  resolveManagementFee,
   round2,
   seedOwnerPayables,
   statusOf,
@@ -65,11 +71,80 @@ export function OwnerPayablesPanel() {
     COLLECTIONS.ownerPayables,
     seedOwnerPayables
   );
+  const {
+    items: rentalReceivables,
+    loading: arLoading,
+  } = useSharedCollection<Receivable>(
+    COLLECTIONS.rentalReceivables,
+    seedRentalReceivables
+  );
+  const { items: managedProperties } =
+    useSharedCollection<ManagementContractDraft>(COLLECTIONS.managedProperties);
 
   const payables = useMemo(
     () => items.map((row) => normalizeOwnerPayable(row)),
     [items]
   );
+
+  const arFingerprint = useMemo(
+    () =>
+      rentalReceivables
+        .map((r) => `${r.id}:${r.amountReceived}:${r.period}:${r.property}`)
+        .join("|"),
+    [rentalReceivables]
+  );
+  const feeFingerprint = useMemo(
+    () =>
+      managedProperties
+        .map(
+          (p) =>
+            `${p.id}:${p.propertyName}:${p.feeStructure}:${p.feePercent}:${p.feeFlatAmount}`
+        )
+        .join("|"),
+    [managedProperties]
+  );
+
+  // Keep unpaid monthly remittances aligned with live A/R + contract fee %.
+  useEffect(() => {
+    if (loading || arLoading || items.length === 0) return;
+
+    let cancelled = false;
+    async function syncFromLiveAr() {
+      for (const raw of items) {
+        const row = normalizeOwnerPayable(raw);
+        if (row.paymentType !== "monthly_distribution") continue;
+        if (row.amountPaid > 0) continue;
+        const next = applyLiveRentToRemittance(
+          row,
+          rentalReceivables,
+          managedProperties
+        );
+        if (
+          next.grossRentCollected === row.grossRentCollected &&
+          next.managementFeePercent === row.managementFeePercent &&
+          next.managementFeeAmount === row.managementFeeAmount &&
+          next.amount === row.amount
+        ) {
+          continue;
+        }
+        if (cancelled) return;
+        await saveOne(next);
+      }
+    }
+    void syncFromLiveAr();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loading,
+    arLoading,
+    arFingerprint,
+    feeFingerprint,
+    items,
+    rentalReceivables,
+    managedProperties,
+    saveOne,
+  ]);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [viewingId, setViewingId] = useState<string | null>(null);
@@ -79,6 +154,16 @@ export function OwnerPayablesPanel() {
   const [paymentAmount, setPaymentAmount] = useState("");
 
   const today = todayIso();
+
+  const formFee = useMemo(
+    () =>
+      resolveManagementFee(
+        form.property,
+        parseNonNegativeAmount(form.grossRentCollected) ?? 0,
+        managedProperties
+      ),
+    [form.property, form.grossRentCollected, managedProperties]
+  );
 
   const totals = useMemo(() => {
     let billed = 0;
@@ -196,6 +281,34 @@ export function OwnerPayablesPanel() {
     setShowAddForm(true);
   }
 
+  // Prefill collected rent from live A/R when property + period are set.
+  useEffect(() => {
+    if (!showAddForm || form.paymentType !== "monthly_distribution") return;
+    const property = form.property.trim();
+    const period = form.period.trim();
+    if (!property || !period) return;
+    const collected = rentCollectedFromReceivables(
+      rentalReceivables,
+      property,
+      period
+    );
+    const fee = resolveManagementFee(property, collected, managedProperties);
+    setForm((prev) => ({
+      ...prev,
+      grossRentCollected: String(collected),
+      managementFeePercent: String(fee.percent),
+    }));
+    // Only when property/period (or AR/contracts) change — not on every gross edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional deps
+  }, [
+    showAddForm,
+    form.property,
+    form.period,
+    form.paymentType,
+    rentalReceivables,
+    managedProperties,
+  ]);
+
   async function handleAdd(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
@@ -219,7 +332,12 @@ export function OwnerPayablesPanel() {
       parseNonNegativeAmount(form.reimbursableExpenses) ?? 0;
     const reservesWithheld =
       parseNonNegativeAmount(form.reservesWithheld) ?? 0;
-    const managementFeeAmount = feeAmountFromPercent(grossRentCollected);
+    const fee = resolveManagementFee(
+      property,
+      grossRentCollected,
+      managedProperties
+    );
+    const managementFeeAmount = fee.amount;
     const amount =
       form.paymentType === "monthly_distribution"
         ? computeNetDue({
@@ -233,7 +351,7 @@ export function OwnerPayablesPanel() {
     if (amount === null || amount <= 0) {
       setFormError(
         form.paymentType === "monthly_distribution"
-          ? "The rental income must exceed the 10% management fee, reimbursable expenses, and reserves withheld."
+          ? `The rental income must exceed the ${fee.percent}% management fee, reimbursable expenses, and reserves withheld.`
           : "Amount owed must be a positive dollar amount."
       );
       return;
@@ -281,9 +399,7 @@ export function OwnerPayablesPanel() {
       paymentType: form.paymentType,
       grossRentCollected,
       managementFeePercent:
-        form.paymentType === "monthly_distribution"
-          ? MANAGEMENT_FEE_PERCENT
-          : 0,
+        form.paymentType === "monthly_distribution" ? fee.percent : 0,
       managementFeeAmount:
         form.paymentType === "monthly_distribution"
           ? managementFeeAmount
@@ -386,9 +502,9 @@ export function OwnerPayablesPanel() {
                 to date
               </p>
               <p className="mt-1 text-xs text-[var(--harbor-ink)]/50">
-                Monthly distributions equal rental income collected, less
-                Harborline&apos;s 10% management fee, reimbursable property
-                expenses, and reserves withheld.
+                Monthly distributions equal rental income collected (from A/R),
+                less Harborline&apos;s contract management fee, reimbursable
+                property expenses, and reserves withheld.
               </p>
             </div>
 
@@ -729,9 +845,13 @@ export function OwnerPayablesPanel() {
                 Owner remittance waterfall
               </p>
               <p className="mt-1 text-xs opacity-60">
-                Harborline earns 10% of rental income. The owner receives the
-                remaining amount after reimbursable property expenses and
-                reserves withheld.
+                Harborline earns {formFee.percent}% of rental income
+                {formFee.source === "contract"
+                  ? " (from the signed management contract)"
+                  : " (portfolio default — no matching contract found)"}
+                . Collected rent prefills from Accounts Receivable for the
+                property and period. The owner receives the remaining amount
+                after reimbursable property expenses and reserves withheld.
               </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <label className="form-control w-full">
@@ -747,17 +867,14 @@ export function OwnerPayablesPanel() {
                 </label>
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 px-4 py-3">
                   <span className="mb-1 text-sm opacity-70">
-                    Harborline management fee (10%)
+                    Harborline management fee ({formFee.percent}%)
                   </span>
                   <p className="text-xl font-semibold tabular-nums text-emerald-800">
-                    {money(
-                      feeAmountFromPercent(
-                        parseNonNegativeAmount(form.grossRentCollected) ?? 0
-                      )
-                    )}
+                    {money(formFee.amount)}
                   </p>
                   <span className="text-xs opacity-55">
-                    Calculated automatically; the rate cannot be changed.
+                    Calculated from the management contract; rate cannot be
+                    edited here.
                   </span>
                 </div>
                 <label className="form-control w-full">
@@ -791,9 +908,7 @@ export function OwnerPayablesPanel() {
                       computeNetDue({
                         grossRentCollected:
                           parseNonNegativeAmount(form.grossRentCollected) ?? 0,
-                        managementFeeAmount: feeAmountFromPercent(
-                          parseNonNegativeAmount(form.grossRentCollected) ?? 0
-                        ),
+                        managementFeeAmount: formFee.amount,
                         reimbursableExpenses:
                           parseNonNegativeAmount(form.reimbursableExpenses) ?? 0,
                         reservesWithheld:
@@ -802,7 +917,8 @@ export function OwnerPayablesPanel() {
                     )}
                   </p>
                   <span className="text-xs opacity-55">
-                    Rental income − 10% fee − expenses − reserves.
+                    Rental income − {formFee.percent}% fee − expenses −
+                    reserves.
                   </span>
                 </div>
                 {form.paymentType !== "monthly_distribution" ? (
@@ -1051,10 +1167,33 @@ export function OwnerPayablesPanel() {
                   </div>
                 </dl>
                 <p className="mt-2 text-xs opacity-55">
-                  Harborline&apos;s income is the 10% management fee. Expenses
-                  and reserves reduce the owner distribution but are not
-                  additional Harborline income.
+                  Harborline&apos;s income is the {viewing.managementFeePercent}%
+                  management fee from the signed contract (or portfolio
+                  default). Expenses and reserves reduce the owner distribution
+                  but are not additional Harborline income. Unpaid monthly
+                  remittances refresh automatically when A/R collections change.
                 </p>
+                {viewing.paymentType === "monthly_distribution" &&
+                viewing.amountPaid === 0 ? (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-xs mt-3"
+                    onClick={async () => {
+                      const next = applyLiveRentToRemittance(
+                        viewing,
+                        rentalReceivables,
+                        managedProperties
+                      );
+                      await saveOne(next);
+                      setSavedMsg(
+                        "Remittance refreshed from A/R collections and management contract."
+                      );
+                      setTimeout(() => setSavedMsg(null), 3500);
+                    }}
+                  >
+                    Refresh from A/R collections
+                  </button>
+                ) : null}
               </div>
 
               <dl className="divide-y divide-base-300 rounded-xl border border-[var(--harbor-deep)]/15 bg-white text-sm">

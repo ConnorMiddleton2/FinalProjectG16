@@ -28,6 +28,8 @@ import {
   generateMaintenanceInvoiceNumber,
   isDocumentApproved,
   laborLabel,
+  maintenanceDocumentAppliesToBudget,
+  maintenanceDocumentForwardsToAp,
   normalizeDocumentApproval,
   normalizeMaintenanceDocument,
   approvalStatusLabel,
@@ -820,7 +822,13 @@ export function MaintenanceDashboard() {
       expenseForm.kind === "invoice" ? "Invoice" : "Receipt";
     setExpenseForm(emptyExpenseForm());
     setShowExpenseForm(false);
-    setExpenseMsg(`${kindLabel} submitted for Management approval.`);
+    setExpenseMsg(
+      isDocumentApproved(receipt)
+        ? `${kindLabel} submitted and applied to budget.`
+        : expenseForm.kind === "invoice"
+          ? `${kindLabel} submitted to Management for approval. Will forward to Accounts Payable once approved.`
+          : `${kindLabel} submitted to Management for approval. Budget will update once approved.`
+    );
     setTimeout(() => setExpenseMsg(null), 3000);
   }
 
@@ -1005,9 +1013,13 @@ export function MaintenanceDashboard() {
 
       setDocForm(emptyDocument());
       setSavedMsg(
-        `${docForm.kind === "invoice" ? "Invoice" : "Receipt"} submitted for approval${
-          linkedOrder ? `, linked to "${linkedOrder.title}"` : " (non-specific)"
-        }, and budget synced.`
+        isDocumentApproved(next)
+          ? `${docForm.kind === "invoice" ? "Invoice" : "Receipt"} submitted${
+              linkedOrder ? `, linked to "${linkedOrder.title}"` : " (non-specific)"
+            }, and budget synced.`
+          : docForm.kind === "invoice"
+            ? "Invoice submitted to Management for approval. Will forward to Accounts Payable once approved."
+            : "Receipt submitted to Management for approval. Budget and work order will update once approved."
       );
       setTimeout(() => setSavedMsg(null), 4000);
     } catch (err) {
@@ -1289,12 +1301,16 @@ export function MaintenanceDashboard() {
 
       setHighlightId(updated.id);
       setSavedMsg(
-        `${updated.kind === "invoice" ? "Invoice" : "Receipt"} resubmitted for approval${
-          previousWorkOrderId &&
-          previousWorkOrderId !== (linkedOrder?.id ?? "")
-            ? "; work order costs recomputed"
-            : ""
-        }, and budget synced.`
+        isDocumentApproved(updated)
+          ? `${updated.kind === "invoice" ? "Invoice" : "Receipt"} updated${
+              previousWorkOrderId &&
+              previousWorkOrderId !== (linkedOrder?.id ?? "")
+                ? "; work order costs recomputed"
+                : ""
+            }, and budget synced.`
+          : updated.kind === "invoice"
+            ? "Invoice resubmitted to Management for approval. Will forward to Accounts Payable once approved."
+            : "Receipt resubmitted to Management for approval. Budget and work order will update once approved."
       );
       cancelEditDocument();
       setTimeout(() => setSavedMsg(null), 4000);
@@ -2551,8 +2567,8 @@ export function MaintenanceDashboard() {
                   </table>
                 </div>
                 <p className="text-[10px] opacity-50">
-                  Approvals happen in Management → Approve receipts &amp;
-                  invoices.
+                  Invoices: Management → Accounts Payable. Receipts: Management
+                  → budget (not AP).
                 </p>
               </div>
             </div>
@@ -2574,8 +2590,7 @@ export function MaintenanceDashboard() {
                     <p className="text-sm opacity-65">
                       Update this invoice or receipt. Changing the work order
                       recomputes actual cost on both the previous and new jobs.
-                      Saves are submitted to management for approval
-                      (auto-approved for now).
+                      Saves are submitted to Management for approval.
                     </p>
                     <p className="mt-1 text-xs opacity-55">
                       Status:{" "}
@@ -2890,7 +2905,8 @@ export function MaintenanceDashboard() {
                 the invoice or receipt file.
               </p>
               <p className="text-xs opacity-55">
-                Submitted to management for approval.
+                Invoices go to Management first, then Accounts Payable.
+                Receipts go to Management first, then apply to budget (not AP).
               </p>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -3172,10 +3188,22 @@ export function MaintenanceDashboard() {
                             : doc.workOrderId
                               ? " · WO: (missing from ledger)"
                               : " · No work order linked"}
-                          {doc.applyToBudget && isDocumentApproved(doc)
-                            ? " · Applied to budget"
-                            : doc.applyToBudget
-                              ? " · Awaiting approval for budget"
+                          {!isDocumentApproved(doc)
+                            ? maintenanceDocumentForwardsToAp(doc)
+                              ? " · Awaiting approval → Accounts Payable"
+                              : maintenanceDocumentAppliesToBudget(doc)
+                                ? " · Awaiting approval → budget"
+                                : " · Awaiting Management approval"
+                            : maintenanceDocumentForwardsToAp(doc)
+                              ? " · Approved → Accounts Payable"
+                              : maintenanceDocumentAppliesToBudget(doc)
+                                ? " · Applied to budget"
+                                : ""}
+                          {approval.approvalStatus === "rejected" &&
+                          approval.rejectionReason
+                            ? ` · Declined: ${approval.rejectionReason}`
+                            : approval.approvalStatus === "rejected"
+                              ? " · Declined by Management"
                               : ""}
                         </p>
                         {doc.notes ? (
