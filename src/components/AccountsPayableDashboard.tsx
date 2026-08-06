@@ -12,6 +12,7 @@ import {
   COLLECTIONS,
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
+import { useApQueueOperatingExpenseSync } from "@/hooks/useApQueueOperatingExpenseSync";
 import {
   CurrencyInput,
   DetailRow,
@@ -48,6 +49,8 @@ const STATUS_BADGE: Record<PayableStatus, string> = {
 
 /** Operating-expense vendor invoices (one tab inside Accounts Payable). */
 export function OperatingExpensesPayable() {
+  useApQueueOperatingExpenseSync();
+
   const {
     items: invoices,
     saveOne,

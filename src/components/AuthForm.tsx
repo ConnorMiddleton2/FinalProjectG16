@@ -1,22 +1,79 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { portalDemoLogin } from "@/app/portal/demo-actions";
 import { createClient } from "@/lib/supabase/client";
+import {
+  isPortalPrivatePath,
+  PORTAL_HOME_PATH,
+} from "@/lib/portal/auth";
+import {
+  isPortalDemoCredentials,
+  PORTAL_DEMO_PASSWORD,
+  PORTAL_DEMO_SESSION_STORAGE_KEY,
+  PORTAL_DEMO_TENANT,
+} from "@/lib/portal/portal-demo-auth";
 import { ALL_ROLES, ROLE_META, type UserRole } from "@/lib/types";
 
 type Mode = "login" | "signup";
 
+function emailNotConfirmedMessage(raw: string) {
+  const msg = raw.toLowerCase();
+  if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
+    return "Email not confirmed. Ask a FinalProjectG16 org admin to turn off Confirm email in Supabase (Authentication → Providers → Email), or confirm your user under Authentication → Users.";
+  }
+  return raw;
+}
+
 export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState(
+    mode === "login" ? PORTAL_DEMO_TENANT.email : ""
+  );
+  const [password, setPassword] = useState(
+    mode === "login" ? PORTAL_DEMO_PASSWORD : ""
+  );
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<UserRole>("manager");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (mode !== "login") return;
+    try {
+      window.sessionStorage.removeItem(PORTAL_DEMO_SESSION_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, [mode]);
+
+  async function resolvePostLoginPath(): Promise<string> {
+    const next = searchParams.get("next");
+    if (next && isPortalPrivatePath(next)) {
+      return next;
+    }
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return "/workspace";
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    const profileRole = (profile as { role?: UserRole } | null)?.role;
+    if (profileRole === "tenant") {
+      return PORTAL_HOME_PATH;
+    }
+    return "/workspace";
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -24,30 +81,62 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setError(null);
     setMessage(null);
 
-    try {
-      const supabase = createClient();
+    if (mode === "login") {
+      const next = searchParams.get("next");
+      const portalDestination =
+        next && isPortalPrivatePath(next) ? next : PORTAL_HOME_PATH;
 
-      if (mode === "login") {
+      // Prefill demo credentials always work via portal demo cookie (no Supabase user needed).
+      if (isPortalDemoCredentials(email, password)) {
+        try {
+          window.sessionStorage.setItem(
+            PORTAL_DEMO_SESSION_STORAGE_KEY,
+            JSON.stringify(PORTAL_DEMO_TENANT)
+          );
+        } catch {
+          /* private mode */
+        }
+        try {
+          await portalDemoLogin(portalDestination);
+        } catch (err) {
+          const digest =
+            err && typeof err === "object" && "digest" in err
+              ? String((err as { digest?: string }).digest)
+              : "";
+          if (digest.startsWith("NEXT_REDIRECT")) {
+            return;
+          }
+          setLoading(false);
+          setError(
+            err instanceof Error ? err.message : "Demo tenant login failed."
+          );
+        }
+        return;
+      }
+
+      try {
+        const supabase = createClient();
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (signInError) {
-          const msg = signInError.message.toLowerCase();
-          if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
-            setError(
-              "Email not confirmed. Ask a FinalProjectG16 org admin to turn off Confirm email in Supabase (Authentication → Providers → Email), or confirm your user under Authentication → Users."
-            );
-          } else {
-            setError(signInError.message);
-          }
+          setError(emailNotConfirmedMessage(signInError.message));
           return;
         }
-        router.push("/workspace");
+        const destination = await resolvePostLoginPath();
+        router.push(destination);
         router.refresh();
-        return;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not sign in.");
+      } finally {
+        setLoading(false);
       }
+      return;
+    }
 
+    try {
+      const supabase = createClient();
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -92,7 +181,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         </h1>
         <p className="text-sm opacity-70 -mt-1">
           {mode === "login"
-            ? "Access the Harborline property-management workspace."
+            ? "Demo tenant credentials are filled in — click Log in to open the portal."
             : "Sign up with a role so teammates can demo different perspectives."}
         </p>
 
@@ -162,17 +251,21 @@ export function AuthForm({ mode }: { mode: Mode }) {
           </div>
 
           {error && (
-            <div className="alert alert-error text-sm py-2">
+            <div className="alert alert-error text-sm py-2" role="alert">
               <span>{error}</span>
             </div>
           )}
           {message && (
-            <div className="alert alert-info text-sm py-2">
+            <div className="alert alert-info text-sm py-2" role="status">
               <span>{message}</span>
             </div>
           )}
 
-          <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+          <button
+            type="submit"
+            className="btn btn-primary min-h-11 w-full"
+            disabled={loading}
+          >
             {loading ? (
               <span className="loading loading-spinner" />
             ) : mode === "login" ? (

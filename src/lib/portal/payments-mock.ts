@@ -1,0 +1,109 @@
+import type { PaymentsOverview } from "@/lib/portal/payments-types";
+
+/** Isolated mock data for Current Tenant Payments — no full card/bank numbers. */
+export function getMockPaymentsOverview(): PaymentsOverview {
+  return {
+    currentBalance: "$4,875.00",
+    amountDue: "$4,800.00",
+    dueDate: "May 1, 2026",
+    paymentStatus: "Due",
+    lateFee: "$75.00",
+    autopay: {
+      enabled: false,
+      nextRunDate: null,
+      methodLabel: null,
+    },
+    savedMethod: {
+      id: "pm-1",
+      brand: "Visa",
+      last4: "4242",
+      kind: "Card",
+      isDefault: true,
+    },
+    transactions: [
+      {
+        id: "txn-1",
+        label: "April rent · Pier 12",
+        amount: "$4,800.00",
+        date: "2026-04-01",
+        displayDate: "Apr 1, 2026",
+        status: "Paid",
+        type: "Rent",
+        methodSummary: "Visa •••• 4242",
+        receiptAvailable: true,
+      },
+      {
+        id: "txn-2",
+        label: "March rent · Pier 12",
+        amount: "$4,800.00",
+        date: "2026-03-01",
+        displayDate: "Mar 1, 2026",
+        status: "Paid",
+        type: "Rent",
+        methodSummary: "Bank •••• 9910",
+        receiptAvailable: true,
+      },
+      {
+        id: "txn-3",
+        label: "Late fee · Canal Yard",
+        amount: "$75.00",
+        date: "2026-02-18",
+        displayDate: "Feb 18, 2026",
+        status: "Paid",
+        type: "Late fee",
+        methodSummary: "Visa •••• 4242",
+        receiptAvailable: true,
+      },
+      {
+        id: "txn-4",
+        label: "February rent · Pier 12",
+        amount: "$4,800.00",
+        date: "2026-02-01",
+        displayDate: "Feb 1, 2026",
+        status: "Paid",
+        type: "Autopay",
+        methodSummary: "Bank •••• 9910",
+        receiptAvailable: true,
+      },
+      {
+        id: "txn-5",
+        label: "Security deposit credit",
+        amount: "$0.00",
+        date: "2026-01-05",
+        displayDate: "Jan 5, 2026",
+        status: "Paid",
+        type: "Deposit",
+        methodSummary: "Ledger adjustment",
+        receiptAvailable: false,
+      },
+      {
+        id: "txn-6",
+        label: "May rent · Pier 12",
+        amount: "$4,800.00",
+        date: "2026-05-01",
+        displayDate: "May 1, 2026",
+        status: "Due",
+        type: "Rent",
+        methodSummary: "Not paid",
+        receiptAvailable: false,
+      },
+    ],
+  };
+}
+
+export function getEmptyPaymentsOverview(): PaymentsOverview {
+  return {
+    currentBalance: "$0.00",
+    amountDue: "$0.00",
+    dueDate: "—",
+    paymentStatus: "Paid",
+    lateFee: null,
+    autopay: {
+      enabled: false,
+      nextRunDate: null,
+      methodLabel: null,
+    },
+    savedMethod: null,
+    transactions: [],
+  };
+}

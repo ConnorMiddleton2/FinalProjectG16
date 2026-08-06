@@ -1,17 +1,6 @@
-import { RoleWorkspace } from "@/components/RoleWorkspace";
+import { redirect } from "next/navigation";
 
+/** Staff app /tenant route redirects into the Current Tenant Portal. */
 export default function TenantPage() {
-  return (
-    <RoleWorkspace
-      role="tenant"
-      title="Tenant portal"
-      summary="Tenants will view lease terms, balances, payment history, and submit maintenance requests."
-      upcomingModules={[
-        "Lease summary",
-        "Current balance and invoices",
-        "Payment history",
-        "Maintenance request form",
-      ]}
-    />
-  );
+  redirect("/portal");
 }

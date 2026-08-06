@@ -1,0 +1,36 @@
+import { DEMO_TENANT_ID } from "@/lib/portal/documents-types";
+import {
+  CURRENT_TENANT_ROLE,
+  type PortalTenantSession,
+} from "@/lib/portal/auth";
+
+/** HttpOnly cookie checked by proxy + server layouts (same pattern as team auth). */
+export const PORTAL_DEMO_COOKIE = "harborline_portal_tenant_v2";
+
+/** Readable flag so client hooks can resolve the demo session without Supabase. */
+export const PORTAL_DEMO_CLIENT_COOKIE = "harborline_portal_tenant_ui_v2";
+
+export const PORTAL_DEMO_SESSION_STORAGE_KEY =
+  "harborline.portal.demoTenantSession.v1";
+
+export const PORTAL_DEMO_TENANT: PortalTenantSession = {
+  userId: "demo-portal-tenant",
+  email: "alex.tenant@harborline.demo",
+  displayName: "Alex Tenant",
+  role: CURRENT_TENANT_ROLE,
+  tenantScopeId: DEMO_TENANT_ID,
+};
+
+/** Prefill password for the login form. Always accepted by portal demo login. */
+export const PORTAL_DEMO_PASSWORD = "tenant123";
+
+export function isPortalDemoCredentials(email: string, password: string) {
+  return (
+    email.trim().toLowerCase() === PORTAL_DEMO_TENANT.email &&
+    password === PORTAL_DEMO_PASSWORD
+  );
+}
+
+export function isPortalDemoCookieValue(value: string | undefined | null) {
+  return value === "1";
+}

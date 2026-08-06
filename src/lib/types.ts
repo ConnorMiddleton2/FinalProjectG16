@@ -30,7 +30,7 @@ export const ROLE_META: Record<
   tenant: {
     label: "Tenant",
     description: "View lease info, balances, payments, and maintenance requests.",
-    href: "/tenant",
+    href: "/portal",
   },
   maintenance: {
     label: "Maintenance",

@@ -221,17 +221,17 @@ export function ownerFacingFeeSummary(property: ManagementContractDraft): string
 export async function ensureDemoOwnerProperty(owner: OwnerAccount) {
   if (owner.email.toLowerCase() !== "bobowner@building.com") return;
 
+  const demoId = "00000000-0000-4000-8000-0000000000b1";
   const existing = await getPropertiesForOwner(owner);
-  if (existing.length > 0) return;
-
   const client = await createClient();
-  const base = emptyManagementContract();
-  const draft: ManagementContractDraft = {
+
+  const demoDraft = (base: ReturnType<typeof emptyManagementContract>): ManagementContractDraft => ({
     ...base,
-    id: "00000000-0000-4000-8000-0000000000b1",
+    id: demoId,
     createdAt: new Date().toISOString(),
-    propertyName: "Harborline Commons",
-    streetAddress: "100 Harbor Way",
+    // Name matches seeded rental_receivables (Riverbend) so owner revenue demo ties to AR.
+    propertyName: "Riverbend Commerce Center",
+    streetAddress: "400 Riverbend Pkwy",
     city: "Oxford",
     state: "MS",
     zip: "38655",
@@ -241,7 +241,7 @@ export async function ensureDemoOwnerProperty(owner: OwnerAccount) {
     grossSf: "52000",
     occupancyPercent: "92",
     tenantCount: "18",
-    monthlyRentRoll: "86000",
+    monthlyRentRoll: "19370",
     arBalance: "4200",
     feeStructure: "percent_collections",
     feePercent: "4",
@@ -265,12 +265,43 @@ export async function ensureDemoOwnerProperty(owner: OwnerAccount) {
     assignedManager: "Alex Rivera",
     camOrNnnStructure: "NNN",
     notes: "Demo property linked to Bob Owner seed account.",
-  };
+  });
 
-  await upsertSharedRecord(
-    client,
-    COLLECTIONS.managedProperties,
-    draft.id,
-    draft as unknown as Record<string, unknown>
+  if (existing.length === 0) {
+    await upsertSharedRecord(
+      client,
+      COLLECTIONS.managedProperties,
+      demoId,
+      demoDraft(emptyManagementContract()) as unknown as Record<string, unknown>
+    );
+    return;
+  }
+
+  // Migrate legacy Harborline Commons demo row so AR seed property names match.
+  const legacy = existing.find(
+    (p) =>
+      p.id === demoId ||
+      p.propertyName.trim().toLowerCase() === "harborline commons"
   );
+  if (
+    legacy &&
+    legacy.propertyName.trim().toLowerCase() !== "riverbend commerce center"
+  ) {
+    const updated: ManagementContractDraft = {
+      ...legacy,
+      propertyName: "Riverbend Commerce Center",
+      streetAddress: legacy.streetAddress || "400 Riverbend Pkwy",
+      monthlyRentRoll: legacy.monthlyRentRoll || "19370",
+      feeStructure: legacy.feeStructure || "percent_collections",
+      feePercent: legacy.feePercent || "4",
+      ownerAccountId: owner.id,
+      ownerEmail: owner.email,
+    };
+    await upsertSharedRecord(
+      client,
+      COLLECTIONS.managedProperties,
+      updated.id,
+      updated as unknown as Record<string, unknown>
+    );
+  }
 }
