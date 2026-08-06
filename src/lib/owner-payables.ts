@@ -1,4 +1,10 @@
-import { seededRentCollected, SEED_MONTHS } from "@/lib/accounts-receivable";
+import {
+  rentCollectedFromReceivables,
+  seededRentCollected,
+  SEED_MONTHS,
+  type Receivable,
+} from "@/lib/accounts-receivable";
+import type { ManagementContractDraft } from "@/lib/management-contract";
 import { monthDay, monthPeriodLabel, monthSlug, shiftDays } from "@/lib/seed-dates";
 
 export type OwnerPaymentType =
@@ -18,8 +24,8 @@ export type OwnerPayableStatus =
 
 /**
  * Owner remittance for a property/period.
- * Dollar fields are entered manually for now; once rent/A/R and expense
- * modules are merged on main we can wire these to live totals.
+ * Gross rent and fee % prefer live A/R collections and the signed
+ * management contract for the property.
  */
 export type OwnerPayable = {
   id: string;
@@ -31,7 +37,7 @@ export type OwnerPayable = {
   paymentType: OwnerPaymentType;
   /** Total rental income collected for the property and period. */
   grossRentCollected: number;
-  /** Harborline's management fee is fixed at 10% of gross rental income. */
+  /** Harborline management fee % from the signed contract (fallback default). */
   managementFeePercent: number;
   managementFeeAmount: number;
   reimbursableExpenses: number;
@@ -165,10 +171,141 @@ export function parsePercent(raw: string): number | null {
   return round2(value);
 }
 
-export const MANAGEMENT_FEE_PERCENT = 10;
+/**
+ * Fallback when no signed management contract is found for the property.
+ * Matches the default fee on new management contracts.
+ */
+export const DEFAULT_MANAGEMENT_FEE_PERCENT = 4;
 
-export function feeAmountFromPercent(gross: number, percent = MANAGEMENT_FEE_PERCENT) {
+/** @deprecated Prefer DEFAULT_MANAGEMENT_FEE_PERCENT / resolveManagementFee. */
+export const MANAGEMENT_FEE_PERCENT = DEFAULT_MANAGEMENT_FEE_PERCENT;
+
+export function feeAmountFromPercent(
+  gross: number,
+  percent = DEFAULT_MANAGEMENT_FEE_PERCENT
+) {
   return round2((gross * percent) / 100);
+}
+
+export type ManagedFeeFields = Pick<
+  ManagementContractDraft,
+  "propertyName" | "feeStructure" | "feePercent" | "feeFlatAmount"
+>;
+
+export type ResolvedManagementFee = {
+  percent: number;
+  amount: number;
+  source: "contract" | "default";
+  feeStructure?: ManagementContractDraft["feeStructure"];
+};
+
+export function findManagedProperty(
+  properties: ManagedFeeFields[],
+  propertyName: string
+) {
+  const needle = propertyName.trim().toLowerCase();
+  if (!needle) return undefined;
+  return properties.find(
+    (p) => p.propertyName.trim().toLowerCase() === needle
+  );
+}
+
+/**
+ * Resolve Harborline's management fee for a remittance from the signed
+ * management contract when available; otherwise use the portfolio default %.
+ */
+export function resolveManagementFee(
+  propertyName: string,
+  grossRentCollected: number,
+  properties: ManagedFeeFields[] = []
+): ResolvedManagementFee {
+  const contract = findManagedProperty(properties, propertyName);
+  if (!contract) {
+    const percent = DEFAULT_MANAGEMENT_FEE_PERCENT;
+    return {
+      percent,
+      amount: feeAmountFromPercent(grossRentCollected, percent),
+      source: "default",
+    };
+  }
+
+  const structure = contract.feeStructure;
+  if (structure === "flat_monthly" || structure === "flat_annual") {
+    const flat = parseNonNegativeAmount(contract.feeFlatAmount ?? "") ?? 0;
+    const amount =
+      structure === "flat_annual" ? round2(flat / 12) : flat;
+    const percent =
+      grossRentCollected > 0
+        ? round2((amount / grossRentCollected) * 100)
+        : 0;
+    return {
+      percent,
+      amount,
+      source: "contract",
+      feeStructure: structure,
+    };
+  }
+
+  const parsed = parsePercent(contract.feePercent ?? "");
+  const percent =
+    parsed != null && parsed > 0 ? parsed : DEFAULT_MANAGEMENT_FEE_PERCENT;
+  return {
+    percent,
+    amount: feeAmountFromPercent(grossRentCollected, percent),
+    source: "contract",
+    feeStructure: structure,
+  };
+}
+
+/**
+ * Rebuild a monthly remittance's rent / fee / net from live A/R and the
+ * management contract. Leaves reimbursable expenses, reserves, and payments.
+ */
+export function applyLiveRentToRemittance(
+  row: OwnerPayable,
+  receivables: Pick<
+    Receivable,
+    "property" | "period" | "category" | "amountReceived"
+  >[],
+  managedProperties: ManagedFeeFields[] = []
+): OwnerPayable {
+  if (row.paymentType !== "monthly_distribution") return row;
+
+  const grossRentCollected = rentCollectedFromReceivables(
+    receivables,
+    row.property,
+    row.period
+  );
+  const fee = resolveManagementFee(
+    row.property,
+    grossRentCollected,
+    managedProperties
+  );
+  const computed = computeNetDue({
+    grossRentCollected,
+    managementFeeAmount: fee.amount,
+    reimbursableExpenses: row.reimbursableExpenses,
+    reservesWithheld: row.reservesWithheld,
+  });
+  // Never drop net below what has already been paid.
+  const amount = Math.max(computed, row.amountPaid);
+
+  if (
+    grossRentCollected === row.grossRentCollected &&
+    fee.percent === row.managementFeePercent &&
+    fee.amount === row.managementFeeAmount &&
+    amount === row.amount
+  ) {
+    return row;
+  }
+
+  return {
+    ...row,
+    grossRentCollected,
+    managementFeePercent: fee.percent,
+    managementFeeAmount: fee.amount,
+    amount,
+  };
 }
 
 /** Gross rent less Harborline's fee, reimbursable expenses, and reserves. */
@@ -222,7 +359,9 @@ export function normalizeOwnerPayable(
     row.grossRentCollected ?? row.rentalIncomeCollected ?? 0;
   const managementFeePercent =
     row.managementFeePercent ??
-    (row.paymentType === "monthly_distribution" ? MANAGEMENT_FEE_PERCENT : 0);
+    (row.paymentType === "monthly_distribution"
+      ? DEFAULT_MANAGEMENT_FEE_PERCENT
+      : 0);
   const managementFeeAmount =
     row.managementFeeAmount ??
     (row.paymentType === "monthly_distribution"
@@ -266,7 +405,7 @@ export function emptyOwnerPayableForm() {
     period: "",
     paymentType: "monthly_distribution" as OwnerPaymentType,
     grossRentCollected: "",
-    managementFeePercent: String(MANAGEMENT_FEE_PERCENT),
+    managementFeePercent: String(DEFAULT_MANAGEMENT_FEE_PERCENT),
     managementFeeAmount: "",
     reimbursableExpenses: "",
     reservesWithheld: "",
@@ -290,6 +429,8 @@ type OwnerContract = {
   ownerName: string;
   ownerId: string;
   property: string;
+  /** Contract management fee % when no managed_properties row is present yet. */
+  feePercent: number;
   /** Property costs reimbursed from rent before the owner distribution. */
   reimbursableExpenses: number[];
   /** Cash retained each month for future property needs. */
@@ -297,8 +438,8 @@ type OwnerContract = {
 };
 
 /**
- * Owner remittance terms. Harborline earns 10% of rental income and distributes
- * the remaining cash after property expenses and reserves.
+ * Owner remittance terms. Fee % follows the signed management contract when
+ * available (seed defaults match the 4% contract default).
  */
 export const OWNER_CONTRACTS: OwnerContract[] = [
   {
@@ -306,6 +447,7 @@ export const OWNER_CONTRACTS: OwnerContract[] = [
     ownerName: "Riverbend Holdings LLC",
     ownerId: "OWN-1001",
     property: "Riverbend Commerce Center",
+    feePercent: 4,
     reimbursableExpenses: [2150, 2200, 2050, 2300, 2100, 2250],
     monthlyReserve: 1000,
   },
@@ -314,6 +456,7 @@ export const OWNER_CONTRACTS: OwnerContract[] = [
     ownerName: "Pier Twelve Partners",
     ownerId: "OWN-1002",
     property: "Pier 12 Commerce Center",
+    feePercent: 4,
     reimbursableExpenses: [3200, 3350, 3100, 3450, 3250, 3300],
     monthlyReserve: 1500,
   },
@@ -322,6 +465,7 @@ export const OWNER_CONTRACTS: OwnerContract[] = [
     ownerName: "Canal Yard Investors",
     ownerId: "OWN-1003",
     property: "Canal Yard",
+    feePercent: 4,
     reimbursableExpenses: [1450, 1525, 1400, 1600, 1475, 1500],
     monthlyReserve: 800,
   },
@@ -368,7 +512,11 @@ export function seedOwnerPayables(): OwnerPayable[] {
         contract.property,
         monthsAgo
       );
-      const managementFeeAmount = feeAmountFromPercent(grossRentCollected);
+      const managementFeePercent = contract.feePercent;
+      const managementFeeAmount = feeAmountFromPercent(
+        grossRentCollected,
+        managementFeePercent
+      );
       const reimbursableExpenses =
         contract.reimbursableExpenses[monthsAgo] ??
         contract.reimbursableExpenses[0];
@@ -393,7 +541,7 @@ export function seedOwnerPayables(): OwnerPayable[] {
         period: monthPeriodLabel(monthsAgo),
         paymentType: "monthly_distribution",
         grossRentCollected,
-        managementFeePercent: MANAGEMENT_FEE_PERCENT,
+        managementFeePercent,
         managementFeeAmount,
         reimbursableExpenses,
         reservesWithheld,
@@ -412,7 +560,7 @@ export function seedOwnerPayables(): OwnerPayable[] {
         fileName: `${paymentId.toLowerCase()}-owner-statement.pdf`,
         notes:
           exception?.notes ??
-          "Monthly owner distribution remitted after Harborline's 10% management fee, property expenses, and reserves.",
+          `Monthly owner distribution remitted after Harborline's ${managementFeePercent}% management fee, property expenses, and reserves.`,
         createdAt: invoiceDate,
       });
     }
@@ -485,8 +633,8 @@ function specialOwnerPayables(): OwnerPayable[] {
       period: "Prior year",
       paymentType: "year_end_trueup",
       grossRentCollected: 64000,
-      managementFeePercent: MANAGEMENT_FEE_PERCENT,
-      managementFeeAmount: 6400,
+      managementFeePercent: DEFAULT_MANAGEMENT_FEE_PERCENT,
+      managementFeeAmount: feeAmountFromPercent(64000, DEFAULT_MANAGEMENT_FEE_PERCENT),
       reimbursableExpenses: 46800,
       reservesWithheld: 4400,
       amount: 6400,
@@ -499,7 +647,7 @@ function specialOwnerPayables(): OwnerPayable[] {
       paymentReference: "",
       fileName: "canal-yard-prior-year-trueup.pdf",
       notes:
-        "Residual owed after the prior-year reconciliation of the fixed contract. Statement not yet approved by the owner's CPA.",
+        "Residual owed after the prior-year reconciliation. Statement not yet approved by the owner's CPA.",
       createdAt: shiftDays(-25),
     },
     {
@@ -511,11 +659,19 @@ function specialOwnerPayables(): OwnerPayable[] {
       period: monthPeriodLabel(0),
       paymentType: "other",
       grossRentCollected: 10000,
-      managementFeePercent: MANAGEMENT_FEE_PERCENT,
-      managementFeeAmount: 1000,
+      managementFeePercent: DEFAULT_MANAGEMENT_FEE_PERCENT,
+      managementFeeAmount: feeAmountFromPercent(10000, DEFAULT_MANAGEMENT_FEE_PERCENT),
       reimbursableExpenses: 0,
       reservesWithheld: 0,
-      amount: 9000,
+      amount: computeNetDue({
+        grossRentCollected: 10000,
+        managementFeeAmount: feeAmountFromPercent(
+          10000,
+          DEFAULT_MANAGEMENT_FEE_PERCENT
+        ),
+        reimbursableExpenses: 0,
+        reservesWithheld: 0,
+      }),
       amountPaid: 0,
       onHold: false,
       statementApproved: true,
@@ -525,7 +681,7 @@ function specialOwnerPayables(): OwnerPayable[] {
       paymentReference: "",
       fileName: "bob-owner-current-statement.pdf",
       notes:
-        "Demo owner account used for the owner-portal walkthrough. Co-investor distribution after Harborline's 10% management fee.",
+        `Demo owner account used for the owner-portal walkthrough. Co-investor distribution after Harborline's ${DEFAULT_MANAGEMENT_FEE_PERCENT}% management fee.`,
       createdAt: shiftDays(-2),
     },
   ];

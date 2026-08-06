@@ -26,7 +26,7 @@ const TABS: {
   {
     id: "owners",
     label: "Payable to owners",
-    description: "Rental distributions after the 10% management fee",
+    description: "Rental distributions after the contract management fee",
     icon: Building2,
   },
   {
@@ -75,7 +75,7 @@ export function AccountsPayableDashboard() {
           </h1>
           <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/65">
             Separate operating-expense vendor bills from amounts Harborline owes
-            property owners after its 10% management fee, and work the queue of
+            property owners after its contract management fee, and work the queue of
             expenses Management has released for payment. Switch tabs below; the
             header stays the same for every view.
           </p>

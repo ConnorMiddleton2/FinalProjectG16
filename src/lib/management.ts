@@ -9,6 +9,8 @@ import {
   normalizeMaintenanceDocument,
   type MaintenanceDocument,
 } from "@/lib/maintenance";
+import type { PayableCategory, PayableInvoice } from "@/lib/accounts-payable";
+import { addDaysIso, round2, todayIso } from "@/lib/money";
 
 export type OwnerContract = {
   id: string;
@@ -990,14 +992,14 @@ export function seedMissedPayments(): MissedPayment[] {
     {
       id: "miss-1",
       tenantName: "Cedar Dental Group",
-      property: "Harborline Commons",
+      property: "Riverbend Commerce Center",
       unit: "Suite 210",
       amountDue: 4850,
       daysPastDue: 42,
       lateCount12mo: 3,
       risk: "elevated",
       lastPaymentAt: "2026-01-12",
-      notes: "Partial payments twice; CAM dispute ongoing.",
+      notes: "Partial payments twice; CAM dispute ongoing. See A/R for open balances.",
       foreclosureChecklist: [
         "Send formal demand letter (certified mail)",
         "Confirm cure period under lease",
@@ -1010,14 +1012,14 @@ export function seedMissedPayments(): MissedPayment[] {
     {
       id: "miss-2",
       tenantName: "Lumen Creative Co.",
-      property: "Harborline Commons",
+      property: "Riverbend Commerce Center",
       unit: "Suite 305",
       amountDue: 7320,
       daysPastDue: 67,
       lateCount12mo: 5,
       risk: "foreclosure_risk",
       lastPaymentAt: "2025-11-02",
-      notes: "Repeated NSF; personal guarantee on file.",
+      notes: "Repeated NSF; personal guarantee on file. Cross-check overdue A/R.",
       foreclosureChecklist: [
         "Escalate to counsel immediately",
         "Pull personal guarantee / security deposit ledger",
@@ -1031,14 +1033,14 @@ export function seedMissedPayments(): MissedPayment[] {
     {
       id: "miss-3",
       tenantName: "Oak & Iron Fitness",
-      property: "Riverside Pavilion",
+      property: "Canal Yard",
       unit: "Gym Wing",
       amountDue: 950,
       daysPastDue: 12,
       lateCount12mo: 1,
       risk: "watch",
       lastPaymentAt: "2026-03-01",
-      notes: "Usually pays within grace; first late this year.",
+      notes: "Usually pays within grace; first late this year. Monitor in A/R.",
       foreclosureChecklist: [
         "Courtesy call / text reminder",
         "Apply late fee per lease",
@@ -1287,5 +1289,68 @@ export function unifiedExpenseToApPayable(row: UnifiedExpense): ApPayable {
     receivedAt: now,
     approvedByManagementAt: now,
     notes: "",
+  };
+}
+
+function departmentToPayableCategory(
+  department: ApPayable["department"]
+): PayableCategory {
+  switch (department) {
+    case "maintenance":
+      return "maintenance";
+    case "sales_marketing":
+      return "professional_fees";
+    case "human_resources":
+      return "professional_fees";
+    case "operations":
+      return "supplies";
+    case "accounts_payable":
+      return "other";
+    default:
+      return "other";
+  }
+}
+
+/** Stable operating-expense invoice id for a Management-approved expense. */
+export function payableInvoiceIdForExpense(sourceExpenseId: string) {
+  return `mgmt-inv:${sourceExpenseId}`;
+}
+
+/**
+ * Operating expense invoice for the A/P Operating expenses tab, created when
+ * Management approves a department / S&M expense.
+ */
+export function unifiedExpenseToPayableInvoice(
+  row: UnifiedExpense
+): PayableInvoice {
+  const invoiceDate = todayIso();
+  const department: ApPayable["department"] =
+    row.source === "sales_marketing"
+      ? "sales_marketing"
+      : (row.raw as DepartmentExpense).department;
+
+  return {
+    id: payableInvoiceIdForExpense(row.id),
+    invoiceNumber:
+      row.code.trim() ||
+      `MGMT-${row.id.replace(/[^a-zA-Z0-9]/g, "").slice(-8)}`,
+    vendorName: row.vendor,
+    vendorId: "",
+    category: departmentToPayableCategory(department),
+    property: "",
+    amount: round2(row.amount),
+    amountPaid: 0,
+    disputed: false,
+    invoiceDate,
+    dueDate: addDaysIso(invoiceDate, 30),
+    fileName: row.fileName,
+    notes: [
+      `Approved by Management · ${row.departmentLabel}`,
+      row.description,
+      `sourceExpenseId=${row.id}`,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    createdAt: new Date().toISOString(),
   };
 }
