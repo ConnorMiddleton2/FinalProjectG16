@@ -7,6 +7,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { PortalNav } from "@/components/portal/PortalNav";
+import { PortalNotificationsHeaderLink } from "@/components/portal/PortalNotificationsHeaderLink";
 
 export default function PortalLayout({
   children,
@@ -36,6 +37,7 @@ export default function PortalLayout({
               <Bookmark className="h-4 w-4" />
               <span className="hidden sm:inline">Saved units</span>
             </Link>
+            <PortalNotificationsHeaderLink />
             <Link
               href="/portal/messages"
               className="btn btn-ghost btn-sm gap-1"

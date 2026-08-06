@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
+import { usePortalNotifications } from "@/hooks/usePortalNotifications";
 
 const PRIMARY_LINKS = [
   { href: "/portal", label: "Home", exact: true },
@@ -13,6 +14,7 @@ const PRIMARY_LINKS = [
   { href: "/portal/offers", label: "Lease Offers" },
   { href: "/portal/move-in", label: "Move-In" },
   { href: "/portal/messages", label: "Messages" },
+  { href: "/portal/notifications", label: "Notifications" },
   { href: "/portal/profile", label: "Applicant Profile" },
 ] as const;
 
@@ -28,8 +30,31 @@ function isActive(pathname: string, href: string, exact?: boolean) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function NavLabel({
+  href,
+  label,
+  unreadCount,
+}: {
+  href: string;
+  label: string;
+  unreadCount: number;
+}) {
+  if (href !== "/portal/notifications" || unreadCount <= 0) {
+    return <>{label}</>;
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {label}
+      <span className="rounded-full bg-[var(--harbor-mid)] px-1.5 py-0.5 text-[10px] font-semibold text-white">
+        {unreadCount > 9 ? "9+" : unreadCount}
+      </span>
+    </span>
+  );
+}
+
 export function PortalNav() {
   const pathname = usePathname();
+  const { unreadCount } = usePortalNotifications();
 
   return (
     <nav
@@ -48,7 +73,11 @@ export function PortalNav() {
                 active ? "btn-neutral" : "btn-ghost"
               }`}
             >
-              {label}
+              <NavLabel
+                href={href}
+                label={label}
+                unreadCount={unreadCount}
+              />
             </Link>
           );
         })}
@@ -78,7 +107,11 @@ export function PortalNav() {
                   active ? "btn-neutral" : "btn-ghost"
                 }`}
               >
-                {label}
+                <NavLabel
+                  href={href}
+                  label={label}
+                  unreadCount={unreadCount}
+                />
               </Link>
             );
           })}
