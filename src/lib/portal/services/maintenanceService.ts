@@ -6,6 +6,7 @@ import {
   resolveMaintenanceDetail,
   upsertStoredMaintenanceDetail,
 } from "@/lib/portal/maintenance-detail-store";
+import { toTenantFacingMaintenanceDetail } from "@/lib/portal/maintenance-detail-types";
 import type {
   MaintenanceFormValues,
   MaintenanceRequest,
@@ -27,9 +28,12 @@ import {
   simulateLatency,
   type ServiceResult,
 } from "@/lib/portal/services/shared";
+import { validateMaintenanceForm } from "@/lib/portal/maintenance-form-validation";
 
 /**
  * Maintenance request service.
+ *
+ * Tenant responses never include internal employee notes.
  *
  * BACKEND_TODO:
  *   GET    /api/tenant/maintenance
@@ -80,7 +84,7 @@ export async function getMaintenanceRequest(
       return denyCrossTenant();
     }
     const detail = resolveMaintenanceDetail(id);
-    return ok(detail, "mock");
+    return ok(detail ? toTenantFacingMaintenanceDetail(detail) : null, "mock");
   } catch (err) {
     return failFromUnknown(
       err,
@@ -102,6 +106,13 @@ export async function createMaintenanceRequest(
   try {
     await simulateLatency(900);
     // BACKEND_TODO: POST multipart/form or signed upload URLs for attachments
+    const validation = validateMaintenanceForm(values);
+    if (Object.keys(validation).length > 0) {
+      return fail(
+        "Fix the highlighted fields before submitting.",
+        "validation"
+      );
+    }
     const submittedAt = new Date().toLocaleString("en-US", {
       dateStyle: "medium",
       timeStyle: "short",

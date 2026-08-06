@@ -10,6 +10,8 @@ import {
   PORTAL_PRIMARY_NAV,
   PORTAL_SECONDARY_ACTIONS,
 } from "@/lib/portal/nav";
+import { FUTURE_PRIMARY_NAV } from "@/lib/portal/future/nav";
+import { FUTURE_HOME } from "@/lib/portal/future/paths";
 
 type Props = {
   id?: string;
@@ -17,8 +19,55 @@ type Props = {
   className?: string;
 };
 
+/**
+ * Current-tenant portal sidebar.
+ * When browsing the Future Tenant Portal, show a short link back to leasing
+ * rather than replacing current-tenant tools (future portal has its own shell).
+ */
 export function PortalNav({ id, onNavigate, className = "" }: Props) {
   const pathname = usePathname();
+  const onFuturePortal = pathname.startsWith(FUTURE_HOME);
+
+  if (onFuturePortal) {
+    return (
+      <div className={`flex h-full flex-col gap-6 ${className}`}>
+        <nav id={id} aria-label="Future tenant portal" className="flex-1">
+          <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-[var(--harbor-ink)]/45">
+            Future tenant
+          </p>
+          <ul className="space-y-1">
+            {FUTURE_PRIMARY_NAV.map((item) => {
+              const active = isPortalNavActive(pathname, item);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    title={item.description}
+                    onClick={onNavigate}
+                    className={`flex min-h-11 items-center rounded-xl px-3 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--harbor-mid)] ${
+                      active
+                        ? "bg-[var(--harbor-ink)] text-[var(--harbor-sand)]"
+                        : "text-[var(--harbor-ink)]/80 hover:bg-[var(--harbor-mist)]/70 hover:text-[var(--harbor-ink)]"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+        <Link
+          href="/portal"
+          onClick={onNavigate}
+          className="btn btn-outline btn-sm w-full justify-start border-[var(--harbor-deep)]/20 text-[var(--harbor-ink)]"
+        >
+          Current tenant portal
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex h-full flex-col gap-6 ${className}`}>
@@ -99,6 +148,14 @@ export function PortalNav({ id, onNavigate, className = "" }: Props) {
             {PORTAL_FUTURE_TENANT_LINK.label}
           </Link>
         </div>
+
+        <Link
+          href="/"
+          onClick={onNavigate}
+          className="flex min-h-11 items-center rounded-xl px-3 py-2 text-sm font-medium text-[var(--harbor-deep)] transition-colors hover:bg-[var(--harbor-sand)] portal-focus"
+        >
+          Website home
+        </Link>
 
         <Link
           href={PORTAL_HELP_HREF}

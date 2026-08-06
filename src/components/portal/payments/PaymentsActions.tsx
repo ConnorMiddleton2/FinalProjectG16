@@ -36,10 +36,10 @@ export function PaymentsActions({
         <li>
           <Link
             href="/portal/payments/make"
-            className="btn btn-neutral w-full justify-start gap-2"
+            className="btn btn-neutral btn-lg w-full justify-start gap-2 min-h-12"
           >
             <Wallet className="h-4 w-4" aria-hidden="true" />
-            Make a Payment
+            Pay rent / balance
           </Link>
         </li>
         <li>

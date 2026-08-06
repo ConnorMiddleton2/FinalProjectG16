@@ -16,7 +16,13 @@ export function loadStoredProfile(tenantScopeId: string): TenantProfile | null {
       portalStorageKey(STORAGE_BASE, tenantScopeId)
     );
     if (!raw) return null;
-    return JSON.parse(raw) as TenantProfile;
+    const parsed = JSON.parse(raw) as Partial<TenantProfile>;
+    if (!parsed.legalName || !parsed.tenantId) return null;
+    return {
+      ...parsed,
+      occupancyClass: parsed.occupancyClass ?? "personal",
+      propertyType: parsed.propertyType ?? "other",
+    } as TenantProfile;
   } catch {
     return null;
   }

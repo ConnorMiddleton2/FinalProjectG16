@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getPortalTenantSessionClient } from "@/lib/portal/auth-client";
 import {
   ANNOUNCEMENT_FILTER_CATEGORIES,
   type AnnouncementFilter,
@@ -8,6 +9,7 @@ import {
   type TenantAnnouncement,
 } from "@/lib/portal/announcements-types";
 import { isAnnouncementRead } from "@/lib/portal/announcements-read-store";
+import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import {
   getAnnouncementsDemoFixture,
   listAnnouncements,
@@ -19,11 +21,12 @@ import {
 export type AnnouncementWithRead = TenantAnnouncement & { read: boolean };
 
 function withReadState(
-  announcements: TenantAnnouncement[]
+  announcements: TenantAnnouncement[],
+  tenantScopeId: string
 ): AnnouncementWithRead[] {
   return announcements.map((item) => ({
     ...item,
-    read: isAnnouncementRead(item.id),
+    read: isAnnouncementRead(item.id, tenantScopeId),
   }));
 }
 
@@ -52,6 +55,7 @@ export function useTenantAnnouncements() {
   const [filter, setFilter] = useState<AnnouncementFilter>("all");
   const [readVersion, setReadVersion] = useState(0);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const tenantScopeRef = useRef<string | null>(null);
 
   const applyData = useCallback(
     (announcements: TenantAnnouncement[], source: "live" | "mock") => {
@@ -59,7 +63,7 @@ export function useTenantAnnouncements() {
         setState({
           status: "empty",
           message:
-            "No announcements yet. Property updates and notices from Harborline will appear here.",
+            "No announcements yet. Payment, maintenance, lease, and property updates from Harborline will appear here.",
         });
         return;
       }
@@ -71,6 +75,8 @@ export function useTenantAnnouncements() {
   const load = useCallback(async () => {
     setState({ status: "loading" });
     try {
+      const session = await getPortalTenantSessionClient();
+      tenantScopeRef.current = session?.tenantScopeId ?? null;
       const result = await listAnnouncements();
       if (!result.ok) {
         setState({ status: "error", message: result.error.message });
@@ -91,9 +97,15 @@ export function useTenantAnnouncements() {
     }
   }, [applyData]);
 
-  const loadDemoData = useCallback(() => {
+  const loadDemoData = useCallback(async () => {
+    const session = await getPortalTenantSessionClient();
+    if (!session || !sessionOwnsDemoFixtures(session)) {
+      void load();
+      return;
+    }
+    tenantScopeRef.current = session.tenantScopeId;
     applyData(getAnnouncementsDemoFixture(), "mock");
-  }, [applyData]);
+  }, [applyData, load]);
 
   useEffect(() => {
     void load();
@@ -107,7 +119,11 @@ export function useTenantAnnouncements() {
   const items = useMemo(() => {
     if (state.status !== "success") return [] as AnnouncementWithRead[];
     void readVersion;
-    return withReadState(state.announcements);
+    const scopeId = tenantScopeRef.current;
+    if (!scopeId) {
+      return state.announcements.map((item) => ({ ...item, read: true }));
+    }
+    return withReadState(state.announcements, scopeId);
   }, [state, readVersion]);
 
   const filtered = useMemo(
@@ -182,7 +198,7 @@ export function useTenantAnnouncements() {
     urgentUnread,
     actionMessage,
     reload: () => void load(),
-    loadDemoData,
+    loadDemoData: () => void loadDemoData(),
     markRead,
     markUnread,
     markAllRead,

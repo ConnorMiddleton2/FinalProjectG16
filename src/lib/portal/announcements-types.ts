@@ -6,6 +6,7 @@ export const ANNOUNCEMENT_CATEGORIES = [
   "Safety notices",
   "Policy reminders",
   "Payment reminders",
+  "Lease updates",
   "Package notices",
   "Parking notices",
 ] as const;
@@ -75,5 +76,10 @@ export const ANNOUNCEMENT_FILTER_CATEGORIES: Record<
     "Office closures",
     "Parking notices",
   ],
-  policy: ["Policy reminders", "Safety notices", "Payment reminders"],
+  policy: [
+    "Policy reminders",
+    "Safety notices",
+    "Payment reminders",
+    "Lease updates",
+  ],
 };

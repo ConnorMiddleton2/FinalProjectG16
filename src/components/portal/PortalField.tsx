@@ -1,6 +1,11 @@
 "use client";
 
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type {
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from "react";
 import { useId } from "react";
 
 type BaseProps = {
@@ -26,8 +31,23 @@ type SelectProps = BaseProps & {
 
 type Props = InputProps | TextareaProps | SelectProps;
 
+const STRIP_KEYS = new Set([
+  "as",
+  "label",
+  "error",
+  "hint",
+  "required",
+  "className",
+  "children",
+]);
+
 /**
  * Accessible labeled field with aria-invalid / describedby wiring.
+ *
+ * Always mounts a real native control for input/textarea/select.
+ * Children are ONLY used as <option> nodes for selects — never as a
+ * replacement for the typing box (that previously made fields look
+ * editable while swallowing value/onChange).
  */
 export function PortalField(props: Props) {
   const autoId = useId();
@@ -39,21 +59,13 @@ export function PortalField(props: Props) {
     className = "",
     as = "input",
     children,
-    ...rest
   } = props;
-  const id = ("id" in rest && rest.id) || autoId;
+  const id = ("id" in props && props.id) || autoId;
   const errorId = `${id}-error`;
   const hintId = `${id}-hint`;
-  const describedBy = [
-    error ? errorId : null,
-    hint ? hintId : null,
-  ]
-    .filter(Boolean)
-    .join(" ") || undefined;
-
-  const controlClass = `input input-bordered w-full min-h-11 portal-focus ${
-    error ? "input-error" : ""
-  }`;
+  const describedBy =
+    [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(" ") ||
+    undefined;
 
   const labelNode = (
     <label htmlFor={id} className="label py-1">
@@ -73,47 +85,54 @@ export function PortalField(props: Props) {
   );
 
   let control: ReactNode;
-  if (children) {
-    control = children;
-  } else if (as === "textarea") {
-    const { as: _a, label: _l, error: _e, hint: _h, required: _r, className: _c, ...textareaProps } =
-      props as TextareaProps;
+
+  if (as === "textarea") {
+    const textareaProps = { ...(props as TextareaProps) } as Record<
+      string,
+      unknown
+    >;
+    for (const key of STRIP_KEYS) delete textareaProps[key];
     control = (
       <textarea
         id={id}
-        className={`textarea textarea-bordered w-full min-h-28 portal-focus ${error ? "textarea-error" : ""}`}
+        className={`portal-native-textarea w-full portal-focus ${error ? "border-error" : ""}`}
         aria-invalid={error ? true : undefined}
         aria-required={required || undefined}
         aria-describedby={describedBy}
-        {...textareaProps}
+        suppressHydrationWarning
+        {...(textareaProps as TextareaHTMLAttributes<HTMLTextAreaElement>)}
       />
     );
   } else if (as === "select") {
-    const { as: _a, label: _l, error: _e, hint: _h, required: _r, className: _c, children: selectChildren, ...selectProps } =
-      props as SelectProps;
+    const selectProps = { ...(props as SelectProps) } as Record<string, unknown>;
+    for (const key of STRIP_KEYS) delete selectProps[key];
     control = (
       <select
         id={id}
-        className={`select select-bordered w-full min-h-11 portal-focus ${error ? "select-error" : ""}`}
+        className={`portal-native-select w-full min-h-11 portal-focus ${error ? "border-error" : ""}`}
         aria-invalid={error ? true : undefined}
         aria-required={required || undefined}
         aria-describedby={describedBy}
-        {...selectProps}
+        suppressHydrationWarning
+        {...(selectProps as SelectHTMLAttributes<HTMLSelectElement>)}
       >
-        {selectChildren}
+        {children}
       </select>
     );
   } else {
-    const { as: _a, label: _l, error: _e, hint: _h, required: _r, className: _c, ...inputProps } =
-      props as InputProps;
+    const inputProps = { ...(props as InputProps) } as Record<string, unknown>;
+    for (const key of STRIP_KEYS) delete inputProps[key];
+    // Default to a real text box when callers omit type.
+    if (inputProps.type == null) inputProps.type = "text";
     control = (
       <input
         id={id}
-        className={controlClass}
+        className={`portal-native-input w-full min-h-11 portal-focus ${error ? "border-error" : ""}`}
         aria-invalid={error ? true : undefined}
         aria-required={required || undefined}
         aria-describedby={describedBy}
-        {...inputProps}
+        suppressHydrationWarning
+        {...(inputProps as InputHTMLAttributes<HTMLInputElement>)}
       />
     );
   }

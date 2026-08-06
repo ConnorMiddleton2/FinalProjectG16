@@ -4,6 +4,9 @@ export type TenantContract = {
   term: string;
   rent: string;
   status: "Active" | "Renewal pending";
+  /** Owning portal user — required for tenant-facing views. */
+  ownerUserId?: string;
+  ownerEmail?: string;
 };
 
 export type TenantInvoice = {
@@ -20,6 +23,9 @@ export type TenantInvoice = {
   dueDate?: string;
   /** ISO date when marked Paid — used for revenue year. */
   paidAt?: string;
+  /** Owning portal user — required for tenant-facing views. */
+  ownerUserId?: string;
+  ownerEmail?: string;
 };
 
 export function emptyTenantContract(): Omit<TenantContract, "id"> {

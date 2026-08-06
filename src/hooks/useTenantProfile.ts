@@ -143,6 +143,8 @@ export function useTenantProfile() {
           legalName: state.profile.legalName,
           propertyName: state.profile.propertyName,
           unitNumber: state.profile.unitNumber,
+          occupancyClass: state.profile.occupancyClass,
+          propertyType: state.profile.propertyType,
           tenantId: state.profile.tenantId,
           leaseStatus: state.profile.leaseStatus,
         },

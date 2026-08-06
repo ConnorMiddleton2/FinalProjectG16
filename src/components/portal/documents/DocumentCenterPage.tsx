@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   AlertCircle,
+  CheckCircle2,
   Download,
   Eye,
   FileText,
@@ -22,6 +23,7 @@ import {
 import { buildDocumentDownloadText } from "@/lib/portal/documents-mock";
 import {
   DOCUMENT_CATEGORIES,
+  type DocumentCategory,
   type DocumentSortKey,
   type SortDirection,
   type TenantDocument,
@@ -34,6 +36,12 @@ const SORT_OPTIONS: Array<{ value: DocumentSortKey; label: string }> = [
   { value: "fileSize", label: "File size" },
 ];
 
+const PRIORITY_CATEGORIES: DocumentCategory[] = [
+  "Lease Documents",
+  "Notices",
+  "Inspection Reports",
+];
+
 export function DocumentCenterPage() {
   const {
     state,
@@ -41,11 +49,14 @@ export function DocumentCenterPage() {
     filtered,
     categoryCounts,
     successMessage,
+    pendingAcknowledgments,
     reload,
     loadDemoData,
     updateFilters,
     resetFilters,
     showSuccess,
+    isAcknowledged,
+    acknowledgeDocument,
   } = useTenantDocuments();
 
   const [previewDoc, setPreviewDoc] = useState<TenantDocument | null>(null);
@@ -217,6 +228,11 @@ export function DocumentCenterPage() {
         Showing documents authorized for {viewerLabel}
         {source === "mock" ? " (demo catalog)" : ""}. Other tenants’ files are
         never listed.
+        {pendingAcknowledgments > 0
+          ? ` ${pendingAcknowledgments} document${
+              pendingAcknowledgments === 1 ? "" : "s"
+            } still need acknowledgment.`
+          : ""}
       </div>
 
       {successMessage ? (
@@ -224,6 +240,40 @@ export function DocumentCenterPage() {
           <span>{successMessage}</span>
         </div>
       ) : null}
+
+      <section
+        className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-4 shadow-sm sm:p-5"
+        aria-labelledby="document-focus-heading"
+      >
+        <h2
+          id="document-focus-heading"
+          className="text-sm font-semibold text-[var(--harbor-ink)]"
+        >
+          Lease, notices, and inspections
+        </h2>
+        <p className="mt-1 text-sm text-[var(--harbor-ink)]/65">
+          Jump to the documents you need most often. Addendums live under Lease
+          Documents.
+        </p>
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {PRIORITY_CATEGORIES.map((item) => (
+            <li key={item}>
+              <button
+                type="button"
+                className={`btn min-h-11 ${
+                  filters.category === item ? "btn-neutral" : "btn-outline"
+                }`}
+                onClick={() => updateFilters({ category: item })}
+              >
+                {item}
+                {categoryCounts[item] != null
+                  ? ` (${categoryCounts[item]})`
+                  : ""}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <DocumentFiltersBar
         search={filters.search}
@@ -269,8 +319,10 @@ export function DocumentCenterPage() {
             <li key={doc.id}>
               <DocumentRow
                 document={doc}
+                acknowledged={isAcknowledged(doc.id)}
                 onPreview={() => setPreviewDoc(doc)}
                 onDownload={() => downloadDocument(doc)}
+                onAcknowledge={() => acknowledgeDocument(doc.id)}
               />
             </li>
           ))}
@@ -461,13 +513,20 @@ function DocumentFiltersBar({
 
 function DocumentRow({
   document,
+  acknowledged,
   onPreview,
   onDownload,
+  onAcknowledge,
 }: {
   document: TenantDocument;
+  acknowledged: boolean;
   onPreview: () => void;
   onDownload: () => void;
+  onAcknowledge: () => void;
 }) {
+  const needsAck = Boolean(document.requiresAcknowledgment);
+  const pendingAck = needsAck && !acknowledged;
+
   return (
     <article className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-4 shadow-sm sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -478,9 +537,22 @@ function DocumentRow({
               aria-hidden="true"
             />
             <div className="min-w-0">
-              <h3 className="truncate text-base font-semibold text-[var(--harbor-ink)]">
-                {document.fileName}
-              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="truncate text-base font-semibold text-[var(--harbor-ink)]">
+                  {document.fileName}
+                </h3>
+                {pendingAck ? (
+                  <span className="badge badge-warning badge-sm">
+                    Acknowledgment required
+                  </span>
+                ) : null}
+                {needsAck && acknowledged ? (
+                  <span className="badge badge-success badge-sm gap-1">
+                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                    Acknowledged
+                  </span>
+                ) : null}
+              </div>
               <p className="text-sm text-[var(--harbor-ink)]/65">
                 {document.description}
               </p>
@@ -498,6 +570,12 @@ function DocumentRow({
               value={formatDocumentSize(document.fileSizeBytes)}
             />
           </dl>
+          {pendingAck ? (
+            <p className="text-sm text-[var(--harbor-ink)]/70">
+              {document.acknowledgmentLabel ??
+                "Please acknowledge that you have reviewed this document."}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2 sm:shrink-0">
           <button
@@ -528,6 +606,17 @@ function DocumentRow({
             <Download className="h-4 w-4" aria-hidden="true" />
             Download
           </button>
+          {pendingAck ? (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm gap-1"
+              onClick={onAcknowledge}
+              aria-label={`Acknowledge ${document.fileName}`}
+            >
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+              Acknowledge
+            </button>
+          ) : null}
         </div>
       </div>
     </article>

@@ -10,6 +10,7 @@ import {
   PORTAL_HOME_PATH,
   PORTAL_UNAUTHORIZED_PATH,
   portalLoginRedirect,
+  resolveTenantLifecycle,
   resolveTenantScopeId,
   type PortalTenantSession,
 } from "@/lib/portal/auth";
@@ -56,6 +57,7 @@ export async function getCurrentPortalTenant(): Promise<PortalTenantSession | nu
       displayName,
       role: CURRENT_TENANT_ROLE,
       tenantScopeId: resolveTenantScopeId(user),
+      lifecycle: resolveTenantLifecycle(user),
     };
   } catch {
     return null;
@@ -109,6 +111,7 @@ export async function requirePortalTenant(
       displayName,
       role: CURRENT_TENANT_ROLE,
       tenantScopeId: resolveTenantScopeId(user),
+      lifecycle: resolveTenantLifecycle(user),
     };
   } catch {
     if (await hasPortalDemoAccess()) {

@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { ArrowLeft, ClipboardList, KeyRound } from "lucide-react";
 import {
-  PORTAL_APPLY_PATH,
   PORTAL_HOME_PATH,
   PORTAL_LOGIN_PATH,
 } from "@/lib/portal/auth";
+import { FUTURE_HOME } from "@/lib/portal/future/paths";
 
+/** Current tenant — original /login flow (unchanged). */
 const CURRENT_TENANT_HREF = `${PORTAL_LOGIN_PATH}?next=${encodeURIComponent(PORTAL_HOME_PATH)}`;
+
+/** Future tenant — leasing portal (public landing; apply requires sign-in). */
+const FUTURE_TENANT_HREF = FUTURE_HOME;
 
 /**
  * After the welcome “tenant or future tenant” CTA — pick which experience to open.
@@ -40,8 +44,8 @@ export default function PortalStartPage() {
             Are you a current tenant or a future tenant?
           </h1>
           <p className="mt-3 max-w-lg text-base text-[var(--harbor-muted)] sm:text-lg">
-            Choose the path that matches your situation so we can open the right
-            tools.
+            Choose the path that matches your situation. Both portals cover
+            personal homes and commercial suites.
           </p>
         </div>
 
@@ -61,8 +65,9 @@ export default function PortalStartPage() {
                     Current tenant
                   </p>
                   <p className="mt-2 text-sm opacity-80">
-                    Already leasing with Harborline — pay rent, request
-                    maintenance, view your lease, and message management.
+                    Already leasing a Harborline personal home or commercial
+                    suite — pay rent, request maintenance, view your lease, and
+                    message management.
                   </p>
                 </div>
               </div>
@@ -74,7 +79,7 @@ export default function PortalStartPage() {
 
           <li>
             <Link
-              href={PORTAL_APPLY_PATH}
+              href={FUTURE_TENANT_HREF}
               className="group flex min-h-[11rem] h-full flex-col justify-between rounded-2xl border border-[var(--harbor-deep)]/15 bg-[var(--harbor-sand)] px-6 py-6 text-[var(--harbor-ink)] shadow-lg transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)] portal-focus portal-motion-safe"
             >
               <div className="flex items-start gap-3">
@@ -87,13 +92,14 @@ export default function PortalStartPage() {
                     Future tenant
                   </p>
                   <p className="mt-2 text-sm text-[var(--harbor-muted)]">
-                    Looking for space — apply for a property, review contracts,
-                    and track your application.
+                    Looking for a personal home or commercial space — browse
+                    available inventory, schedule a tour, apply online, and
+                    track your application.
                   </p>
                 </div>
               </div>
               <span className="mt-6 text-sm font-medium text-[var(--harbor-deep)]">
-                Continue to apply →
+                Continue to leasing portal →
               </span>
             </Link>
           </li>

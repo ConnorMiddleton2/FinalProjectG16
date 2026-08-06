@@ -1,6 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getPortalTenantSessionClient } from "@/lib/portal/auth-client";
+import {
+  isDocumentAcknowledged,
+  markDocumentAcknowledged,
+} from "@/lib/portal/documents-ack-store";
 import { documentMatchesSearch } from "@/lib/portal/documents-format";
 import type {
   DocumentFilters,
@@ -47,6 +52,8 @@ export function useTenantDocuments() {
   const [state, setState] = useState<DocumentsLoadState>({ status: "loading" });
   const [filters, setFilters] = useState<DocumentFilters>(DEFAULT_FILTERS);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [ackVersion, setAckVersion] = useState(0);
+  const tenantScopeRef = useRef<string | null>(null);
 
   const applyAuthorized = useCallback(
     (
@@ -79,6 +86,8 @@ export function useTenantDocuments() {
     setState({ status: "loading" });
     setSuccessMessage(null);
     try {
+      const session = await getPortalTenantSessionClient();
+      tenantScopeRef.current = session?.tenantScopeId ?? null;
       const result = await listDocuments();
       if (!result.ok) {
         if (result.error.code === "unauthorized") {
@@ -130,6 +139,28 @@ export function useTenantDocuments() {
     window.setTimeout(() => setSuccessMessage(null), 3500);
   }, []);
 
+  const isAcknowledged = useCallback(
+    (documentId: string) => {
+      void ackVersion;
+      const scopeId = tenantScopeRef.current;
+      if (!scopeId) return false;
+      return isDocumentAcknowledged(documentId, scopeId);
+    },
+    [ackVersion]
+  );
+
+  const acknowledgeDocument = useCallback(
+    (documentId: string) => {
+      const scopeId = tenantScopeRef.current;
+      if (!scopeId) return false;
+      markDocumentAcknowledged(documentId, scopeId);
+      setAckVersion((v) => v + 1);
+      showSuccess("Document acknowledged for your account.");
+      return true;
+    },
+    [showSuccess]
+  );
+
   const filtered = useMemo(() => {
     if (state.status !== "success") return [];
     return state.documents
@@ -153,16 +184,31 @@ export function useTenantDocuments() {
     return counts;
   }, [state]);
 
+  const pendingAcknowledgments = useMemo(() => {
+    if (state.status !== "success") return 0;
+    void ackVersion;
+    const scopeId = tenantScopeRef.current;
+    if (!scopeId) return 0;
+    return state.documents.filter(
+      (doc) =>
+        doc.requiresAcknowledgment &&
+        !isDocumentAcknowledged(doc.id, scopeId)
+    ).length;
+  }, [state, ackVersion]);
+
   return {
     state,
     filters,
     filtered,
     categoryCounts,
     successMessage,
+    pendingAcknowledgments,
     reload: () => void load(),
     loadDemoData,
     updateFilters,
     resetFilters,
     showSuccess,
+    isAcknowledged,
+    acknowledgeDocument,
   };
 }

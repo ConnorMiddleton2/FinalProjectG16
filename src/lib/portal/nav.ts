@@ -25,6 +25,11 @@ export const PORTAL_PRIMARY_NAV: PortalNavItem[] = [
     description: "See what’s due and recent payment activity.",
   },
   {
+    href: "/portal/charges",
+    label: "Utilities & fees",
+    description: "Pay utilities, common area maintenance, parking, and amenity charges.",
+  },
+  {
     href: "/portal/maintenance",
     label: "Maintenance",
     description: "Track and submit maintenance requests.",
@@ -33,6 +38,11 @@ export const PORTAL_PRIMARY_NAV: PortalNavItem[] = [
     href: "/portal/lease",
     label: "Lease",
     description: "View lease terms and unit details.",
+  },
+  {
+    href: "/portal/insurance",
+    label: "Insurance",
+    description: "Track coverage and upload certificates of insurance.",
   },
   {
     href: "/portal/documents",
@@ -59,6 +69,11 @@ export const PORTAL_PRIMARY_NAV: PortalNavItem[] = [
 /** Secondary actions for current tenants. */
 export const PORTAL_SECONDARY_ACTIONS: PortalNavItem[] = [
   {
+    href: "/portal/notification-preferences",
+    label: "Mobile alerts",
+    description: "Manage mobile notification preferences.",
+  },
+  {
     href: "/portal/renewal",
     label: "Request Renewal",
     description: "Ask to renew your lease.",
@@ -70,11 +85,31 @@ export const PORTAL_SECONDARY_ACTIONS: PortalNavItem[] = [
   },
 ];
 
-/** Future-tenant entry (applications / onboarding). */
+/** Primary navigation when a future-tenant session is inside current-tenant chrome. */
+export const PORTAL_FUTURE_PRIMARY_NAV: PortalNavItem[] = [
+  {
+    href: "/portal/future",
+    label: "Leasing home",
+    description: "Browse units and start an application.",
+    exact: true,
+  },
+  {
+    href: "/portal/future/units",
+    label: "Available units",
+    description: "Search open inventory.",
+  },
+  {
+    href: "/portal/apply",
+    label: "Move-in progress",
+    description: "Track approval stage, deadlines, and readiness.",
+  },
+];
+
+/** Future-tenant entry (leasing discovery + application). */
 export const PORTAL_FUTURE_TENANT_LINK: PortalNavItem = {
-  href: "/portal/apply",
-  label: "Apply for a property",
-  description: "Start an application if you are looking for space.",
+  href: "/portal/future",
+  label: "Future tenant leasing",
+  description: "Browse units, schedule tours, and apply with Harborline.",
 };
 
 export type PortalPageMeta = {
@@ -102,6 +137,16 @@ export const PORTAL_PAGE_META: Record<string, PortalPageMeta> = {
     title: "Payment history and receipts",
     description:
       "Search, filter, and download receipts for past payments with masked methods.",
+  },
+  "/portal/charges": {
+    title: "Utilities, common area maintenance & fees",
+    description:
+      "View and pay charges beyond base rent — utilities, common area maintenance, parking, and amenity fees.",
+  },
+  "/portal/insurance": {
+    title: "Insurance & certificates",
+    description:
+      "Track required insurance for personal and commercial leases and upload certificates of insurance.",
   },
   "/portal/maintenance": {
     title: "Maintenance requests",
@@ -142,6 +187,11 @@ export const PORTAL_PAGE_META: Record<string, PortalPageMeta> = {
     description:
       "In-portal alerts for rent, payments, maintenance, announcements, messages, renewals, and documents.",
   },
+  "/portal/notification-preferences": {
+    title: "Mobile alerts",
+    description:
+      "Enable mobile alerts, choose alert categories, set quiet hours, and send a test alert.",
+  },
   "/portal/profile": {
     title: "Profile",
     description:
@@ -158,9 +208,9 @@ export const PORTAL_PAGE_META: Record<string, PortalPageMeta> = {
       "Submit a move-out notice, review checklist items, and track status. Notices are not accepted until management acknowledges them.",
   },
   "/portal/apply": {
-    title: "Apply for a property",
+    title: "Move-in progress",
     description:
-      "Future tenants can submit an application, review contracts, and check billing.",
+      "Approved future tenants: track stages, documents, lease signing, deposits, scheduling, and readiness before move-in.",
   },
   "/portal/start": {
     title: "Choose your path",
@@ -171,6 +221,20 @@ export const PORTAL_PAGE_META: Record<string, PortalPageMeta> = {
     title: "Unauthorized",
     description:
       "This area is only for authenticated current tenants. Choose another path if you need to apply or sign in.",
+  },
+  "/portal/login": {
+    title: "Tenant login",
+    description:
+      "Sign in to the Harborline tenant portal with your lease email and password.",
+  },
+  "/portal/signup": {
+    title: "Tenant signup",
+    description:
+      "Create a tenant account with a valid invitation code for your unit.",
+  },
+  "/portal/reset-password": {
+    title: "Reset password",
+    description: "Choose a new password for your tenant portal account.",
   },
 };
 

@@ -38,7 +38,7 @@ export function getMockPortalNotifications(): PortalNotification[] {
       type: "maintenance_updated",
       category: "Maintenance",
       title: "Maintenance request updated",
-      body: "HVAC not cooling in suite (MR-2026-0142) has a new status update.",
+      body: "Heating and cooling not working in suite (MR-2026-0142) has a new status update.",
       createdAt: "2026-04-28T16:20:00",
       href: "/portal/maintenance/maint-1",
       hrefLabel: "View request",
@@ -102,6 +102,16 @@ export function getMockPortalNotifications(): PortalNotification[] {
       createdAt: "2026-04-22T09:00:00",
       href: "/portal/announcements",
       hrefLabel: "View announcements",
+    },
+    {
+      id: "notif-11",
+      type: "new_announcement",
+      category: "Announcements",
+      title: "Property update posted",
+      body: "Elevator modernization progress was shared for Pier 12.",
+      createdAt: "2026-04-12T11:00:00",
+      href: "/portal/announcements",
+      hrefLabel: "View property announcements",
     },
   ];
 }

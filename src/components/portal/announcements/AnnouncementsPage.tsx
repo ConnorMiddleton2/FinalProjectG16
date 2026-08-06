@@ -144,7 +144,8 @@ export function AnnouncementsPage() {
         role="status"
       >
         Announcements loaded
-        {state.source === "mock" ? " (demo data)" : ""}.
+        {state.source === "mock" ? " (demo data)" : ""}. Includes payment,
+        maintenance, lease, and property notices for your building.
       </div>
 
       {urgentUnread.length > 0 ? (

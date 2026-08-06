@@ -1,4 +1,6 @@
-const STORAGE_KEY = "harborline.portal.notificationRead.v1";
+import { portalStorageKey } from "@/lib/portal/storage-key";
+
+const STORAGE_BASE = "harborline.portal.notificationRead.v1";
 
 /** Default unread set for first visit — mirrors announcements read pattern. */
 const DEFAULT_UNREAD_IDS = [
@@ -15,10 +17,14 @@ function canUseStorage() {
   );
 }
 
-function readMap(): Record<string, boolean> {
-  if (!canUseStorage()) return {};
+function storageKey(tenantScopeId: string) {
+  return portalStorageKey(STORAGE_BASE, tenantScopeId);
+}
+
+function readMap(tenantScopeId: string): Record<string, boolean> {
+  if (!canUseStorage() || !tenantScopeId) return {};
   try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(storageKey(tenantScopeId));
     if (!raw) return {};
     return JSON.parse(raw) as Record<string, boolean>;
   } catch {
@@ -26,36 +32,42 @@ function readMap(): Record<string, boolean> {
   }
 }
 
-function writeMap(map: Record<string, boolean>) {
-  if (!canUseStorage()) return;
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+function writeMap(tenantScopeId: string, map: Record<string, boolean>) {
+  if (!canUseStorage() || !tenantScopeId) return;
+  window.sessionStorage.setItem(storageKey(tenantScopeId), JSON.stringify(map));
 }
 
 /** true = read; default unread list starts unread */
-export function isNotificationRead(id: string): boolean {
-  const map = readMap();
+export function isNotificationRead(
+  id: string,
+  tenantScopeId: string
+): boolean {
+  const map = readMap(tenantScopeId);
   if (id in map) return map[id] === true;
   return !DEFAULT_UNREAD_IDS.includes(id);
 }
 
-export function markNotificationRead(id: string) {
-  const map = readMap();
+export function markNotificationRead(id: string, tenantScopeId: string) {
+  const map = readMap(tenantScopeId);
   map[id] = true;
-  writeMap(map);
+  writeMap(tenantScopeId, map);
   notifyReadersChanged();
 }
 
-export function markNotificationUnread(id: string) {
-  const map = readMap();
+export function markNotificationUnread(id: string, tenantScopeId: string) {
+  const map = readMap(tenantScopeId);
   map[id] = false;
-  writeMap(map);
+  writeMap(tenantScopeId, map);
   notifyReadersChanged();
 }
 
-export function markAllNotificationsRead(ids: string[]) {
-  const map = readMap();
+export function markAllNotificationsRead(
+  ids: string[],
+  tenantScopeId: string
+) {
+  const map = readMap(tenantScopeId);
   for (const id of ids) map[id] = true;
-  writeMap(map);
+  writeMap(tenantScopeId, map);
   notifyReadersChanged();
 }
 
@@ -64,9 +76,16 @@ function notifyReadersChanged() {
   window.dispatchEvent(new Event("harborline:notifications-changed"));
 }
 
-export function countUnreadNotifications(ids: string[]) {
+export function countUnreadNotifications(
+  ids: string[],
+  tenantScopeId: string
+) {
   return ids.reduce(
-    (sum, id) => sum + (isNotificationRead(id) ? 0 : 1),
+    (sum, id) => sum + (isNotificationRead(id, tenantScopeId) ? 0 : 1),
     0
   );
+}
+
+export function notificationReadStoragePrefix() {
+  return `${STORAGE_BASE}::`;
 }

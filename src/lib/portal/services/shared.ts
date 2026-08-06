@@ -48,10 +48,10 @@ export type ServiceFailure = {
 export type ServiceResult<T> = ServiceSuccess<T> | ServiceFailure;
 
 /** Default simulated network delay (ms) for mock reads. */
-export const DEFAULT_LOAD_DELAY_MS = 400;
+export const DEFAULT_LOAD_DELAY_MS = 150;
 
 /** Default simulated network delay (ms) for mock writes. */
-export const DEFAULT_WRITE_DELAY_MS = 700;
+export const DEFAULT_WRITE_DELAY_MS = 250;
 
 /**
  * Set `NEXT_PUBLIC_PORTAL_FORCE_SERVICE_ERROR=1` to force service failures.

@@ -8,13 +8,13 @@ import type { SavedPaymentMethodSummary } from "@/lib/portal/payments-types";
 export function getMockMakePaymentContext(): MakePaymentContext {
   return {
     propertyLabel: "Pier 12 · Suite 210",
-    currentBalance: 4875,
+    currentBalance: 4850,
     currentRent: 4800,
     lateFee: 75,
     dueDate: "May 1, 2026",
     currencySymbol: "$",
     allowCustomAmount: true,
-    maxPayable: 4875,
+    maxPayable: 4850,
     methods: [
       {
         id: "pm-1",

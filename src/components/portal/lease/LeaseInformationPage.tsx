@@ -20,6 +20,11 @@ import {
 } from "@/lib/portal/lease-format";
 import { buildLeaseDocumentText } from "@/lib/portal/lease-mock";
 import type { LeaseInformation } from "@/lib/portal/lease-types";
+import {
+  occupancyClassLabel,
+  portalPropertyTypeLabel,
+  spaceNoun,
+} from "@/lib/portal/occupancy";
 
 export function LeaseInformationPage() {
   const { state, reload, loadDemoData } = useLeaseInformation();
@@ -162,6 +167,9 @@ export function LeaseInformationPage() {
             <span className={`badge ${leaseStatusClass(lease.status)}`}>
               {lease.status}
             </span>
+            <span className="badge badge-outline">
+              {occupancyClassLabel(lease.occupancyClass)}
+            </span>
             <span className="text-xs font-medium uppercase tracking-wide text-[var(--harbor-muted)]">
               {lease.leaseNumber}
             </span>
@@ -192,8 +200,19 @@ export function LeaseInformationPage() {
           Lease terms
         </h3>
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+          <DetailItem
+            label="Property class"
+            value={occupancyClassLabel(lease.occupancyClass)}
+          />
+          <DetailItem
+            label="Property type"
+            value={portalPropertyTypeLabel(lease.propertyType)}
+          />
           <DetailItem label="Property address" value={lease.propertyAddress} />
-          <DetailItem label="Unit number" value={lease.unitNumber} />
+          <DetailItem
+            label={`${spaceNoun(lease.occupancyClass)} number`}
+            value={lease.unitNumber}
+          />
           <DetailItem
             label="Lease start date"
             value={formatLeaseDate(lease.leaseStartDate)}
@@ -226,7 +245,9 @@ export function LeaseInformationPage() {
           id="occupants-heading"
           className="text-lg font-semibold text-[var(--harbor-ink)]"
         >
-          Occupants
+          {lease.occupancyClass === "commercial"
+            ? "Authorized contacts"
+            : "Occupants"}
         </h3>
         {lease.occupants.length === 0 ? (
           <p className="mt-3 text-sm text-[var(--harbor-muted)]" role="status">

@@ -68,15 +68,20 @@ export function MaintenanceRequestForm() {
             Submit a maintenance request
           </h2>
           <p className="text-sm text-[var(--harbor-muted)]">
-            Required fields are marked. Attachments are optional (JPG, PNG,
-            WEBP, or PDF · max {MAX_ATTACHMENTS} files ·{" "}
+            Complete the fields below. Required fields are marked. Attachments
+            are optional (JPG, PNG, WEBP, or PDF · max {MAX_ATTACHMENTS} files ·{" "}
             {formatFileSize(MAX_ATTACHMENT_BYTES)} each).
           </p>
         </header>
 
+        <fieldset className="space-y-4 rounded-xl border border-[var(--harbor-deep)]/10 p-4">
+          <legend className="px-1 text-sm font-semibold text-[var(--harbor-ink)]">
+            Issue details
+          </legend>
+
         <div className="grid gap-4 md:grid-cols-2">
           <Field
-            label="Unit or property"
+            label="Property or unit"
             required
             error={errors.propertyOrUnit}
             htmlFor="maint-property"
@@ -261,7 +266,12 @@ export function MaintenanceRequestForm() {
             </select>
           </Field>
         </div>
+        </fieldset>
 
+        <fieldset className="space-y-4 rounded-xl border border-[var(--harbor-deep)]/10 p-4">
+          <legend className="px-1 text-sm font-semibold text-[var(--harbor-ink)]">
+            Access, pets, and safety
+          </legend>
         <div className="grid gap-4 md:grid-cols-2">
           <Field
             label="Permission to enter"
@@ -334,9 +344,27 @@ export function MaintenanceRequestForm() {
           />
         </Field>
 
+        <Field
+          label="Safety concerns"
+          error={errors.safetyConcerns}
+          htmlFor="maint-safety"
+          hint="Optional — note hazards technicians should know about (not for active emergencies)."
+        >
+          <textarea
+            id="maint-safety"
+            className="textarea textarea-bordered min-h-20 w-full"
+            value={values.safetyConcerns}
+            onChange={(e) => updateField("safetyConcerns", e.target.value)}
+            placeholder="e.g. Uneven flooring near the leak"
+            maxLength={NOTES_MAX}
+            aria-invalid={Boolean(errors.safetyConcerns)}
+          />
+        </Field>
+        </fieldset>
+
         <fieldset className="space-y-4 rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/30 p-4">
           <legend className="px-1 text-sm font-semibold text-[var(--harbor-ink)]">
-            Contact details
+            Preferred contact method and contact time
           </legend>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -461,29 +489,16 @@ export function MaintenanceRequestForm() {
           </Field>
         </fieldset>
 
-        <Field
-          label="Safety concerns"
-          error={errors.safetyConcerns}
-          htmlFor="maint-safety"
-          hint="Optional — note hazards technicians should know about (not for active emergencies)."
-        >
-          <textarea
-            id="maint-safety"
-            className="textarea textarea-bordered min-h-20 w-full"
-            value={values.safetyConcerns}
-            onChange={(e) => updateField("safetyConcerns", e.target.value)}
-            placeholder="e.g. Uneven flooring near the leak"
-            maxLength={NOTES_MAX}
-            aria-invalid={Boolean(errors.safetyConcerns)}
-          />
-        </Field>
-
+        <fieldset className="space-y-4 rounded-xl border border-[var(--harbor-deep)]/10 p-4">
+          <legend className="px-1 text-sm font-semibold text-[var(--harbor-ink)]">
+            Preferred service timing
+          </legend>
         <div className="grid gap-4 md:grid-cols-2">
           <Field
             label="Preferred service date"
             error={errors.preferredServiceDate}
             htmlFor="maint-service-date"
-            hint="Optional"
+            hint="Optional — helps scheduling"
           >
             <input
               id="maint-service-date"
@@ -524,15 +539,16 @@ export function MaintenanceRequestForm() {
             </select>
           </Field>
         </div>
+        </fieldset>
 
-        <fieldset className="space-y-3">
-          <legend className="text-sm font-medium text-[var(--harbor-ink)]">
-            Attachments
+        <fieldset className="space-y-3 rounded-xl border border-[var(--harbor-deep)]/10 p-4">
+          <legend className="px-1 text-sm font-semibold text-[var(--harbor-ink)]">
+            Photo or document attachments
           </legend>
           <p className="text-xs text-[var(--harbor-muted)]">
             Allowed: {ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")}. Max{" "}
             {MAX_ATTACHMENTS} files, {formatFileSize(MAX_ATTACHMENT_BYTES)}{" "}
-            each. Files stay in this browser session only (demo).
+            each. Invalid types or oversized files are rejected.
           </p>
           <input
             type="file"
@@ -736,7 +752,11 @@ function MaintenanceFormConfirmation({
 }) {
   const { values } = result;
   return (
-    <div className="space-y-5 rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-5 shadow-sm sm:p-6">
+    <div
+      className="space-y-5 rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-5 shadow-sm sm:p-6"
+      role="status"
+      aria-live="polite"
+    >
       <div className="flex items-start gap-3">
         <CheckCircle2
           className="mt-0.5 h-7 w-7 text-success"
@@ -747,15 +767,25 @@ function MaintenanceFormConfirmation({
             Request submitted
           </h2>
           <p className="mt-1 text-sm text-[var(--harbor-muted)]">
-            Harborline received your maintenance request. Track status and add
-            updates on the request detail page.
+            Harborline received your maintenance request. Save your request
+            number and track status on the request detail page.
           </p>
         </div>
       </div>
 
+      <div className="rounded-2xl border border-success/25 bg-success/10 px-4 py-5 text-center">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--harbor-muted)]">
+          Your request number
+        </p>
+        <p className="mt-2 font-display text-3xl tracking-tight text-[var(--harbor-ink)] sm:text-4xl">
+          {result.requestNumber}
+        </p>
+        <p className="mt-2 text-sm text-[var(--harbor-muted)]">
+          Submitted {result.submittedAt}
+        </p>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2">
-        <ConfirmTile label="Request number" value={result.requestNumber} emphasize />
-        <ConfirmTile label="Submitted" value={result.submittedAt} />
         <ConfirmTile label="Property / unit" value={values.propertyOrUnit} />
         <ConfirmTile label="Category" value={values.category || "—"} />
         <ConfirmTile label="Title" value={values.title} />

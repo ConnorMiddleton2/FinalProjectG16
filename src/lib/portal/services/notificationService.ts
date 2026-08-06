@@ -42,10 +42,11 @@ export async function listNotifications(): Promise<
     if (!sessionOwnsDemoFixtures(auth.data)) {
       return ok([], "mock");
     }
+    const scopeId = auth.data.tenantScopeId;
     const items = getMockPortalNotifications()
       .map((item) => ({
         ...item,
-        read: isNotificationRead(item.id),
+        read: isNotificationRead(item.id, scopeId),
       }))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return ok(items, "mock");
@@ -68,7 +69,10 @@ export async function getUnreadNotificationCount(): Promise<
       return ok(0, "mock");
     }
     const ids = getMockPortalNotifications().map((n) => n.id);
-    return ok(countUnreadNotifications(ids), "mock");
+    return ok(
+      countUnreadNotifications(ids, auth.data.tenantScopeId),
+      "mock"
+    );
   } catch (err) {
     return failFromUnknown(err, "Could not load unread count.");
   }
@@ -77,21 +81,27 @@ export async function getUnreadNotificationCount(): Promise<
 export async function markNotificationAsRead(
   id: string
 ): Promise<ServiceResult<{ id: string }>> {
-  markNotificationRead(id);
+  const auth = await requirePortalServiceSession();
+  if (!auth.ok) return auth;
+  markNotificationRead(id, auth.data.tenantScopeId);
   return ok({ id }, "mock");
 }
 
 export async function markNotificationAsUnread(
   id: string
 ): Promise<ServiceResult<{ id: string }>> {
-  markNotificationUnread(id);
+  const auth = await requirePortalServiceSession();
+  if (!auth.ok) return auth;
+  markNotificationUnread(id, auth.data.tenantScopeId);
   return ok({ id }, "mock");
 }
 
 export async function markAllNotificationsAsRead(
   ids: string[]
 ): Promise<ServiceResult<{ count: number }>> {
-  markAllNotificationsRead(ids);
+  const auth = await requirePortalServiceSession();
+  if (!auth.ok) return auth;
+  markAllNotificationsRead(ids, auth.data.tenantScopeId);
   return ok({ count: ids.length }, "mock");
 }
 

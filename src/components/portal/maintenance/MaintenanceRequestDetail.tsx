@@ -2,6 +2,14 @@
 
 import Link from "next/link";
 import { useId, useRef, useState, type FormEvent } from "react";
+import {
+  CalendarClock,
+  ClipboardList,
+  FileText,
+  Paperclip,
+  UserRound,
+  Wrench,
+} from "lucide-react";
 import { usePortalModal } from "@/hooks/usePortalModal";
 import { useMaintenanceRequestDetail } from "@/hooks/useMaintenanceRequestDetail";
 import {
@@ -114,12 +122,20 @@ export function MaintenanceRequestDetail({ requestId }: Props) {
   const detail = state.detail;
   const canFollowUp =
     detail.status === "Open" || detail.status === "Scheduled";
+  const tenantNotes = detail.updates.filter(
+    (entry) =>
+      (entry.visibility ?? "tenant") === "tenant" &&
+      (entry.kind === "note" || entry.kind === "tenant")
+  );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-2">
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--harbor-muted)]">
+            Request number
+          </p>
+          <p className="font-display text-2xl tracking-tight text-[var(--harbor-ink)]">
             {detail.requestNumber}
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -179,24 +195,112 @@ export function MaintenanceRequestDetail({ requestId }: Props) {
         </div>
       ) : null}
 
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section
+          className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-4 shadow-sm sm:p-5"
+          aria-labelledby="appointment-heading"
+        >
+          <div className="flex items-center gap-2">
+            <CalendarClock
+              className="h-5 w-5 text-[var(--harbor-mid)]"
+              aria-hidden="true"
+            />
+            <h2
+              id="appointment-heading"
+              className="text-lg font-semibold text-[var(--harbor-ink)]"
+            >
+              Appointment information
+            </h2>
+          </div>
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+            <DetailItem
+              label="Scheduled visit"
+              value={
+                detail.scheduledOn
+                  ? formatMaintenanceDate(detail.scheduledOn)
+                  : "Not scheduled yet"
+              }
+            />
+            <DetailItem
+              label="Appointment window"
+              value={detail.appointmentWindow ?? "—"}
+            />
+            <DetailItem
+              label="Preferred service date"
+              value={
+                detail.preferredServiceDate
+                  ? formatMaintenanceDate(detail.preferredServiceDate)
+                  : "Not specified"
+              }
+            />
+            <DetailItem
+              label="Preferred window"
+              value={labelServiceWindow(detail.preferredServiceWindow)}
+            />
+          </dl>
+        </section>
+
+        <section
+          className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-4 shadow-sm sm:p-5"
+          aria-labelledby="technician-heading"
+        >
+          <div className="flex items-center gap-2">
+            <Wrench
+              className="h-5 w-5 text-[var(--harbor-mid)]"
+              aria-hidden="true"
+            />
+            <h2
+              id="technician-heading"
+              className="text-lg font-semibold text-[var(--harbor-ink)]"
+            >
+              Technician information
+            </h2>
+          </div>
+          {detail.technicianName ? (
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+              <DetailItem label="Technician" value={detail.technicianName} />
+              <DetailItem
+                label="Company"
+                value={detail.technicianCompany ?? "—"}
+              />
+              <DetailItem
+                label="Contact phone"
+                value={detail.technicianPhone ?? "—"}
+              />
+              <DetailItem
+                label="Permission to enter"
+                value={labelPermission(detail.permissionToEnter)}
+              />
+            </dl>
+          ) : (
+            <p className="mt-4 text-sm text-[var(--harbor-muted)]" role="status">
+              A technician has not been assigned yet. Appointment and contact
+              details will appear here when available.
+            </p>
+          )}
+        </section>
+      </div>
+
       <section
         className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-4 shadow-sm sm:p-5"
         aria-labelledby="request-summary-heading"
       >
-        <h2
-          id="request-summary-heading"
-          className="text-lg font-semibold text-[var(--harbor-ink)]"
-        >
-          Request details
-        </h2>
+        <div className="flex items-center gap-2">
+          <ClipboardList
+            className="h-5 w-5 text-[var(--harbor-mid)]"
+            aria-hidden="true"
+          />
+          <h2
+            id="request-summary-heading"
+            className="text-lg font-semibold text-[var(--harbor-ink)]"
+          >
+            Request details
+          </h2>
+        </div>
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
           <DetailItem label="Category" value={detail.category} />
           <DetailItem label="Property / unit" value={detail.propertyOrUnit} />
           <DetailItem label="Location in unit" value={detail.locationInUnit} />
-          <DetailItem
-            label="Permission to enter"
-            value={labelPermission(detail.permissionToEnter)}
-          />
           <DetailItem
             label="Pets in unit"
             value={
@@ -226,30 +330,6 @@ export function MaintenanceRequestDetail({ requestId }: Props) {
             }
           />
           <DetailItem
-            label="Preferred service date"
-            value={
-              detail.preferredServiceDate
-                ? formatMaintenanceDate(detail.preferredServiceDate)
-                : "Not specified"
-            }
-          />
-          <DetailItem
-            label="Preferred service window"
-            value={labelServiceWindow(detail.preferredServiceWindow)}
-          />
-          <DetailItem
-            label="Scheduled visit"
-            value={
-              detail.scheduledOn
-                ? formatMaintenanceDate(detail.scheduledOn)
-                : "Not scheduled"
-            }
-          />
-          <DetailItem
-            label="Technician"
-            value={detail.technicianName ?? "Not assigned"}
-          />
-          <DetailItem
             label="Last update"
             value={formatMaintenanceDate(detail.lastUpdate)}
           />
@@ -277,9 +357,15 @@ export function MaintenanceRequestDetail({ requestId }: Props) {
         </dl>
 
         <div className="mt-5 border-t border-[var(--harbor-deep)]/10 pt-4">
-          <h3 className="text-sm font-semibold text-[var(--harbor-ink)]">
-            Contact for this request
-          </h3>
+          <div className="flex items-center gap-2">
+            <UserRound
+              className="h-4 w-4 text-[var(--harbor-mid)]"
+              aria-hidden="true"
+            />
+            <h3 className="text-sm font-semibold text-[var(--harbor-ink)]">
+              Contact for this request
+            </h3>
+          </div>
           <dl className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <DetailItem label="Name" value={detail.contactName} />
             <DetailItem label="Phone" value={detail.contactPhone || "—"} />
@@ -294,24 +380,94 @@ export function MaintenanceRequestDetail({ requestId }: Props) {
             />
           </dl>
         </div>
+      </section>
 
+      <section
+        className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-4 shadow-sm sm:p-5"
+        aria-labelledby="attachments-heading"
+      >
+        <div className="flex items-center gap-2">
+          <Paperclip
+            className="h-5 w-5 text-[var(--harbor-mid)]"
+            aria-hidden="true"
+          />
+          <h2
+            id="attachments-heading"
+            className="text-lg font-semibold text-[var(--harbor-ink)]"
+          >
+            Attachments
+          </h2>
+        </div>
         {detail.attachments.length > 0 ? (
-          <div className="mt-5 border-t border-[var(--harbor-deep)]/10 pt-4">
-            <h3 className="text-sm font-semibold text-[var(--harbor-ink)]">
-              Attachments
-            </h3>
-            <ul className="mt-2 space-y-1 text-sm text-[var(--harbor-ink)]/80">
+          <>
+            <ul className="mt-4 space-y-2">
               {detail.attachments.map((file) => (
-                <li key={file.id}>
-                  {file.name} ({formatFileSize(file.size)})
+                <li
+                  key={file.id}
+                  className="flex items-center justify-between gap-3 rounded-xl bg-[var(--harbor-sand)]/45 px-3 py-2 text-sm"
+                >
+                  <span className="min-w-0 truncate text-[var(--harbor-ink)]">
+                    {file.name}
+                  </span>
+                  <span className="shrink-0 text-[var(--harbor-muted)]">
+                    {formatFileSize(file.size)}
+                  </span>
                 </li>
               ))}
             </ul>
             <p className="mt-2 text-xs text-[var(--harbor-muted)]">
-              File previews are not shown in this demo.
+              File previews are not shown in this demo. Download links will
+              appear when live storage is connected.
             </p>
-          </div>
-        ) : null}
+          </>
+        ) : (
+          <p className="mt-4 text-sm text-[var(--harbor-muted)]" role="status">
+            No photos or documents were attached to this request.
+          </p>
+        )}
+      </section>
+
+      <section
+        className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-4 shadow-sm sm:p-5"
+        aria-labelledby="tenant-notes-heading"
+      >
+        <div className="flex items-center gap-2">
+          <FileText
+            className="h-5 w-5 text-[var(--harbor-mid)]"
+            aria-hidden="true"
+          />
+          <h2
+            id="tenant-notes-heading"
+            className="text-lg font-semibold text-[var(--harbor-ink)]"
+          >
+            Notes visible to you
+          </h2>
+        </div>
+        <p className="mt-1 text-sm text-[var(--harbor-muted)]">
+          Only tenant-facing updates appear here. Internal employee notes are
+          never shown in the portal.
+        </p>
+        {tenantNotes.length === 0 ? (
+          <p className="mt-4 text-sm text-[var(--harbor-muted)]" role="status">
+            No tenant-visible notes yet.
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {tenantNotes.map((entry) => (
+              <li
+                key={entry.id}
+                className="rounded-xl border border-[var(--harbor-deep)]/10 px-3 py-3"
+              >
+                <p className="text-xs text-[var(--harbor-muted)]">
+                  {entry.createdAt} · {entry.author}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--harbor-ink)]">
+                  {entry.message}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section
@@ -322,10 +478,11 @@ export function MaintenanceRequestDetail({ requestId }: Props) {
           id="timeline-heading"
           className="text-lg font-semibold text-[var(--harbor-ink)]"
         >
-          Updates &amp; timeline
+          Status timeline
         </h2>
         <p className="mt-1 text-sm text-[var(--harbor-muted)]">
-          Status changes and messages appear here so you can track follow-up.
+          Status changes, schedule updates, technician assignments, and your
+          follow-ups appear here.
         </p>
 
         {detail.updates.length === 0 ? (
@@ -504,7 +661,7 @@ function DetailItem({
 function TimelineItem({ entry }: { entry: MaintenanceStatusUpdate }) {
   return (
     <li className="relative border-l-2 border-[var(--harbor-deep)]/15 pl-4">
-      <div className="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full bg-[var(--harbor-deep)]" />
+      <div className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-[var(--harbor-deep)]" />
       <p className="text-xs text-[var(--harbor-muted)]">
         {entry.createdAt} · {entry.author}
         <span className="ml-1 opacity-70">({labelUpdateKind(entry.kind)})</span>

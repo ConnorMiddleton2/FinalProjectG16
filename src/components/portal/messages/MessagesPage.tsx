@@ -212,10 +212,32 @@ export function MessagesPage() {
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-[var(--harbor-muted)]" aria-live="polite">
-          {unreadTotal} unread conversation
-          {unreadTotal === 1 ? "" : "s"}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-[var(--harbor-muted)]" aria-live="polite">
+            {unreadTotal > 0 ? (
+              <>
+                <span className="badge badge-neutral badge-sm mr-2">
+                  {unreadTotal} unread
+                </span>
+                conversation{unreadTotal === 1 ? "" : "s"} with management
+              </>
+            ) : (
+              "No unread conversations"
+            )}
+          </p>
+          <Link
+            href="/portal/notifications"
+            className="btn btn-ghost btn-sm min-h-11"
+          >
+            Notifications
+          </Link>
+          <Link
+            href="/portal/announcements"
+            className="btn btn-ghost btn-sm min-h-11"
+          >
+            Announcements
+          </Link>
+        </div>
         <button
           type="button"
           className="btn btn-neutral btn-sm min-h-11 gap-1"

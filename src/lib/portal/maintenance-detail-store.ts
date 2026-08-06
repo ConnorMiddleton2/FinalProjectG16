@@ -1,4 +1,5 @@
 import type { MaintenanceRequestDetail } from "@/lib/portal/maintenance-detail-types";
+import { toTenantFacingMaintenanceDetail } from "@/lib/portal/maintenance-detail-types";
 import type { MaintenanceSubmissionResult } from "@/lib/portal/maintenance-types";
 import { getMockMaintenanceRequests } from "@/lib/portal/maintenance-mock";
 import { formatMaintenanceDate } from "@/lib/portal/maintenance-format";
@@ -59,7 +60,10 @@ export function createDetailFromSubmission(input: {
     submittedOn: today,
     submittedAtLabel: submittedAt,
     scheduledOn: null,
+    appointmentWindow: null,
     technicianName: null,
+    technicianCompany: null,
+    technicianPhone: null,
     lastUpdate: today,
     contactName: values.contactName.trim(),
     contactPhone: values.contactPhone.trim(),
@@ -83,6 +87,7 @@ export function createDetailFromSubmission(input: {
         message: "Request submitted by tenant and marked Open.",
         createdAt: submittedAt,
         author: values.contactName.trim() || "Tenant",
+        visibility: "tenant",
       },
       {
         id: crypto.randomUUID(),
@@ -91,6 +96,16 @@ export function createDetailFromSubmission(input: {
           "Harborline received your request. A coordinator will review and update this page.",
         createdAt: submittedAt,
         author: "Harborline",
+        visibility: "tenant",
+      },
+      {
+        id: crypto.randomUUID(),
+        kind: "note",
+        message:
+          "INTERNAL: Assign to vendor queue and check SLA. Do not show this note to the tenant.",
+        createdAt: submittedAt,
+        author: "Ops desk",
+        visibility: "internal",
       },
     ],
   };
@@ -118,7 +133,10 @@ function seedFromListItem(
     submittedOn: request.submittedOn,
     submittedAtLabel: `${formatMaintenanceDate(request.submittedOn)}, 10:00 AM`,
     scheduledOn: request.scheduledOn,
+    appointmentWindow: request.scheduledOn ? "Morning (8 AM – 12 PM)" : null,
     technicianName: request.technicianName,
+    technicianCompany: request.technicianName ? "Harborline Facilities" : null,
+    technicianPhone: request.technicianName ? "(662) 555-0177" : null,
     lastUpdate: request.lastUpdate,
     contactName: "Alex Tenant",
     contactPhone: "(662) 555-0142",
@@ -158,7 +176,7 @@ export function getSeedMaintenanceDetail(
   > = {
     "maint-1": {
       description:
-        "The suite HVAC blows air but it is not cold. Started mid-afternoon and has not recovered overnight.",
+        "The suite heating and cooling system blows air but it is not cold. Started mid-afternoon and has not recovered overnight.",
       propertyOrUnit: "Pier 12 · Suite 210",
       locationInUnit: "Main open office area",
       submittedAtLabel: "Apr 22, 2026, 10:14 AM",
@@ -166,7 +184,16 @@ export function getSeedMaintenanceDetail(
       preferredServiceDate: "2026-04-29",
       preferredServiceWindow: "afternoon",
       accessNotes: "South lobby is closest after 5 PM.",
+      safetyConcerns: "Uneven flooring near the thermostat wall plate.",
       noticedOn: "2026-04-21",
+      attachments: [
+        {
+          id: "att-hvac-1",
+          name: "thermostat-reading.jpg",
+          size: 245_760,
+          type: "image/jpeg",
+        },
+      ],
       updates: [
         {
           id: "u1",
@@ -174,13 +201,24 @@ export function getSeedMaintenanceDetail(
           message: "Request submitted and marked Open.",
           createdAt: "Apr 22, 2026, 10:14 AM",
           author: "Alex Tenant",
+          visibility: "tenant",
         },
         {
           id: "u2",
           kind: "note",
-          message: "Coordinator reviewing HVAC work order priority.",
+          message: "Coordinator reviewing heating and cooling work order priority.",
           createdAt: "Apr 23, 2026, 9:02 AM",
           author: "Harborline",
+          visibility: "tenant",
+        },
+        {
+          id: "u-internal-1",
+          kind: "note",
+          message:
+            "INTERNAL: Vendor overtime approval pending — do not disclose cost estimate to tenant.",
+          createdAt: "Apr 23, 2026, 9:05 AM",
+          author: "Ops desk",
+          visibility: "internal",
         },
         {
           id: "u3",
@@ -188,6 +226,7 @@ export function getSeedMaintenanceDetail(
           message: "Waiting on vendor availability for diagnostic visit.",
           createdAt: "Apr 28, 2026, 4:20 PM",
           author: "Harborline",
+          visibility: "tenant",
         },
       ],
     },
@@ -202,7 +241,19 @@ export function getSeedMaintenanceDetail(
       recurringIssue: "yes",
       preferredServiceDate: "2026-05-02",
       preferredServiceWindow: "morning",
+      appointmentWindow: "Morning (8 AM – 12 PM)",
+      technicianName: "Jordan Lee",
+      technicianCompany: "Harborline Facilities",
+      technicianPhone: "(662) 555-0177",
       noticedOn: "2026-04-19",
+      attachments: [
+        {
+          id: "att-badge-1",
+          name: "lobby-reader.pdf",
+          size: 102_400,
+          type: "application/pdf",
+        },
+      ],
       updates: [
         {
           id: "u1",
@@ -210,20 +261,32 @@ export function getSeedMaintenanceDetail(
           message: "Request submitted.",
           createdAt: "Apr 20, 2026, 2:41 PM",
           author: "Alex Tenant",
+          visibility: "tenant",
         },
         {
           id: "u2",
           kind: "technician",
-          message: "Assigned to Jordan Lee.",
+          message: "Assigned to Jordan Lee (Harborline Facilities).",
           createdAt: "Apr 24, 2026, 11:10 AM",
           author: "Harborline",
+          visibility: "tenant",
+        },
+        {
+          id: "u-internal-2",
+          kind: "note",
+          message:
+            "INTERNAL: Badge vendor SLA ticket #4412 — employee-only tracking.",
+          createdAt: "Apr 24, 2026, 11:12 AM",
+          author: "Ops desk",
+          visibility: "internal",
         },
         {
           id: "u3",
           kind: "schedule",
-          message: "Visit scheduled for May 2, 2026.",
+          message: "Visit scheduled for May 2, 2026 · Morning (8 AM – 12 PM).",
           createdAt: "Apr 26, 2026, 3:05 PM",
           author: "Harborline",
+          visibility: "tenant",
         },
       ],
     },
@@ -252,6 +315,7 @@ export function getSeedMaintenanceDetail(
         message: "Request submitted.",
         createdAt: `${formatMaintenanceDate(request.submittedOn)}, 10:00 AM`,
         author: "Alex Tenant",
+        visibility: "tenant",
       },
       ...(request.technicianName
         ? [
@@ -261,6 +325,7 @@ export function getSeedMaintenanceDetail(
               message: `Assigned to ${request.technicianName}.`,
               createdAt: `${formatMaintenanceDate(request.lastUpdate)}, 11:00 AM`,
               author: "Harborline",
+              visibility: "tenant" as const,
             },
           ]
         : []),
@@ -270,6 +335,7 @@ export function getSeedMaintenanceDetail(
         message: statusMessage,
         createdAt: `${formatMaintenanceDate(request.lastUpdate)}, 3:00 PM`,
         author: "Harborline",
+        visibility: "tenant",
       },
     ],
   });
@@ -278,7 +344,8 @@ export function getSeedMaintenanceDetail(
 export function resolveMaintenanceDetail(
   id: string
 ): MaintenanceRequestDetail | null {
-  return getStoredMaintenanceDetail(id) ?? getSeedMaintenanceDetail(id);
+  const raw = getStoredMaintenanceDetail(id) ?? getSeedMaintenanceDetail(id);
+  return raw ? toTenantFacingMaintenanceDetail(raw) : null;
 }
 
 export function appendTenantUpdate(
@@ -300,12 +367,13 @@ export function appendTenantUpdate(
         message: message.trim(),
         createdAt,
         author: detail.contactName || "Tenant",
+        visibility: "tenant",
       },
       ...detail.updates,
     ],
   };
   upsertStoredMaintenanceDetail(next);
-  return next;
+  return toTenantFacingMaintenanceDetail(next);
 }
 
 export function cancelMaintenanceRequest(
@@ -327,10 +395,11 @@ export function cancelMaintenanceRequest(
         message: "Tenant cancelled this maintenance request.",
         createdAt,
         author: detail.contactName || "Tenant",
+        visibility: "tenant",
       },
       ...detail.updates,
     ],
   };
   upsertStoredMaintenanceDetail(next);
-  return next;
+  return toTenantFacingMaintenanceDetail(next);
 }
