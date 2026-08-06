@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   Building2,
   ClipboardCheck,
+  FilePlus2,
   FileText,
   LogOut,
   Menu,
@@ -15,6 +16,12 @@ import { ownerLogout } from "@/app/owners/actions";
 
 const NAV = [
   { href: "/owners/dashboard", label: "Portfolio", match: "exact" as const },
+  {
+    href: "/owners/dashboard/apply",
+    label: "Apply",
+    match: "prefix" as const,
+    icon: FilePlus2,
+  },
   {
     href: "/owners/dashboard/contracts",
     label: "Contracts",

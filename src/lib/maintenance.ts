@@ -364,136 +364,18 @@ export function emptyWorkOrder(): Omit<WorkOrder, "id" | "createdAt"> {
 }
 
 export function seedWorkOrders(): WorkOrder[] {
-  const today = new Date();
-  const iso = (offsetDays: number) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + offsetDays);
-    return d.toISOString().slice(0, 10);
-  };
-
-  return [
-    {
-      id: "wo-1",
-      title: "Suite 210 HVAC not cooling",
-      category: "hvac",
-      property: "Riverbend Commerce Center",
-      unit: "210",
-      description: "Tenant reports warm air from vents since Monday.",
-      status: "in_progress",
-      priority: "high",
-      source: "tenant_submitted",
-      labor: "third_party",
-      vendorName: "Oxford HVAC Pros",
-      estimatedCost: "850",
-      actualCost: "",
-      requestedBy: "Tenant · Suite 210",
-      createdAt: iso(-4),
-      dueDate: iso(2),
-      completedAt: "",
-    },
-    {
-      id: "wo-2",
-      title: "Lobby light ballast replacement",
-      category: "electrical",
-      property: "Pier 12 Commerce Center",
-      unit: "Lobby",
-      description: "Flickering lobby fixtures on east wall.",
-      status: "pending",
-      priority: "normal",
-      source: "management_submitted",
-      labor: "in_house",
-      vendorName: "",
-      estimatedCost: "120",
-      actualCost: "",
-      requestedBy: "Jordan Hale",
-      createdAt: iso(-1),
-      dueDate: iso(5),
-      completedAt: "",
-    },
-    {
-      id: "wo-3",
-      title: "Restroom sink leak",
-      category: "plumbing",
-      property: "Canal Yard",
-      unit: "Common",
-      description: "Slow drip under vanity; mop bucket in place.",
-      status: "completed",
-      priority: "normal",
-      source: "management_submitted",
-      labor: "in_house",
-      vendorName: "",
-      estimatedCost: "95",
-      actualCost: "110",
-      requestedBy: "Front desk",
-      createdAt: iso(-10),
-      dueDate: iso(-7),
-      completedAt: iso(-6),
-    },
-  ];
+  // Portfolio data lives in shared_records (scripts/seed-portfolio.mjs).
+  return [];
 }
 
 export function seedVendors(): VendorRecord[] {
-  return [
-    {
-      id: "v-1",
-      name: "Oxford HVAC Pros",
-      specialty: "HVAC",
-      phone: "(662) 555-0190",
-      email: "dispatch@oxfordhvac.example",
-      notes: "Preferred for commercial rooftop units.",
-    },
-    {
-      id: "v-2",
-      name: "Delta Roofing",
-      specialty: "Structural / roofing",
-      phone: "(662) 555-0177",
-      email: "jobs@deltaroofing.example",
-      notes: "Used for membrane patches and annual inspections.",
-    },
-  ];
+  // Portfolio data lives in shared_records (scripts/seed-portfolio.mjs).
+  return [];
 }
 
 export function seedBudget(): BudgetLine[] {
-  const lines: BudgetLine[] = WORK_ORDER_CATEGORIES.map((cat) => ({
-    id: `maint-budget-${cat.value}`,
-    category: cat.value,
-    label: cat.label,
-    budgetAmount:
-      cat.value === "hvac"
-        ? 15000
-        : cat.value === "plumbing"
-          ? 9000
-          : cat.value === "electrical"
-            ? 8000
-            : cat.value === "structural"
-              ? 10000
-              : cat.value === "janitorial"
-                ? 6000
-                : cat.value === "landscaping"
-                  ? 5000
-                  : cat.value === "security"
-                    ? 4000
-                    : cat.value === "appliance"
-                      ? 6000
-                      : cat.value === "general"
-                        ? 12000
-                        : 3000,
-    spentAmount: 0,
-    notes: "",
-  }));
-  const totalBudget = lines.reduce((s, l) => s + l.budgetAmount, 0);
-  const totalSpent = lines.reduce((s, l) => s + l.spentAmount, 0);
-  return [
-    ...lines,
-    {
-      id: "b-total",
-      category: "all",
-      label: "Total maintenance budget",
-      budgetAmount: totalBudget,
-      spentAmount: totalSpent,
-      notes: "Annual allocation from management",
-    },
-  ];
+  // Portfolio data lives in shared_records (scripts/seed-portfolio.mjs).
+  return [];
 }
 
 /** Align budget_lines to the shared work-order category list (merge legacy keys). */
@@ -572,37 +454,8 @@ export function reconcileBudgetLinesToWorkOrderCategories(
 }
 
 export function seedDocuments(): MaintenanceDocument[] {
-  const now = new Date().toISOString();
-  const day = now.slice(0, 10);
-  return [
-    {
-      id: "doc-1",
-      kind: "invoice",
-      vendorName: "Oxford HVAC Pros",
-      property: "Riverbend Commerce Center",
-      amount: 850,
-      documentDate: day,
-      invoiceDate: day,
-      dueDate: "",
-      invoiceNumber: "MNT-DOC00001",
-      vendorId: "",
-      amountPaid: 0,
-      disputed: false,
-      payableCategory: "maintenance",
-      workOrderId: "wo-1",
-      category: "hvac",
-      fileName: "oxford-hvac-invoice-4412.pdf",
-      notes: "Service call + refrigerant top-off",
-      submittedAt: now,
-      applyToBudget: false,
-      budgetLineId: "",
-      approvalStatus: "approved",
-      submittedForApprovalAt: now,
-      approvedAt: now,
-      approvedBy: "system-auto",
-      rejectionReason: "",
-    },
-  ];
+  // Portfolio data lives in shared_records (scripts/seed-portfolio.mjs).
+  return [];
 }
 
 export function emptyDocument(): MaintenanceDocumentForm {

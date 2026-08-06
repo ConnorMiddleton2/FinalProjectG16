@@ -928,126 +928,18 @@ export function seedOwnerContracts(): OwnerContract[] {
 }
 
 export function seedCapitalExpenditures(): CapitalExpenditure[] {
-  return [
-    {
-      id: "capex-1",
-      title: "Replace main chiller plant",
-      propertyName: "Pierpoint Tower",
-      ownerEmail: "bobowner@building.com",
-      ownerName: "Bob Owner",
-      category: "major_repair",
-      estimatedCost: 185000,
-      description:
-        "End-of-life centrifugal chiller requires replacement before summer cooling season.",
-      justification:
-        "Maintenance flagged repeated failures and rising repair cost; CapEx is more economical than another rebuild.",
-      source: "maintenance",
-      relatedWorkOrderId: "wo-1",
-      status: "pending_mgmt_edit",
-      createdAt: new Date().toISOString(),
-    },
-  ];
+  // Portfolio data lives in shared_records (scripts/seed-portfolio.mjs).
+  return [];
 }
 
 export function seedDepartmentExpenses(): DepartmentExpense[] {
-  return [
-    {
-      id: "dept-exp-1",
-      department: "maintenance",
-      code: "MNT-014",
-      vendor: "Delta HVAC Co.",
-      amount: 1840,
-      description: "Rooftop unit repair — Pierpoint",
-      fileName: "delta-invoice-4412.pdf",
-      status: "pending",
-      submittedAt: new Date().toISOString(),
-    },
-    {
-      id: "dept-exp-2",
-      department: "human_resources",
-      code: "HR-003",
-      vendor: "Northshore Recruiting",
-      amount: 2500,
-      description: "Leasing coordinator search fee",
-      fileName: "recruiting-invoice.pdf",
-      status: "pending",
-      submittedAt: new Date().toISOString(),
-    },
-    {
-      id: "dept-exp-3",
-      department: "accounts_payable",
-      code: "AP-220",
-      vendor: "City of Harbor Utilities",
-      amount: 960,
-      description: "Common area water — March",
-      fileName: "utility-mar.pdf",
-      status: "pending",
-      submittedAt: new Date().toISOString(),
-    },
-  ];
+  // Portfolio data lives in shared_records (scripts/seed-portfolio.mjs).
+  return [];
 }
 
 export function seedMissedPayments(): MissedPayment[] {
-  return [
-    {
-      id: "miss-1",
-      tenantName: "Cedar Dental Group",
-      property: "Riverbend Commerce Center",
-      unit: "Suite 210",
-      amountDue: 4850,
-      daysPastDue: 42,
-      lateCount12mo: 3,
-      risk: "elevated",
-      lastPaymentAt: "2026-01-12",
-      notes: "Partial payments twice; CAM dispute ongoing. See A/R for open balances.",
-      foreclosureChecklist: [
-        "Send formal demand letter (certified mail)",
-        "Confirm cure period under lease",
-        "Notify Owner and legal counsel",
-        "Document all outreach attempts",
-        "If uncured: prepare notice of default / possession filing",
-        "Coordinate with local counsel / law enforcement for lockout only after judgment",
-      ],
-    },
-    {
-      id: "miss-2",
-      tenantName: "Lumen Creative Co.",
-      property: "Riverbend Commerce Center",
-      unit: "Suite 305",
-      amountDue: 7320,
-      daysPastDue: 67,
-      lateCount12mo: 5,
-      risk: "foreclosure_risk",
-      lastPaymentAt: "2025-11-02",
-      notes: "Repeated NSF; personal guarantee on file. Cross-check overdue A/R.",
-      foreclosureChecklist: [
-        "Escalate to counsel immediately",
-        "Pull personal guarantee / security deposit ledger",
-        "Issue notice of default and opportunity to cure",
-        "Prepare unlawful detainer / eviction packet",
-        "Owner approval required before filing",
-        "After judgment: coordinate sheriff / constable lockout",
-        "Inventory premises and mitigate reletting costs",
-      ],
-    },
-    {
-      id: "miss-3",
-      tenantName: "Oak & Iron Fitness",
-      property: "Canal Yard",
-      unit: "Gym Wing",
-      amountDue: 950,
-      daysPastDue: 12,
-      lateCount12mo: 1,
-      risk: "watch",
-      lastPaymentAt: "2026-03-01",
-      notes: "Usually pays within grace; first late this year. Monitor in A/R.",
-      foreclosureChecklist: [
-        "Courtesy call / text reminder",
-        "Apply late fee per lease",
-        "Watch for second late occurrence",
-      ],
-    },
-  ];
+  // Portfolio data lives in shared_records (scripts/seed-portfolio.mjs).
+  return [];
 }
 
 export const SILLY_OWNER_APP_ID = "demo-silly-owner-app";
@@ -1059,11 +951,60 @@ export function sillyOwnerApplication(): OwnerApplication {
     email: "baron@lofty-castles.biz",
     phone: "(662) 555-0199",
     companyName: "Lofty Castles Holdings",
+    entityType: "LLC",
     properties: [
       {
+        propertyName: "Quayside Commons",
         category: "mixed-use",
-        location: "88 Quayside Blvd, Harbor City",
-        squareFeet: "48,000",
+        streetAddress: "88 Quayside Blvd",
+        city: "Harbor City",
+        state: "MS",
+        zip: "38655",
+        county: "",
+        parcelTaxId: "",
+        yearBuilt: "1920",
+        yearRenovated: "",
+        buildings: "1",
+        floors: "4",
+        unitsSuites: "12",
+        grossSf: "52000",
+        rentableSf: "48000",
+        parkingSpaces: "40",
+        zoning: "",
+        amenities: "Turret, courtyard",
+        elevator: "no",
+        fireSprinkler: "unknown",
+        occupancyPercent: "70",
+        tenantCount: "8",
+        monthlyRentRoll: "86000",
+        annualGpr: "",
+        annualOperatingExpenses: "",
+        annualNoi: "",
+        arBalance: "",
+        securityDepositsHeld: "",
+        reserveBalance: "",
+        camOrNnnStructure: "Modified gross",
+        majorLeaseExpirations: "",
+        currentManagement: "self_managed",
+        reasonForChange: "Refuse to manage the parking myself.",
+        avgLeaseTermYears: "",
+        percentLeasesExpiring12mo: "",
+        roofAgeYears: "",
+        hvacNotes: "",
+        knownIssues: "Turret leaks when it rains sideways.",
+        preferredVendors: "",
+        utilityNotes: "",
+        accessNotes: "",
+        insuranceCarrier: "",
+        insuranceCoverageAmount: "",
+        insuranceExpiration: "",
+        claimsHistoryNotes: "",
+        ownerGoals: "Professional management without losing the castle aesthetic.",
+        servicesRequested: ["leasing", "maintenance", "accounting"],
+        capitalPlans: "",
+        specialInstructions: "",
+        location: "88 Quayside Blvd, Harbor City, MS",
+        squareFeet: "48000",
       },
     ],
     message:
@@ -1080,10 +1021,15 @@ export function draftManagementAgreement(app: OwnerApplication): string {
   const term = app.proposedTermYears?.trim() || "3";
   const exclusive = app.exclusiveManagement !== false;
   const props = app.properties
-    .map(
-      (p, i) =>
-        `   ${i + 1}. ${p.location}${p.squareFeet ? ` (${p.squareFeet} SF)` : ""}${p.category ? ` — ${p.category}` : ""}`
-    )
+    .map((p, i) => {
+      const name =
+        p.propertyName ||
+        p.location ||
+        [p.streetAddress, p.city, p.state].filter(Boolean).join(", ") ||
+        `Property ${i + 1}`;
+      const sf = p.rentableSf || p.squareFeet;
+      return `   ${i + 1}. ${name}${sf ? ` (${sf} SF)` : ""}${p.category ? ` — ${p.category}` : ""}`;
+    })
     .join("\n");
   const effective = new Date().toLocaleDateString();
 

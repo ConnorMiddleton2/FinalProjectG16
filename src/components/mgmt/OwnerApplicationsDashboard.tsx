@@ -6,11 +6,12 @@ import {
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
 import type { OwnerApplication } from "@/lib/owner-auth";
+import { propertyLocationLabel } from "@/lib/owner-application-intake";
+import { OwnerApplicationPropertySummary } from "@/components/OwnerApplicationPropertySummary";
+import { UnitRentSchedulePanel } from "@/components/mgmt/UnitRentSchedulePanel";
 import { provisionOwnerTempPassword } from "@/app/ops/management/owner-applications/actions";
 import {
   draftManagementAgreement,
-  sillyOwnerApplication,
-  SILLY_OWNER_APP_ID,
   type OwnerContract,
 } from "@/lib/management";
 
@@ -88,17 +89,10 @@ export function OwnerApplicationsDashboard() {
   const [seeded, setSeeded] = useState(false);
 
   useEffect(() => {
+    // Demo silly owner app disabled — portfolio data is seeded in shared_records.
     if (loading || seeded) return;
-    if (apps.some((a) => a.id === SILLY_OWNER_APP_ID)) {
-      setSeeded(true);
-      return;
-    }
-    void (async () => {
-      await saveOne(sillyOwnerApplication());
-      setSeeded(true);
-      setSelectedId(SILLY_OWNER_APP_ID);
-    })();
-  }, [loading, apps, saveOne, seeded]);
+    setSeeded(true);
+  }, [loading, seeded]);
 
   const selected = apps.find((a) => a.id === selectedId) ?? null;
   const relatedContracts = useMemo(
@@ -269,8 +263,10 @@ export function OwnerApplicationsDashboard() {
             <p className="font-semibold">{app.fullName}</p>
             <p className="text-sm opacity-70">{app.companyName || app.email}</p>
             <p className="text-xs opacity-55">
-              {app.properties[0]?.location || "No property"} ·{" "}
-              {app.mgmtStatus ?? "new"}
+              {app.properties[0]
+                ? propertyLocationLabel(app.properties[0])
+                : "No property"}{" "}
+              · {app.mgmtStatus ?? "new"}
             </p>
           </button>
         ))}
@@ -287,12 +283,10 @@ export function OwnerApplicationsDashboard() {
                 {draft.fullName} · {draft.email} · {draft.phone || "no phone"}
               </p>
               <p className="text-sm opacity-70">{draft.companyName}</p>
-              <ul className="mt-2 list-disc pl-5 text-sm">
+              <ul className="mt-2 space-y-2">
                 {draft.properties.map((p, i) => (
                   <li key={i}>
-                    {p.location}
-                    {p.squareFeet ? ` · ${p.squareFeet} SF` : ""}
-                    {p.category ? ` · ${p.category}` : ""}
+                    <OwnerApplicationPropertySummary property={p} />
                   </li>
                 ))}
               </ul>
@@ -383,6 +377,16 @@ export function OwnerApplicationsDashboard() {
                 }
               />
             </div>
+
+            <UnitRentSchedulePanel
+              application={draft}
+              onSaved={(next) => {
+                void persist(next);
+                setMsg(
+                  "Unit rents saved on the application and published to leasing inventory."
+                );
+              }}
+            />
 
             <div className="space-y-2 border-t border-base-200 pt-3">
               <p className="text-sm font-medium">Meetings & negotiation</p>

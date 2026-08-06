@@ -302,6 +302,8 @@ export function FutureTenantWorkspace() {
       property: contractForm.property.trim(),
       ownerUserId: session.userId,
       ownerEmail: session.email,
+      tenantEmail: session.email,
+      tenantName: session.displayName || undefined,
     });
     setContractForm(emptyTenantContract());
     setShowContractForm(false);
@@ -316,6 +318,8 @@ export function FutureTenantWorkspace() {
       label: invoiceForm.label.trim(),
       ownerUserId: session.userId,
       ownerEmail: session.email,
+      tenantEmail: session.email,
+      tenantName: session.displayName || undefined,
     });
     setInvoiceForm(emptyTenantInvoice());
     setShowInvoiceForm(false);

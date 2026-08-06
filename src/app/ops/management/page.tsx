@@ -5,12 +5,21 @@ import {
   ClipboardCheck,
   Landmark,
   ScrollText,
+  Users,
   Wallet,
 } from "lucide-react";
 import { requireOpsModule } from "@/lib/team-auth";
 import { MgShell, tileClass } from "@/components/mgmt/MgShell";
+import { ManagementCollectionsPanel } from "@/components/ManagementCollectionsPanel";
 
 const categories = [
+  {
+    title: "Owner accounts",
+    href: "/ops/management/owners",
+    icon: Users,
+    blurb:
+      "Current owners — contact info, login email/password, linked assets, and password reset.",
+  },
   {
     title: "Owner applications & contracts",
     href: "/ops/management/owner-applications",
@@ -79,6 +88,10 @@ export default async function ManagementHubPage() {
             </div>
           </Link>
         ))}
+      </div>
+
+      <div className="mt-8">
+        <ManagementCollectionsPanel />
       </div>
     </MgShell>
   );

@@ -84,21 +84,67 @@ export async function provisionPropertiesFromApplication(
 
   for (const prop of app.properties) {
     const base = emptyManagementContract();
-    const location = prop.location.trim();
-    const nameGuess = location.split(",")[0]?.trim() || location;
+    const location =
+      prop.location?.trim() ||
+      [prop.streetAddress, prop.city, prop.state, prop.zip]
+        .filter(Boolean)
+        .join(", ");
+    const nameGuess =
+      prop.propertyName.trim() ||
+      location.split(",")[0]?.trim() ||
+      location;
     const draft: ManagementContractDraft = {
       ...base,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       propertyName: nameGuess,
-      streetAddress: location,
+      streetAddress: prop.streetAddress.trim() || location,
+      city: prop.city.trim(),
+      state: prop.state.trim(),
+      zip: prop.zip.trim(),
+      county: prop.county.trim(),
+      parcelTaxId: prop.parcelTaxId.trim(),
       propertyType: mapCategoryToPropertyType(prop.category),
-      grossSf: prop.squareFeet.trim(),
-      rentableSf: prop.squareFeet.trim(),
+      yearBuilt: prop.yearBuilt.trim(),
+      yearRenovated: prop.yearRenovated.trim(),
+      buildings: prop.buildings.trim(),
+      floors: prop.floors.trim(),
+      unitsSuites: prop.unitsSuites.trim(),
+      grossSf: prop.grossSf.trim() || prop.squareFeet?.trim() || "",
+      rentableSf: prop.rentableSf.trim() || prop.squareFeet?.trim() || "",
+      parkingSpaces: prop.parkingSpaces.trim(),
+      zoning: prop.zoning.trim(),
+      amenities: prop.amenities.trim(),
+      occupancyPercent: prop.occupancyPercent.trim(),
+      tenantCount: prop.tenantCount.trim(),
+      monthlyRentRoll: prop.monthlyRentRoll.trim(),
+      annualGpr: prop.annualGpr.trim(),
+      annualOperatingExpenses: prop.annualOperatingExpenses.trim(),
+      annualNoi: prop.annualNoi.trim(),
+      arBalance: prop.arBalance.trim(),
+      securityDepositsHeld: prop.securityDepositsHeld.trim(),
+      reserveBalance: prop.reserveBalance.trim(),
+      camOrNnnStructure: prop.camOrNnnStructure.trim(),
+      majorLeaseExpirations: prop.majorLeaseExpirations.trim(),
+      knownIssues: prop.knownIssues.trim(),
+      preferredVendors: prop.preferredVendors.trim(),
+      insuranceRequirements: [
+        prop.insuranceCarrier.trim(),
+        prop.insuranceCoverageAmount.trim()
+          ? `Coverage ${prop.insuranceCoverageAmount.trim()}`
+          : "",
+        prop.insuranceExpiration.trim()
+          ? `Expires ${prop.insuranceExpiration.trim()}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
       ownerLegalName: app.companyName.trim() || app.fullName.trim(),
+      ownerEntityType: app.entityType?.trim() || base.ownerEntityType,
       ownerContactName: app.fullName.trim(),
       ownerEmail: app.email.toLowerCase(),
       ownerPhone: app.phone.trim(),
+      ownerMailingAddress: app.mailingAddress?.trim() || base.ownerMailingAddress,
       ownerAccountId: owner?.id ?? "",
       sourceApplicationId: app.id,
       contractStartDate: terms?.contractStartDate?.trim() || base.contractStartDate,
@@ -112,7 +158,29 @@ export async function provisionPropertiesFromApplication(
       terminationNoticeDays:
         terms?.terminationNoticeDays?.trim() || base.terminationNoticeDays,
       assignedManager: terms?.assignedManager?.trim() || base.assignedManager,
-      notes: `Provisioned from owner application ${app.id}`,
+      specialTerms: [
+        prop.ownerGoals.trim(),
+        prop.servicesRequested.length
+          ? `Services requested: ${prop.servicesRequested.join(", ")}`
+          : "",
+        prop.specialInstructions.trim(),
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      notes: [
+        `Provisioned from owner application ${app.id}`,
+        prop.reasonForChange.trim()
+          ? `Reason for change: ${prop.reasonForChange.trim()}`
+          : "",
+        prop.capitalPlans.trim()
+          ? `Capital plans: ${prop.capitalPlans.trim()}`
+          : "",
+        prop.hvacNotes.trim() ? `HVAC: ${prop.hvacNotes.trim()}` : "",
+        prop.accessNotes.trim() ? `Access: ${prop.accessNotes.trim()}` : "",
+        prop.utilityNotes.trim() ? `Utilities: ${prop.utilityNotes.trim()}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
     };
 
     await upsertSharedRecord(

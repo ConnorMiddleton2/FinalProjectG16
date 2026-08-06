@@ -22,6 +22,10 @@ import {
   ownerFacingFeeSummary,
 } from "@/lib/owner-properties";
 
+function statusLabel(status: string) {
+  return status.replaceAll("_", " ");
+}
+
 export default async function OwnerDashboardPage() {
   const owner = await getCurrentOwner();
   if (!owner) {
@@ -40,6 +44,9 @@ export default async function OwnerDashboardPage() {
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
+  const openApplications = myApplications.filter((a) =>
+    ["pending", "needs_info", "awaiting_signature"].includes(a.status)
+  );
 
   return (
     <OwnerShell
@@ -64,13 +71,19 @@ export default async function OwnerDashboardPage() {
             Welcome, {owner.fullName}
           </h1>
           <p className="owner-muted mt-2 max-w-2xl text-sm leading-relaxed sm:text-base">
-            Portfolio overview for properties Harborline manages on your behalf.
-            Review contracts, CapEx approvals, and account security here.
+            Track management applications and assets already under Harborline
+            contracts from this dashboard.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
-              href="/owners/dashboard/contracts"
+              href="/owners/dashboard/apply"
               className="owner-btn-primary owner-btn-primary-sm"
+            >
+              Submit application
+            </Link>
+            <Link
+              href="/owners/dashboard/contracts"
+              className="owner-btn-secondary owner-btn-secondary-sm"
             >
               View management contracts
             </Link>
@@ -129,12 +142,34 @@ export default async function OwnerDashboardPage() {
           <OwnerPropertyRevenuePanel financials={financials} />
         ) : null}
 
-        {myApplications.length > 0 ? (
-          <section className="space-y-4">
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-[var(--harbor-mid)]">
               <ClipboardList className="h-5 w-5" />
               <h2 className="owner-section-title">Your applications</h2>
+              {openApplications.length > 0 ? (
+                <span className="badge badge-warning badge-sm">
+                  {openApplications.length} open
+                </span>
+              ) : null}
             </div>
+            <Link
+              href="/owners/dashboard/apply"
+              className="text-sm font-semibold text-[var(--harbor-mid)] hover:underline"
+            >
+              New application
+            </Link>
+          </div>
+
+          {myApplications.length === 0 ? (
+            <OwnerEmptyState
+              icon={ClipboardList}
+              title="No applications yet"
+              description="Submit a property for Harborline management. Pending applications appear here for you and for the management team."
+              actionHref="/owners/dashboard/apply"
+              actionLabel="Submit application"
+            />
+          ) : (
             <ul className="owner-stagger space-y-3">
               {myApplications.map((app) => (
                 <li key={app.id}>
@@ -147,10 +182,21 @@ export default async function OwnerDashboardPage() {
                         {app.companyName || app.fullName}
                       </p>
                       <p className="owner-muted mt-1 text-sm capitalize">
-                        {app.status.replaceAll("_", " ")}
+                        {statusLabel(app.status)}
+                        {" · "}
+                        {app.properties.length} propert
+                        {app.properties.length === 1 ? "y" : "ies"}
                         {app.contractId || app.contractSentAt
-                          ? " · Contract sent — review & sign"
-                          : " · View submitted details"}
+                          ? " · Contract ready to review"
+                          : ""}
+                      </p>
+                      <p className="owner-muted mt-0.5 text-xs">
+                        Submitted{" "}
+                        {new Date(app.createdAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
                       </p>
                     </div>
                     <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-[var(--harbor-mid)] opacity-40 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
@@ -158,22 +204,24 @@ export default async function OwnerDashboardPage() {
                 </li>
               ))}
             </ul>
-          </section>
-        ) : null}
+          )}
+        </section>
 
         <section className="space-y-4">
           <div className="flex items-center gap-2 text-[var(--harbor-mid)]">
             <Building2 className="h-5 w-5" />
-            <h2 className="owner-section-title">Current properties</h2>
+            <h2 className="owner-section-title">
+              Assets under management contracts
+            </h2>
           </div>
 
           {properties.length === 0 ? (
             <OwnerEmptyState
               icon={Building2}
-              title="No properties linked yet"
-              description="When Harborline approves your application or acquires a management contract under your email, they will appear here."
-              actionHref="/owners/status"
-              actionLabel="Check application status"
+              title="No managed assets yet"
+              description="After management approves your application and the contract is signed, your properties appear here."
+              actionHref="/owners/dashboard/apply"
+              actionLabel="Submit application"
             />
           ) : (
             <div className="owner-stagger grid gap-4 sm:grid-cols-2">
@@ -237,20 +285,19 @@ export default async function OwnerDashboardPage() {
             </div>
             <div>
               <h2 className="font-semibold text-[var(--harbor-ink)]">
-                Submit asset for management
+                Add another asset
               </h2>
               <p className="owner-muted mt-1 max-w-xl text-sm leading-relaxed">
-                Need Harborline to take on another property? Apply with
-                additional details, or ask your manager to acquire a contract
-                under {owner.email}.
+                Submit additional properties for management review. Open
+                applications stay visible above until approved or closed.
               </p>
             </div>
           </div>
           <Link
-            href="/owners"
+            href="/owners/dashboard/apply"
             className="owner-btn-secondary owner-btn-secondary-sm shrink-0"
           >
-            Apply for access
+            Submit application
           </Link>
         </section>
 

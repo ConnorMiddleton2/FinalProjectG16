@@ -1,4 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import { isHashedPassword } from "@/lib/owner-credentials";
+
+export { isHashedPassword, ownerPasswordForAdmin } from "@/lib/owner-credentials";
 
 const KEY_LEN = 64;
 
@@ -29,10 +32,6 @@ export function verifyPassword(password: string, stored: string): boolean {
   } catch {
     return false;
   }
-}
-
-export function isHashedPassword(stored: string): boolean {
-  return stored.includes(":") && stored.split(":")[0].length === 32;
 }
 
 /** Generate a temporary password suitable for one-time handoff. */

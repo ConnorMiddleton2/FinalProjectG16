@@ -1,5 +1,9 @@
 export const MG_NAV = [
   {
+    href: "/ops/management/owners",
+    label: "Owner accounts",
+  },
+  {
     href: "/ops/management/owner-applications",
     label: "Owner applications",
   },

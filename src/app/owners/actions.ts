@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import {
   clearOwnerSession,
+  getCurrentOwner,
+  registerOwnerAccount,
   setOwnerSession,
   submitOwnerApplication,
   verifyOwnerLogin,
@@ -30,10 +32,44 @@ export async function ownerLogin(
   redirect("/owners/dashboard");
 }
 
+export async function ownerRegister(
+  _prev: OwnerAuthState,
+  formData: FormData
+): Promise<OwnerAuthState> {
+  const fullName = String(formData.get("fullName") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirmPassword") ?? "");
+
+  if (!fullName) {
+    return { error: "Full name is required." };
+  }
+  if (password !== confirm) {
+    return { error: "Passwords do not match." };
+  }
+
+  const created = await registerOwnerAccount({ fullName, email, password });
+  if ("error" in created) {
+    return { error: created.error };
+  }
+
+  await setOwnerSession(created.email);
+  redirect("/owners/dashboard");
+}
+
+function checkbox(formData: FormData, name: string) {
+  return formData.get(name) === "on" || formData.get(name) === "true";
+}
+
 export async function ownerApply(
   _prev: OwnerAuthState,
   formData: FormData
 ): Promise<OwnerAuthState> {
+  const owner = await getCurrentOwner();
+  if (!owner) {
+    return { error: "Sign in to submit an application." };
+  }
+
   let properties: OwnerApplicationProperty[] = [];
   try {
     const raw = String(formData.get("propertiesJson") ?? "[]");
@@ -43,10 +79,25 @@ export async function ownerApply(
   }
 
   const result = await submitOwnerApplication({
-    fullName: String(formData.get("fullName") ?? ""),
-    email: String(formData.get("email") ?? ""),
+    fullName: String(formData.get("fullName") ?? "") || owner.fullName,
+    email: owner.email,
     phone: String(formData.get("phone") ?? ""),
     companyName: String(formData.get("companyName") ?? ""),
+    entityType: String(formData.get("entityType") ?? ""),
+    mailingAddress: String(formData.get("mailingAddress") ?? ""),
+    taxIdOrEin: String(formData.get("taxIdOrEin") ?? ""),
+    preferredContactMethod: String(formData.get("preferredContactMethod") ?? ""),
+    emergencyContactName: String(formData.get("emergencyContactName") ?? ""),
+    emergencyContactPhone: String(formData.get("emergencyContactPhone") ?? ""),
+    communicationPreference: String(
+      formData.get("communicationPreference") ?? ""
+    ),
+    documentsReadyNotes: String(formData.get("documentsReadyNotes") ?? ""),
+    ownershipProofAvailable: checkbox(formData, "ownershipProofAvailable"),
+    rentRollAvailable: checkbox(formData, "rentRollAvailable"),
+    leasesAvailable: checkbox(formData, "leasesAvailable"),
+    insuranceDocsAvailable: checkbox(formData, "insuranceDocsAvailable"),
+    bankingReady: checkbox(formData, "bankingReady"),
     properties,
     message: String(formData.get("message") ?? ""),
   });
@@ -55,9 +106,7 @@ export async function ownerApply(
     return { error: result.error };
   }
 
-  return {
-    success: `Application submitted (ID ${result.application.id}). Track status, sign your contract when ready, and pick up your temporary password at Check application status (/owners/status).`,
-  };
+  redirect("/owners/dashboard");
 }
 
 export async function ownerLogout() {

@@ -9,6 +9,7 @@ import {
   sendContractForSignatureAction,
   type StaffApplicationState,
 } from "./actions";
+import { OwnerApplicationPropertySummary } from "@/components/OwnerApplicationPropertySummary";
 
 const initialState: StaffApplicationState = {};
 
@@ -86,22 +87,48 @@ export function PendingApplicationCard({
         <p className="mb-2 text-sm font-medium">Properties requested</p>
         <ul className="space-y-2">
           {application.properties.map((property, index) => (
-            <li
-              key={`${application.id}-${index}`}
-              className="rounded-xl border border-base-300 bg-base-100 px-3 py-2 text-sm"
-            >
-              <p className="font-medium">{property.location}</p>
-              <p className="opacity-65">
-                {property.category
-                  ? property.category.charAt(0).toUpperCase() +
-                    property.category.slice(1)
-                  : "No category"}
-                {property.squareFeet ? ` · ${property.squareFeet} sq ft` : ""}
-              </p>
+            <li key={`${application.id}-${index}`}>
+              <OwnerApplicationPropertySummary property={property} />
             </li>
           ))}
         </ul>
       </div>
+
+      {(application.entityType ||
+        application.mailingAddress ||
+        application.communicationPreference) && (
+        <div className="rounded-xl border border-base-300 bg-base-100 px-3 py-2 text-sm">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide opacity-55">
+            Ownership / engagement
+          </p>
+          <p className="opacity-80">
+            {[
+              application.entityType,
+              application.mailingAddress,
+              application.preferredContactMethod
+                ? `Contact: ${application.preferredContactMethod}`
+                : null,
+              application.communicationPreference
+                ? `Comm: ${application.communicationPreference.replaceAll("_", " ")}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+          <p className="mt-1 text-xs opacity-65">
+            Docs ready:{" "}
+            {[
+              application.ownershipProofAvailable ? "deed" : null,
+              application.rentRollAvailable ? "rent roll" : null,
+              application.leasesAvailable ? "leases" : null,
+              application.insuranceDocsAvailable ? "insurance" : null,
+              application.bankingReady ? "banking" : null,
+            ]
+              .filter(Boolean)
+              .join(", ") || "none marked"}
+          </p>
+        </div>
+      )}
 
       {application.message ? (
         <p className="text-sm opacity-75">
