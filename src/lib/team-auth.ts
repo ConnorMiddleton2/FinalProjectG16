@@ -10,8 +10,11 @@ import {
 import {
   ALL_HR_OPS_MODULES,
   CADE_EMPLOYEE_ID,
+  employeeNeedsModuleAccessSync,
+  getEmployeeLoginModules,
   makeCadeEmployee,
   normalizeHrEmployee,
+  syncEmployeeModuleAccess,
   type HrEmployee,
   type HrOpsModule,
 } from "@/lib/hr";
@@ -44,20 +47,47 @@ export async function ensureCadeEmployee(client: SupabaseClient) {
     COLLECTIONS.hrEmployees
   );
   const cade = makeCadeEmployee();
-  const byId = rows.find((r) => r.id === CADE_EMPLOYEE_ID);
-  const byEmail = rows.find(
-    (r) =>
-      typeof r.email === "string" &&
-      r.email.toLowerCase() === cade.email.toLowerCase()
-  );
+  const existing =
+    rows.find((r) => r.id === CADE_EMPLOYEE_ID) ??
+    rows.find(
+      (r) =>
+        typeof r.email === "string" &&
+        r.email.toLowerCase() === cade.email.toLowerCase()
+    );
 
-  if (byId || byEmail) return;
+  if (!existing) {
+    await upsertSharedRecord(
+      client,
+      COLLECTIONS.hrEmployees,
+      cade.id,
+      cade as unknown as Record<string, unknown>
+    );
+    return;
+  }
+
+  const normalized = normalizeHrEmployee({
+    ...existing,
+    id: existing.id,
+    category: "corporate",
+  });
+  const withAccess: HrEmployee = {
+    ...normalized,
+    moduleAccess: syncEmployeeModuleAccess(normalized),
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (
+    existing.category === "corporate" &&
+    !employeeNeedsModuleAccessSync(withAccess)
+  ) {
+    return;
+  }
 
   await upsertSharedRecord(
     client,
     COLLECTIONS.hrEmployees,
-    cade.id,
-    cade as unknown as Record<string, unknown>
+    withAccess.id,
+    withAccess as unknown as Record<string, unknown>
   );
 }
 
@@ -111,7 +141,7 @@ export async function getTeamSession(): Promise<TeamSession | null> {
     return {
       kind: "employee",
       employee,
-      modules: [...employee.moduleAccess],
+      modules: getEmployeeLoginModules(employee),
     };
   } catch {
     return null;

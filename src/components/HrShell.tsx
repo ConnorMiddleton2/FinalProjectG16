@@ -22,31 +22,47 @@ import {
   COLLECTIONS,
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
+import { createClient } from "@/lib/supabase/client";
+import { deleteSharedRecord } from "@/lib/shared-store";
+import { money } from "@/lib/money";
 import {
   CADE_DEMO,
   CADE_EMPLOYEE_ID,
+  categoryLabel,
   departmentLabel,
   emptyEmployee,
   employeeDisplayName,
   HR_DEPARTMENTS,
+  HR_EMPLOYEE_CATEGORIES,
   HR_OPS_MODULES,
   HR_PAY_FREQUENCIES,
+  HR_PAY_STUB_STATUSES,
   HR_PAY_TYPES,
   HR_STATUSES,
   makeCadeEmployee,
   nextEmployeeId,
   normalizeHrEmployee,
+  employeeNeedsModuleAccessSync,
+  isTypeDefaultModule,
+  payStubStatusLabel,
+  resolveEmployeeModuleAccess,
+  seedPayStubs,
+  syncEmployeeModuleAccess,
+  SEED_EMPLOYEE_CATEGORIES,
   seedEmployees,
   statusLabel,
   type HrDepartment,
   type HrEmployee,
+  type HrEmployeeCategory,
   type HrEmployeeStatus,
   type HrOpsModule,
   type HrPayFrequency,
+  type HrPayStub,
+  type HrPayStubStatus,
   type HrPayType,
 } from "@/lib/hr";
 
-type HrTab = "directory" | "access" | "wages" | "contracts";
+type HrTab = "directory" | "access" | "payroll" | "contracts";
 
 const TABS: {
   id: HrTab;
@@ -67,9 +83,9 @@ const TABS: {
     icon: KeyRound,
   },
   {
-    id: "wages",
-    label: "Wages",
-    description: "Pay type, rate, and frequency",
+    id: "payroll",
+    label: "Payroll",
+    description: "Compensation, withholding, direct deposit, and pay history",
     icon: BadgeDollarSign,
   },
   {
@@ -112,6 +128,8 @@ export function HrDashboard() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [cadeEnsured, setCadeEnsured] = useState(false);
+  const [categoriesBackfilled, setCategoriesBackfilled] = useState(false);
+  const [accessBackfilled, setAccessBackfilled] = useState(false);
 
   useEffect(() => {
     if (loading || cadeEnsured) return;
@@ -127,6 +145,60 @@ export function HrDashboard() {
       });
     }
   }, [loading, employees, saveOne, cadeEnsured]);
+
+  useEffect(() => {
+    if (loading || categoriesBackfilled) return;
+    const missing = employeeRows.filter(
+      (row) =>
+        row.category == null ||
+        !HR_EMPLOYEE_CATEGORIES.some((c) => c.value === row.category)
+    );
+    setCategoriesBackfilled(true);
+    if (missing.length === 0) return;
+    void (async () => {
+      const now = new Date().toISOString();
+      for (const row of missing) {
+        const seedCategory = SEED_EMPLOYEE_CATEGORIES[row.id];
+        if (!seedCategory) continue;
+        const next = normalizeHrEmployee({
+          ...row,
+          id: row.id,
+          category: seedCategory,
+          updatedAt: now,
+        });
+        try {
+          await saveOne(next);
+        } catch {
+          /* ignore backfill failures */
+        }
+      }
+    })();
+  }, [loading, employeeRows, saveOne, categoriesBackfilled]);
+
+  useEffect(() => {
+    if (loading || accessBackfilled) return;
+    const stale = employeeRows.filter((row) =>
+      employeeNeedsModuleAccessSync(normalizeHrEmployee(row))
+    );
+    setAccessBackfilled(true);
+    if (stale.length === 0) return;
+    void (async () => {
+      const now = new Date().toISOString();
+      for (const row of stale) {
+        const normalized = normalizeHrEmployee(row);
+        const next: HrEmployee = {
+          ...normalized,
+          moduleAccess: syncEmployeeModuleAccess(normalized),
+          updatedAt: now,
+        };
+        try {
+          await saveOne(next);
+        } catch {
+          /* ignore backfill failures */
+        }
+      }
+    })();
+  }, [loading, employeeRows, saveOne, accessBackfilled]);
 
   const filtered = useMemo(() => {
     return employees.filter((e) => {
@@ -152,9 +224,14 @@ export function HrDashboard() {
   function startCreate() {
     setCreating(true);
     setEditing(null);
+    const department: HrDepartment = "other";
+    const category: HrEmployeeCategory = "property";
     setForm({
       ...emptyEmployee(),
       employeeId: nextEmployeeId(employees),
+      department,
+      category,
+      moduleAccess: resolveEmployeeModuleAccess(department, category),
     });
   }
 
@@ -168,6 +245,7 @@ export function HrDashboard() {
       email: emp.email,
       phone: emp.phone,
       department: emp.department,
+      category: emp.category,
       jobTitle: emp.jobTitle,
       status: emp.status,
       moduleAccess: [...emp.moduleAccess],
@@ -200,7 +278,39 @@ export function HrDashboard() {
     key: K,
     value: ReturnType<typeof emptyEmployee>[K]
   ) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (
+        creating &&
+        (key === "department" || key === "category")
+      ) {
+        next.moduleAccess = resolveEmployeeModuleAccess(
+          next.department,
+          next.category
+        );
+      }
+      return next;
+    });
+  }
+
+  function applyTypeDefaults(emp: HrEmployee) {
+    const moduleAccess = syncEmployeeModuleAccess(emp);
+    const differs =
+      moduleAccess.length !== emp.moduleAccess.length ||
+      moduleAccess.some((m) => !emp.moduleAccess.includes(m));
+    if (
+      differs &&
+      !window.confirm(
+        `Replace current access with the recommended defaults for ${departmentLabel(emp.department)} · ${categoryLabel(emp.category)}?`
+      )
+    ) {
+      return;
+    }
+    void patchEmployee(
+      emp,
+      { moduleAccess },
+      `Applied type defaults for ${employeeDisplayName(emp)}.`
+    );
   }
 
   async function handleSaveDirectory(e: FormEvent) {
@@ -210,12 +320,18 @@ export function HrDashboard() {
       return;
     }
     const now = new Date().toISOString();
+    const moduleAccess = syncEmployeeModuleAccess({
+      department: form.department,
+      category: form.category,
+      moduleAccess: form.moduleAccess,
+    });
     setSaving(true);
     try {
       if (editing) {
         const next: HrEmployee = {
           ...editing,
           ...form,
+          moduleAccess,
           updatedAt: now,
           terminatedAt:
             form.status === "terminated"
@@ -227,6 +343,7 @@ export function HrDashboard() {
       } else {
         const next: HrEmployee = {
           ...form,
+          moduleAccess,
           id: crypto.randomUUID(),
           createdAt: now,
           updatedAt: now,
@@ -338,9 +455,10 @@ export function HrDashboard() {
             Human resources
           </h1>
           <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/65">
-            Staff roster, website access rights, wages, and employment
-            contracts. Module checkboxes control which ops windows each person
-            can open after they sign in with their email and temporary password.
+            Staff roster, website access rights, payroll, and employment
+            contracts. Website access is based on each person&apos;s department
+            and category (Corporate or Property); use the Access tab to review
+            or adjust module checkboxes.
           </p>
         </div>
 
@@ -372,7 +490,7 @@ export function HrDashboard() {
           </div>
           <div className="rounded-2xl border border-[var(--harbor-deep)]/12 bg-white/90 px-4 py-3 shadow-sm">
             <p className="text-xs uppercase tracking-wide opacity-55">
-              Active pay rates (sum)
+              Active compensation (sum)
             </p>
             <p className="mt-1 text-2xl font-semibold tabular-nums">
               {loading ? "…" : `$${payrollHint.toLocaleString()}`}
@@ -465,11 +583,12 @@ export function HrDashboard() {
                   `Updated reset flag for ${employeeDisplayName(emp)}.`
                 )
               }
+              onApplyTypeDefaults={applyTypeDefaults}
             />
           ) : null}
 
-          {tab === "wages" ? (
-            <WagesPanel
+          {tab === "payroll" ? (
+            <PayrollPanel
               loading={loading}
               employees={filtered}
               selected={selected}
@@ -479,7 +598,7 @@ export function HrDashboard() {
                 void patchEmployee(
                   emp,
                   patch,
-                  `Updated wages for ${employeeDisplayName(emp)}.`
+                  `Updated payroll for ${employeeDisplayName(emp)}.`
                 )
               }
             />
@@ -682,6 +801,22 @@ function DirectoryPanel({
               </select>
             </label>
             <label className="form-control">
+              <span className="mb-1 text-sm opacity-70">Category</span>
+              <select
+                className="select select-bordered"
+                value={form.category}
+                onChange={(e) =>
+                  onUpdateForm("category", e.target.value as HrEmployeeCategory)
+                }
+              >
+                {HR_EMPLOYEE_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="form-control">
               <span className="mb-1 text-sm opacity-70">Status</span>
               <select
                 className="select select-bordered"
@@ -738,6 +873,7 @@ function DirectoryPanel({
               <th>ID</th>
               <th>Name</th>
               <th>Department</th>
+              <th>Category</th>
               <th>Title</th>
               <th>Status</th>
               <th>Hired</th>
@@ -747,13 +883,13 @@ function DirectoryPanel({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="opacity-60">
+                <td colSpan={8} className="opacity-60">
                   Loading employees…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="opacity-60">
+                <td colSpan={8} className="opacity-60">
                   No employees match these filters.
                 </td>
               </tr>
@@ -766,6 +902,7 @@ function DirectoryPanel({
                     <p className="text-xs opacity-55">{emp.email || "—"}</p>
                   </td>
                   <td>{departmentLabel(emp.department)}</td>
+                  <td className="text-sm">{categoryLabel(emp.category)}</td>
                   <td className="text-sm">{emp.jobTitle || "—"}</td>
                   <td>
                     <span
@@ -837,6 +974,7 @@ function AccessPanel({
   onIssuePassword,
   onClearPassword,
   onMustReset,
+  onApplyTypeDefaults,
 }: {
   loading: boolean;
   employees: HrEmployee[];
@@ -848,14 +986,15 @@ function AccessPanel({
   onIssuePassword: (emp: HrEmployee) => void;
   onClearPassword: (emp: HrEmployee) => void;
   onMustReset: (emp: HrEmployee, value: boolean) => void;
+  onApplyTypeDefaults: (emp: HrEmployee) => void;
 }) {
   return (
     <div className="space-y-4 rounded-2xl border border-[var(--harbor-deep)]/12 bg-white/90 p-5 shadow-sm">
       <p className="text-sm opacity-65">
-        These checkboxes control which ops windows this person can open after
-        they sign in with their work email and temporary password. Unchecked
-        modules are hidden from their Windows menu and blocked if opened
-        directly.
+        Sign-in access is determined by department and category. Recommended
+        modules are pre-checked below; you can grant extra modules or use
+        Apply type defaults to reset to the recommended set. Property staff
+        cannot access Management or Human resources.
       </p>
       <EmployeePicker
         employees={employees}
@@ -868,13 +1007,34 @@ function AccessPanel({
         <p className="text-sm opacity-60">Select an employee to manage access.</p>
       ) : (
         <div className="space-y-6">
+          <p className="text-sm opacity-65">
+            <span className="font-medium">{departmentLabel(selected.department)}</span>
+            {" · "}
+            <span className="font-medium">{categoryLabel(selected.category)}</span>
+          </p>
           <div>
-            <h3 className="font-semibold">
-              Module access · {employeeDisplayName(selected)}
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold">
+                Module access · {employeeDisplayName(selected)}
+              </h3>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={saving}
+                onClick={() => onApplyTypeDefaults(selected)}
+              >
+                Apply type defaults
+              </button>
+            </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {HR_OPS_MODULES.map((mod) => {
                 const checked = selected.moduleAccess.includes(mod.value);
+                const recommended = isTypeDefaultModule(
+                  selected.department,
+                  selected.category,
+                  mod.value
+                );
+                const isExtra = checked && !recommended;
                 return (
                   <label
                     key={mod.value}
@@ -887,7 +1047,12 @@ function AccessPanel({
                       disabled={saving}
                       onChange={() => onToggleModule(selected, mod.value)}
                     />
-                    {mod.label}
+                    <span>
+                      {mod.label}
+                      {isExtra ? (
+                        <span className="ml-1 text-xs opacity-50">(extra)</span>
+                      ) : null}
+                    </span>
                   </label>
                 );
               })}
@@ -935,7 +1100,40 @@ function AccessPanel({
   );
 }
 
-function WagesPanel({
+function formatPayAmount(raw: string) {
+  const value = Number(raw.replace(/[$,\s]/g, ""));
+  if (!Number.isFinite(value)) return raw || "—";
+  return money(value);
+}
+
+type PayrollProfilePatch = Pick<
+  HrEmployee,
+  | "payType"
+  | "payRate"
+  | "payFrequency"
+  | "payEffectiveDate"
+  | "federalWithholding"
+  | "stateWithholding"
+  | "deductionsNotes"
+  | "directDepositBank"
+  | "directDepositAccountLast4"
+  | "directDepositRoutingLast4"
+  | "payrollNotes"
+>;
+
+const EMPTY_STUB_FORM = {
+  periodStart: "",
+  periodEnd: "",
+  payDate: "",
+  grossPay: "",
+  deductions: "",
+  netPay: "",
+  hoursWorked: "",
+  status: "draft" as HrPayStubStatus,
+  notes: "",
+};
+
+function PayrollPanel({
   loading,
   employees,
   selected,
@@ -948,18 +1146,44 @@ function WagesPanel({
   selected: HrEmployee | null;
   onSelect: (id: string) => void;
   saving: boolean;
-  onSave: (
-    emp: HrEmployee,
-    patch: Pick<
-      HrEmployee,
-      "payType" | "payRate" | "payFrequency" | "payEffectiveDate"
-    >
-  ) => void;
+  onSave: (emp: HrEmployee, patch: PayrollProfilePatch) => void;
 }) {
+  const {
+    items: payStubs,
+    setItems: setPayStubs,
+    loading: stubsLoading,
+    saveOne: saveStub,
+  } = useSharedCollection<HrPayStub>(COLLECTIONS.hrPayStubs, seedPayStubs);
+
   const [payType, setPayType] = useState<HrPayType>("hourly");
   const [payRate, setPayRate] = useState("");
   const [payFrequency, setPayFrequency] = useState<HrPayFrequency>("biweekly");
   const [payEffectiveDate, setPayEffectiveDate] = useState("");
+  const [federalWithholding, setFederalWithholding] = useState("");
+  const [stateWithholding, setStateWithholding] = useState("");
+  const [deductionsNotes, setDeductionsNotes] = useState("");
+  const [directDepositBank, setDirectDepositBank] = useState("");
+  const [directDepositAccountLast4, setDirectDepositAccountLast4] =
+    useState("");
+  const [directDepositRoutingLast4, setDirectDepositRoutingLast4] =
+    useState("");
+  const [payrollNotes, setPayrollNotes] = useState("");
+
+  const [stubForm, setStubForm] = useState(EMPTY_STUB_FORM);
+  const [editingStubId, setEditingStubId] = useState<string | null>(null);
+  const [stubSaving, setStubSaving] = useState(false);
+
+  const categoryMeta = HR_EMPLOYEE_CATEGORIES.find(
+    (c) => c.value === selected?.category
+  );
+
+  const employeeStubs = useMemo(
+    () =>
+      payStubs
+        .filter((s) => s.employeeId === selected?.id)
+        .sort((a, b) => b.payDate.localeCompare(a.payDate)),
+    [payStubs, selected?.id]
+  );
 
   useEffect(() => {
     if (!selected) return;
@@ -967,7 +1191,66 @@ function WagesPanel({
     setPayRate(selected.payRate);
     setPayFrequency(selected.payFrequency);
     setPayEffectiveDate(selected.payEffectiveDate);
+    setFederalWithholding(selected.federalWithholding);
+    setStateWithholding(selected.stateWithholding);
+    setDeductionsNotes(selected.deductionsNotes);
+    setDirectDepositBank(selected.directDepositBank);
+    setDirectDepositAccountLast4(selected.directDepositAccountLast4);
+    setDirectDepositRoutingLast4(selected.directDepositRoutingLast4);
+    setPayrollNotes(selected.payrollNotes);
+    setEditingStubId(null);
+    setStubForm(EMPTY_STUB_FORM);
   }, [selected]);
+
+  async function deleteStub(stub: HrPayStub) {
+    if (!window.confirm("Delete this pay stub?")) return;
+    setStubSaving(true);
+    try {
+      const supabase = createClient();
+      await deleteSharedRecord(supabase, COLLECTIONS.hrPayStubs, stub.id);
+      setPayStubs((prev) => prev.filter((s) => s.id !== stub.id));
+    } finally {
+      setStubSaving(false);
+    }
+  }
+
+  function startEditStub(stub: HrPayStub) {
+    setEditingStubId(stub.id);
+    setStubForm({
+      periodStart: stub.periodStart,
+      periodEnd: stub.periodEnd,
+      payDate: stub.payDate,
+      grossPay: stub.grossPay,
+      deductions: stub.deductions,
+      netPay: stub.netPay,
+      hoursWorked: stub.hoursWorked,
+      status: stub.status,
+      notes: stub.notes,
+    });
+  }
+
+  async function handleStubSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    const now = new Date().toISOString();
+    setStubSaving(true);
+    try {
+      const stub: HrPayStub = {
+        id: editingStubId ?? crypto.randomUUID(),
+        employeeId: selected.id,
+        ...stubForm,
+        createdAt: editingStubId
+          ? payStubs.find((s) => s.id === editingStubId)?.createdAt ?? now
+          : now,
+        updatedAt: now,
+      };
+      await saveStub(stub);
+      setEditingStubId(null);
+      setStubForm(EMPTY_STUB_FORM);
+    } finally {
+      setStubSaving(false);
+    }
+  }
 
   return (
     <div className="space-y-4 rounded-2xl border border-[var(--harbor-deep)]/12 bg-white/90 p-5 shadow-sm">
@@ -979,78 +1262,414 @@ function WagesPanel({
       {loading ? (
         <p className="text-sm opacity-60">Loading…</p>
       ) : !selected ? (
-        <p className="text-sm opacity-60">Select an employee to edit wages.</p>
+        <p className="text-sm opacity-60">
+          Select an employee to manage payroll.
+        </p>
       ) : (
-        <form
-          className="grid max-w-xl gap-3 sm:grid-cols-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSave(selected, {
-              payType,
-              payRate,
-              payFrequency,
-              payEffectiveDate,
-            });
-          }}
-        >
-          <label className="form-control">
-            <span className="mb-1 text-sm opacity-70">Pay type</span>
-            <select
-              className="select select-bordered"
-              value={payType}
-              onChange={(e) => setPayType(e.target.value as HrPayType)}
-            >
-              {HR_PAY_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="form-control">
-            <span className="mb-1 text-sm opacity-70">
-              {payType === "salary" ? "Annual salary ($)" : "Hourly rate ($)"}
-            </span>
-            <input
-              className="input input-bordered"
-              value={payRate}
-              onChange={(e) => setPayRate(e.target.value)}
-              placeholder={payType === "salary" ? "72000" : "28.50"}
-            />
-          </label>
-          <label className="form-control">
-            <span className="mb-1 text-sm opacity-70">Pay frequency</span>
-            <select
-              className="select select-bordered"
-              value={payFrequency}
-              onChange={(e) =>
-                setPayFrequency(e.target.value as HrPayFrequency)
-              }
-            >
-              {HR_PAY_FREQUENCIES.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="form-control">
-            <span className="mb-1 text-sm opacity-70">Effective date</span>
-            <input
-              type="date"
-              className="input input-bordered"
-              value={payEffectiveDate}
-              onChange={(e) => setPayEffectiveDate(e.target.value)}
-            />
-          </label>
-          <button
-            type="submit"
-            className="btn btn-neutral sm:col-span-2"
-            disabled={saving}
+        <div className="space-y-8">
+          <section className="space-y-2">
+            <h3 className="font-semibold">Classification</h3>
+            <p className="text-sm">
+              <span className="font-medium">
+                {departmentLabel(selected.department)}
+              </span>
+              {" · "}
+              <span className="font-medium">
+                {categoryLabel(selected.category)}
+              </span>
+            </p>
+            {categoryMeta ? (
+              <p className="text-sm opacity-65">{categoryMeta.description}</p>
+            ) : null}
+          </section>
+
+          <form
+            className="space-y-6"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onSave(selected, {
+                payType,
+                payRate,
+                payFrequency,
+                payEffectiveDate,
+                federalWithholding,
+                stateWithholding,
+                deductionsNotes,
+                directDepositBank,
+                directDepositAccountLast4,
+                directDepositRoutingLast4,
+                payrollNotes,
+              });
+            }}
           >
-            {saving ? "Saving…" : "Save wages"}
-          </button>
-        </form>
+            <section className="space-y-3">
+              <h3 className="font-semibold">Compensation</h3>
+              <div className="grid max-w-2xl gap-3 sm:grid-cols-2">
+                <label className="form-control">
+                  <span className="mb-1 text-sm opacity-70">Pay type</span>
+                  <select
+                    className="select select-bordered"
+                    value={payType}
+                    onChange={(e) => setPayType(e.target.value as HrPayType)}
+                  >
+                    {HR_PAY_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="form-control">
+                  <span className="mb-1 text-sm opacity-70">
+                    {payType === "salary" ? "Annual salary ($)" : "Hourly rate ($)"}
+                  </span>
+                  <input
+                    className="input input-bordered"
+                    value={payRate}
+                    onChange={(e) => setPayRate(e.target.value)}
+                    placeholder={payType === "salary" ? "72000" : "28.50"}
+                  />
+                </label>
+                <label className="form-control">
+                  <span className="mb-1 text-sm opacity-70">Pay frequency</span>
+                  <select
+                    className="select select-bordered"
+                    value={payFrequency}
+                    onChange={(e) =>
+                      setPayFrequency(e.target.value as HrPayFrequency)
+                    }
+                  >
+                    {HR_PAY_FREQUENCIES.map((f) => (
+                      <option key={f.value} value={f.value}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="form-control">
+                  <span className="mb-1 text-sm opacity-70">Effective date</span>
+                  <input
+                    type="date"
+                    className="input input-bordered"
+                    value={payEffectiveDate}
+                    onChange={(e) => setPayEffectiveDate(e.target.value)}
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="font-semibold">Tax and deductions</h3>
+              <div className="grid max-w-2xl gap-3 sm:grid-cols-2">
+                <label className="form-control sm:col-span-2">
+                  <span className="mb-1 text-sm opacity-70">
+                    Federal withholding
+                  </span>
+                  <input
+                    className="input input-bordered"
+                    value={federalWithholding}
+                    onChange={(e) => setFederalWithholding(e.target.value)}
+                    placeholder="W-4 filing status or rate note"
+                  />
+                </label>
+                <label className="form-control sm:col-span-2">
+                  <span className="mb-1 text-sm opacity-70">
+                    State withholding
+                  </span>
+                  <input
+                    className="input input-bordered"
+                    value={stateWithholding}
+                    onChange={(e) => setStateWithholding(e.target.value)}
+                    placeholder="State tax note"
+                  />
+                </label>
+                <label className="form-control sm:col-span-2">
+                  <span className="mb-1 text-sm opacity-70">
+                    Deductions notes
+                  </span>
+                  <textarea
+                    className="textarea textarea-bordered min-h-16"
+                    value={deductionsNotes}
+                    onChange={(e) => setDeductionsNotes(e.target.value)}
+                    placeholder="Benefits, garnishments, other deductions"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="font-semibold">Direct deposit</h3>
+              <div className="grid max-w-2xl gap-3 sm:grid-cols-2">
+                <label className="form-control sm:col-span-2">
+                  <span className="mb-1 text-sm opacity-70">Bank name</span>
+                  <input
+                    className="input input-bordered"
+                    value={directDepositBank}
+                    onChange={(e) => setDirectDepositBank(e.target.value)}
+                  />
+                </label>
+                <label className="form-control">
+                  <span className="mb-1 text-sm opacity-70">Account last 4</span>
+                  <input
+                    className="input input-bordered"
+                    value={directDepositAccountLast4}
+                    onChange={(e) =>
+                      setDirectDepositAccountLast4(e.target.value)
+                    }
+                    maxLength={4}
+                    placeholder="1234"
+                  />
+                </label>
+                <label className="form-control">
+                  <span className="mb-1 text-sm opacity-70">Routing last 4</span>
+                  <input
+                    className="input input-bordered"
+                    value={directDepositRoutingLast4}
+                    onChange={(e) =>
+                      setDirectDepositRoutingLast4(e.target.value)
+                    }
+                    maxLength={4}
+                    placeholder="5678"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <label className="form-control max-w-2xl">
+              <span className="mb-1 text-sm opacity-70">Payroll notes</span>
+              <textarea
+                className="textarea textarea-bordered min-h-20"
+                value={payrollNotes}
+                onChange={(e) => setPayrollNotes(e.target.value)}
+              />
+            </label>
+
+            <button
+              type="submit"
+              className="btn btn-neutral"
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Save payroll profile"}
+            </button>
+          </form>
+
+          <section className="space-y-4 border-t border-base-300 pt-6">
+            <h3 className="font-semibold">Pay history</h3>
+            {stubsLoading ? (
+              <p className="text-sm opacity-60">Loading pay stubs…</p>
+            ) : employeeStubs.length === 0 ? (
+              <p className="text-sm opacity-60">No pay stubs for this employee yet.</p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-base-300">
+                <table className="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>Period</th>
+                      <th>Pay date</th>
+                      <th>Gross</th>
+                      <th>Deductions</th>
+                      <th>Net</th>
+                      <th>Status</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employeeStubs.map((stub) => (
+                      <tr key={stub.id}>
+                        <td className="text-xs whitespace-nowrap">
+                          {stub.periodStart} → {stub.periodEnd}
+                        </td>
+                        <td className="text-sm tabular-nums">{stub.payDate}</td>
+                        <td className="text-sm tabular-nums">
+                          {formatPayAmount(stub.grossPay)}
+                        </td>
+                        <td className="text-sm tabular-nums">
+                          {formatPayAmount(stub.deductions)}
+                        </td>
+                        <td className="text-sm tabular-nums">
+                          {formatPayAmount(stub.netPay)}
+                        </td>
+                        <td>
+                          <span className="badge badge-sm badge-ghost">
+                            {payStubStatusLabel(stub.status)}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs"
+                              disabled={stubSaving}
+                              onClick={() => startEditStub(stub)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs text-error"
+                              disabled={stubSaving}
+                              onClick={() => void deleteStub(stub)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <form
+              className="grid max-w-2xl gap-3 rounded-xl border border-base-300 p-4 sm:grid-cols-2"
+              onSubmit={(e) => void handleStubSubmit(e)}
+            >
+              <p className="font-medium sm:col-span-2">
+                {editingStubId ? "Edit pay stub" : "Add pay stub"}
+              </p>
+              <label className="form-control">
+                <span className="mb-1 text-xs opacity-70">Period start</span>
+                <input
+                  type="date"
+                  className="input input-bordered input-sm"
+                  value={stubForm.periodStart}
+                  onChange={(e) =>
+                    setStubForm((f) => ({ ...f, periodStart: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="form-control">
+                <span className="mb-1 text-xs opacity-70">Period end</span>
+                <input
+                  type="date"
+                  className="input input-bordered input-sm"
+                  value={stubForm.periodEnd}
+                  onChange={(e) =>
+                    setStubForm((f) => ({ ...f, periodEnd: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="form-control">
+                <span className="mb-1 text-xs opacity-70">Pay date</span>
+                <input
+                  type="date"
+                  className="input input-bordered input-sm"
+                  value={stubForm.payDate}
+                  onChange={(e) =>
+                    setStubForm((f) => ({ ...f, payDate: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="form-control">
+                <span className="mb-1 text-xs opacity-70">Status</span>
+                <select
+                  className="select select-bordered select-sm"
+                  value={stubForm.status}
+                  onChange={(e) =>
+                    setStubForm((f) => ({
+                      ...f,
+                      status: e.target.value as HrPayStubStatus,
+                    }))
+                  }
+                >
+                  {HR_PAY_STUB_STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-control">
+                <span className="mb-1 text-xs opacity-70">Gross pay ($)</span>
+                <input
+                  className="input input-bordered input-sm"
+                  value={stubForm.grossPay}
+                  onChange={(e) =>
+                    setStubForm((f) => ({ ...f, grossPay: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="form-control">
+                <span className="mb-1 text-xs opacity-70">Deductions ($)</span>
+                <input
+                  className="input input-bordered input-sm"
+                  value={stubForm.deductions}
+                  onChange={(e) =>
+                    setStubForm((f) => ({ ...f, deductions: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="form-control">
+                <span className="mb-1 text-xs opacity-70">Net pay ($)</span>
+                <input
+                  className="input input-bordered input-sm"
+                  value={stubForm.netPay}
+                  onChange={(e) =>
+                    setStubForm((f) => ({ ...f, netPay: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              {payType === "hourly" ? (
+                <label className="form-control">
+                  <span className="mb-1 text-xs opacity-70">Hours worked</span>
+                  <input
+                    className="input input-bordered input-sm"
+                    value={stubForm.hoursWorked}
+                    onChange={(e) =>
+                      setStubForm((f) => ({
+                        ...f,
+                        hoursWorked: e.target.value,
+                      }))
+                    }
+                    placeholder="40"
+                  />
+                </label>
+              ) : null}
+              <label className="form-control sm:col-span-2">
+                <span className="mb-1 text-xs opacity-70">Notes</span>
+                <textarea
+                  className="textarea textarea-bordered textarea-sm min-h-14"
+                  value={stubForm.notes}
+                  onChange={(e) =>
+                    setStubForm((f) => ({ ...f, notes: e.target.value }))
+                  }
+                />
+              </label>
+              <div className="flex gap-2 sm:col-span-2">
+                <button
+                  type="submit"
+                  className="btn btn-neutral btn-sm"
+                  disabled={stubSaving}
+                >
+                  {stubSaving
+                    ? "Saving…"
+                    : editingStubId
+                      ? "Update pay stub"
+                      : "Add pay stub"}
+                </button>
+                {editingStubId ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      setEditingStubId(null);
+                      setStubForm(EMPTY_STUB_FORM);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          </section>
+        </div>
       )}
     </div>
   );
