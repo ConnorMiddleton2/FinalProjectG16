@@ -29,9 +29,14 @@ export type OwnerPayable = {
   property: string;
   period: string;
   paymentType: OwnerPaymentType;
-  /** Rental income collected for this property and period (comparison only). */
-  rentalIncomeCollected: number;
-  /** Fixed amount contractually owed to the property owner for the period. */
+  /** Total rental income collected for the property and period. */
+  grossRentCollected: number;
+  /** Harborline's management fee is fixed at 10% of gross rental income. */
+  managementFeePercent: number;
+  managementFeeAmount: number;
+  reimbursableExpenses: number;
+  reservesWithheld: number;
+  /** Net amount owed to the owner after the remittance waterfall. */
   amount: number;
   amountPaid: number;
   onHold: boolean;
@@ -49,7 +54,7 @@ export const OWNER_PAYMENT_TYPES: {
   value: OwnerPaymentType;
   label: string;
 }[] = [
-  { value: "monthly_distribution", label: "Fixed contractual payment" },
+  { value: "monthly_distribution", label: "Monthly owner distribution" },
   { value: "security_deposit_return", label: "Security deposit return" },
   {
     value: "capital_improvement",
@@ -83,7 +88,8 @@ export function ownerPaymentMethodLabel(value: string) {
 }
 
 export function money(n: number) {
-  return n.toLocaleString("en-US", {
+  const value = Number.isFinite(n) ? n : 0;
+  return value.toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
@@ -159,9 +165,96 @@ export function parsePercent(raw: string): number | null {
   return round2(value);
 }
 
-/** Gross company spread before operating expenses. */
-export function companySpread(row: Pick<OwnerPayable, "rentalIncomeCollected" | "amount">) {
-  return round2(row.rentalIncomeCollected - row.amount);
+export const MANAGEMENT_FEE_PERCENT = 10;
+
+export function feeAmountFromPercent(gross: number, percent = MANAGEMENT_FEE_PERCENT) {
+  return round2((gross * percent) / 100);
+}
+
+/** Gross rent less Harborline's fee, reimbursable expenses, and reserves. */
+export function computeNetDue(input: {
+  grossRentCollected: number;
+  managementFeeAmount: number;
+  reimbursableExpenses: number;
+  reservesWithheld: number;
+}) {
+  return round2(
+    Math.max(
+      0,
+      input.grossRentCollected -
+        input.managementFeeAmount -
+        input.reimbursableExpenses -
+        input.reservesWithheld
+    )
+  );
+}
+
+/**
+ * Normalizes older fixed-fee owner-payable records into the current
+ * remittance-waterfall shape so the UI does not crash on stale seed data.
+ */
+export function normalizeOwnerPayable(
+  row: Partial<OwnerPayable> &
+    Pick<
+      OwnerPayable,
+      | "id"
+      | "paymentId"
+      | "ownerName"
+      | "ownerId"
+      | "property"
+      | "period"
+      | "paymentType"
+      | "amountPaid"
+      | "onHold"
+      | "statementApproved"
+      | "invoiceDate"
+      | "dueDate"
+      | "paymentMethod"
+      | "paymentReference"
+      | "fileName"
+      | "notes"
+      | "createdAt"
+    > & { rentalIncomeCollected?: number; amount?: number }
+): OwnerPayable {
+  const isLegacy =
+    row.grossRentCollected == null && row.rentalIncomeCollected != null;
+  const grossRentCollected =
+    row.grossRentCollected ?? row.rentalIncomeCollected ?? 0;
+  const managementFeePercent =
+    row.managementFeePercent ??
+    (row.paymentType === "monthly_distribution" ? MANAGEMENT_FEE_PERCENT : 0);
+  const managementFeeAmount =
+    row.managementFeeAmount ??
+    (row.paymentType === "monthly_distribution"
+      ? feeAmountFromPercent(grossRentCollected, managementFeePercent)
+      : 0);
+  const reimbursableExpenses = row.reimbursableExpenses ?? 0;
+  const reservesWithheld = row.reservesWithheld ?? 0;
+  const amount =
+    isLegacy && row.paymentType === "monthly_distribution"
+      ? computeNetDue({
+          grossRentCollected,
+          managementFeeAmount,
+          reimbursableExpenses,
+          reservesWithheld,
+        })
+      : (row.amount ??
+        computeNetDue({
+          grossRentCollected,
+          managementFeeAmount,
+          reimbursableExpenses,
+          reservesWithheld,
+        }));
+
+  return {
+    ...row,
+    grossRentCollected,
+    managementFeePercent,
+    managementFeeAmount,
+    reimbursableExpenses,
+    reservesWithheld,
+    amount,
+  };
 }
 
 export function emptyOwnerPayableForm() {
@@ -172,7 +265,11 @@ export function emptyOwnerPayableForm() {
     property: "",
     period: "",
     paymentType: "monthly_distribution" as OwnerPaymentType,
-    rentalIncomeCollected: "",
+    grossRentCollected: "",
+    managementFeePercent: String(MANAGEMENT_FEE_PERCENT),
+    managementFeeAmount: "",
+    reimbursableExpenses: "",
+    reservesWithheld: "",
     amount: "",
     amountPaid: "",
     onHold: false,
@@ -193,14 +290,15 @@ type OwnerContract = {
   ownerName: string;
   ownerId: string;
   property: string;
-  /** Fixed amount owed to the owner every period, regardless of collections. */
-  fixedAmount: number;
+  /** Property costs reimbursed from rent before the owner distribution. */
+  reimbursableExpenses: number[];
+  /** Cash retained each month for future property needs. */
+  monthlyReserve: number;
 };
 
 /**
- * Fixed-fee management contracts. Harborline owes each owner the same amount
- * every period and keeps whatever rent it collects above that amount, so these
- * figures are deliberately set below the seeded rent roll for each property.
+ * Owner remittance terms. Harborline earns 10% of rental income and distributes
+ * the remaining cash after property expenses and reserves.
  */
 export const OWNER_CONTRACTS: OwnerContract[] = [
   {
@@ -208,21 +306,24 @@ export const OWNER_CONTRACTS: OwnerContract[] = [
     ownerName: "Riverbend Holdings LLC",
     ownerId: "OWN-1001",
     property: "Riverbend Commerce Center",
-    fixedAmount: 13500,
+    reimbursableExpenses: [2150, 2200, 2050, 2300, 2100, 2250],
+    monthlyReserve: 1000,
   },
   {
     code: "P12",
     ownerName: "Pier Twelve Partners",
     ownerId: "OWN-1002",
     property: "Pier 12 Commerce Center",
-    fixedAmount: 21000,
+    reimbursableExpenses: [3200, 3350, 3100, 3450, 3250, 3300],
+    monthlyReserve: 1500,
   },
   {
     code: "CY",
     ownerName: "Canal Yard Investors",
     ownerId: "OWN-1003",
     property: "Canal Yard",
-    fixedAmount: 8500,
+    reimbursableExpenses: [1450, 1525, 1400, 1600, 1475, 1500],
+    monthlyReserve: 800,
   },
 ];
 
@@ -241,12 +342,12 @@ const REMITTANCE_EXCEPTIONS: Record<string, RemittanceException> = {
   "0:RB": {
     paid: 0,
     notes:
-      "Fixed contractual payment for the current period. Owed in full even though two suites have not paid rent yet.",
+      "Current-period distribution. Two suites have not paid rent yet, so only collected rent is included.",
   },
   "0:CY": {
     paid: 0,
     notes:
-      "Fixed contractual payment for the current period. No rent collected at this property yet this month.",
+      "No rent has been collected at this property yet this month; no owner distribution is currently due.",
   },
   "1:CY": {
     paid: 4000,
@@ -263,9 +364,22 @@ export function seedOwnerPayables(): OwnerPayable[] {
   for (let monthsAgo = SEED_MONTHS - 1; monthsAgo >= 0; monthsAgo -= 1) {
     for (const contract of OWNER_CONTRACTS) {
       const exception = REMITTANCE_EXCEPTIONS[`${monthsAgo}:${contract.code}`];
-      const paid = exception
-        ? (exception.paid ?? contract.fixedAmount)
-        : contract.fixedAmount;
+      const grossRentCollected = seededRentCollected(
+        contract.property,
+        monthsAgo
+      );
+      const managementFeeAmount = feeAmountFromPercent(grossRentCollected);
+      const reimbursableExpenses =
+        contract.reimbursableExpenses[monthsAgo] ??
+        contract.reimbursableExpenses[0];
+      const reservesWithheld = contract.monthlyReserve;
+      const amount = computeNetDue({
+        grossRentCollected,
+        managementFeeAmount,
+        reimbursableExpenses,
+        reservesWithheld,
+      });
+      const paid = exception ? (exception.paid ?? amount) : amount;
       const slug = monthSlug(monthsAgo);
       const paymentId = `OWN-${slug}-${contract.code}`;
       const invoiceDate = monthDay(monthsAgo, 1);
@@ -278,11 +392,12 @@ export function seedOwnerPayables(): OwnerPayable[] {
         property: contract.property,
         period: monthPeriodLabel(monthsAgo),
         paymentType: "monthly_distribution",
-        rentalIncomeCollected: seededRentCollected(
-          contract.property,
-          monthsAgo
-        ),
-        amount: contract.fixedAmount,
+        grossRentCollected,
+        managementFeePercent: MANAGEMENT_FEE_PERCENT,
+        managementFeeAmount,
+        reimbursableExpenses,
+        reservesWithheld,
+        amount,
         amountPaid: paid,
         onHold: false,
         statementApproved: true,
@@ -291,13 +406,13 @@ export function seedOwnerPayables(): OwnerPayable[] {
         paymentMethod: exception?.method ?? "ach",
         paymentReference:
           exception?.reference ??
-          (paid >= contract.fixedAmount
+          (amount > 0 && paid >= amount
             ? `ACH-${slug.replace("-", "")}${contract.code}`
             : ""),
         fileName: `${paymentId.toLowerCase()}-owner-statement.pdf`,
         notes:
           exception?.notes ??
-          "Fixed contractual payment remitted in full under the management agreement.",
+          "Monthly owner distribution remitted after Harborline's 10% management fee, property expenses, and reserves.",
         createdAt: invoiceDate,
       });
     }
@@ -306,7 +421,7 @@ export function seedOwnerPayables(): OwnerPayable[] {
   return [...rows, ...specialOwnerPayables()];
 }
 
-/** One-off owner payables that sit outside the recurring fixed-fee schedule. */
+/** One-off owner payables that sit outside the recurring rent distribution. */
 function specialOwnerPayables(): OwnerPayable[] {
   return [
     {
@@ -317,7 +432,11 @@ function specialOwnerPayables(): OwnerPayable[] {
       property: "Riverbend Commerce Center",
       period: monthPeriodLabel(0),
       paymentType: "security_deposit_return",
-      rentalIncomeCollected: 0,
+      grossRentCollected: 0,
+      managementFeePercent: 0,
+      managementFeeAmount: 0,
+      reimbursableExpenses: 450,
+      reservesWithheld: 0,
       amount: 3550,
       amountPaid: 0,
       onHold: true,
@@ -339,7 +458,11 @@ function specialOwnerPayables(): OwnerPayable[] {
       property: "Pier 12 Commerce Center",
       period: monthPeriodLabel(0),
       paymentType: "capital_improvement",
-      rentalIncomeCollected: 0,
+      grossRentCollected: 0,
+      managementFeePercent: 0,
+      managementFeeAmount: 0,
+      reimbursableExpenses: 0,
+      reservesWithheld: 0,
       amount: 18500,
       amountPaid: 0,
       onHold: false,
@@ -361,7 +484,11 @@ function specialOwnerPayables(): OwnerPayable[] {
       property: "Canal Yard",
       period: "Prior year",
       paymentType: "year_end_trueup",
-      rentalIncomeCollected: 0,
+      grossRentCollected: 64000,
+      managementFeePercent: MANAGEMENT_FEE_PERCENT,
+      managementFeeAmount: 6400,
+      reimbursableExpenses: 46800,
+      reservesWithheld: 4400,
       amount: 6400,
       amountPaid: 0,
       onHold: false,
@@ -383,7 +510,11 @@ function specialOwnerPayables(): OwnerPayable[] {
       property: "Riverbend Commerce Center",
       period: monthPeriodLabel(0),
       paymentType: "other",
-      rentalIncomeCollected: 0,
+      grossRentCollected: 10000,
+      managementFeePercent: MANAGEMENT_FEE_PERCENT,
+      managementFeeAmount: 1000,
+      reimbursableExpenses: 0,
+      reservesWithheld: 0,
       amount: 9000,
       amountPaid: 0,
       onHold: false,
@@ -394,7 +525,7 @@ function specialOwnerPayables(): OwnerPayable[] {
       paymentReference: "",
       fileName: "bob-owner-current-statement.pdf",
       notes:
-        "Demo owner account used for the owner-portal walkthrough. Co-investor share of the Riverbend fixed payment.",
+        "Demo owner account used for the owner-portal walkthrough. Co-investor distribution after Harborline's 10% management fee.",
       createdAt: shiftDays(-2),
     },
   ];

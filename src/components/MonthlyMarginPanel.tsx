@@ -76,7 +76,7 @@ export function MonthlyMarginPanel() {
             Amounts <strong>billed and owed</strong> in each month, grouped by
             invoice / owner-statement date — not by cash collected or paid.
             Accounts payable includes both operating-expense vendor invoices and
-            fixed payments owed to property owners.
+            net rental distributions owed to property owners.
           </p>
         </div>
         {current ? (

@@ -1,12 +1,9 @@
-import { redirect } from "next/navigation";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { requireOpsModule } from "@/lib/team-auth";
 import { SmShell } from "@/components/sm/SmShell";
 import { CalendarDashboard } from "@/components/sm/CalendarDashboard";
 
 export default async function SmCalendarPage() {
-  if (!(await hasTeamAccess())) {
-    redirect("/team");
-  }
+  await requireOpsModule("sales-marketing");
 
   return (
     <SmShell
@@ -14,6 +11,7 @@ export default async function SmCalendarPage() {
       subtitle="Schedule tours, media events, and meetings. Filter by day, week, month, or year."
       backHref="/ops/sales-marketing"
       backLabel="Back to Sales & Marketing"
+      activeNavHref="/ops/sales-marketing/calendar"
     >
       <CalendarDashboard />
     </SmShell>
