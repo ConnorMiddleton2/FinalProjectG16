@@ -42,6 +42,12 @@ export type SmTenantApplication = {
   building?: string;
   /** Desired room / suite size (e.g. "1,200 SF" or "Suite 305") */
   roomSize?: string;
+  /** Unit / suite agreed for lease (demo cycle) */
+  unit?: string;
+  /** Monthly base rent agreed on the application */
+  monthlyRent?: string;
+  /** Managed property id when known */
+  propertyId?: string;
   smStatus?: SmApplicationStatus;
   communicated?: boolean;
   lastContactAt?: string;

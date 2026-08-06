@@ -6,7 +6,7 @@ import {
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
 import type { OwnerApplication } from "@/lib/owner-auth";
-import { provisionOwnerTempPassword } from "@/app/ops/management/owner-applications/actions";
+import { provisionOwnerTempPassword, sendManagementContractOffer } from "@/app/ops/management/owner-applications/actions";
 import {
   draftManagementAgreement,
   sillyOwnerApplication,
@@ -147,7 +147,7 @@ export function OwnerApplicationsDashboard() {
     }
   }
 
-  /** Manager signs the generated agreement and posts it to the owner portal. */
+  /** Manager signs and provisions managed_properties (same path as Properties). */
   async function signAndSendToOwnerPortal() {
     if (!draft || busy) return;
     if (!mgrSigner.trim()) {
@@ -157,8 +157,22 @@ export function OwnerApplicationsDashboard() {
     setBusy(true);
     setActionError(null);
     try {
-      const body = draftManagementAgreement(draft);
-      const contractId = crypto.randomUUID();
+      const offer = await sendManagementContractOffer({
+        applicationId: draft.id,
+        reviewedBy: mgrSigner.trim(),
+        reviewNotes: draft.negotiationTerms || draft.reviewNotes,
+        feePercent: draft.proposedFeePercent || "4",
+      });
+      if ("error" in offer) {
+        setActionError(offer.error ?? "Could not send contract.");
+        return;
+      }
+
+      const body = draftManagementAgreement({
+        ...draft,
+        ...offer.application,
+      });
+      const contractId = draft.contractId || crypto.randomUUID();
       const propertyName =
         draft.properties[0]?.location || draft.companyName || "Owner asset";
       const now = new Date().toISOString();
@@ -181,15 +195,16 @@ export function OwnerApplicationsDashboard() {
 
       await persist({
         ...draft,
+        ...offer.application,
         draftContract: body,
         contractId,
         contractSentAt: now,
         mgmtStatus: "contract_sent",
-        accountMessage: `Harborline has signed and sent your Property Management Agreement (${new Date().toLocaleString()}). Open Contracts in your portal to review and sign.`,
+        accountMessage: `Harborline sent your Property Management Agreement. Review and sign at /owners/status (look up your email). ${offer.propertiesProvisioned} propert${offer.propertiesProvisioned === 1 ? "y was" : "ies were"} provisioned for management.`,
       });
 
       setMsg(
-        "Contract signed by management and sent to the owner portal for signature."
+        `Contract sent — ${offer.propertiesProvisioned} managed propert${offer.propertiesProvisioned === 1 ? "y" : "ies"} created. Owner signs at /owners/status.`
       );
     } catch (err) {
       setActionError(

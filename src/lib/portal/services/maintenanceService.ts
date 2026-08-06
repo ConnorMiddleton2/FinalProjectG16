@@ -120,6 +120,37 @@ export async function createMaintenanceRequest(
     upsertStoredMaintenanceDetail(
       createDetailFromSubmission({ id, result })
     );
+
+    // Bridge into ops Maintenance so Management can hire and invoice → A/P.
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const { upsertSharedRecord, COLLECTIONS } = await import(
+        "@/lib/shared-store"
+      );
+      const { buildWorkOrderFromPortalRequest } = await import(
+        "@/lib/demo-cycle"
+      );
+      const workOrder = buildWorkOrderFromPortalRequest({
+        id,
+        requestNumber,
+        values,
+        requestedBy:
+          auth.data.displayName ||
+          values.contactName ||
+          auth.data.email ||
+          "Tenant",
+      });
+      const supabase = createClient();
+      await upsertSharedRecord(
+        supabase,
+        COLLECTIONS.workOrders,
+        workOrder.id,
+        workOrder as unknown as Record<string, unknown>
+      );
+    } catch {
+      // Portal detail still saved locally even if shared write fails.
+    }
+
     return ok(result, "mock");
   } catch (err) {
     return failFromUnknown(

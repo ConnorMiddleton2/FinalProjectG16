@@ -33,6 +33,12 @@ type Application = {
   notes: string;
   status: "Submitted" | "In review";
   createdAt: string;
+  unit?: string;
+  monthlyRent?: string;
+  propertyId?: string;
+  building?: string;
+  roomSize?: string;
+  smStatus?: "new";
 };
 
 export function FutureTenantWorkspace() {
@@ -66,6 +72,9 @@ export function FutureTenantWorkspace() {
     ManagementContractDraft[]
   >([]);
   const [property, setProperty] = useState("");
+  const [propertyId, setPropertyId] = useState("");
+  const [unit, setUnit] = useState("");
+  const [monthlyRent, setMonthlyRent] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
@@ -87,27 +96,27 @@ export function FutureTenantWorkspace() {
         setManagedProperties(rows);
         if (!property && rows[0]?.propertyName) {
           setProperty(rows[0].propertyName);
+          setPropertyId(rows[0].id);
         } else if (!property) {
-          setProperty("Pier 12 · Suite 305");
+          setProperty("Pier 12 Commerce Center");
         }
       } catch {
-        if (!property) setProperty("Pier 12 · Suite 305");
+        if (!property) setProperty("Pier 12 Commerce Center");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, []);
 
   const propertyOptions = useMemo(() => {
-    const names = managedProperties
-      .map((p) => p.propertyName)
-      .filter(Boolean);
-    const fallback = [
-      "Pier 12 · Suite 305",
-      "Canal Yard · Unit A",
-      "Harbor Court · Floor 3",
-      "Wharf East · Retail Bay 4",
+    const fromManaged = managedProperties
+      .map((p) => ({ id: p.id, name: p.propertyName }))
+      .filter((p) => p.name);
+    if (fromManaged.length > 0) return fromManaged;
+    return [
+      { id: "", name: "Pier 12 Commerce Center" },
+      { id: "", name: "Canal Yard" },
+      { id: "", name: "Riverbend Commerce Center" },
     ];
-    return Array.from(new Set([...names, ...fallback]));
   }, [managedProperties]);
 
   const tabs = useMemo(
@@ -122,13 +131,28 @@ export function FutureTenantWorkspace() {
 
   async function handleApply(e: FormEvent) {
     e.preventDefault();
+    const rent = monthlyRent.trim();
+    if (!unit.trim()) {
+      setSavedMsg("Enter the unit or suite you want to lease.");
+      return;
+    }
+    if (!rent || Number(rent.replace(/[$,\s]/g, "")) <= 0) {
+      setSavedMsg("Enter the monthly rent agreed for this unit.");
+      return;
+    }
     const next: Application = {
       id: crypto.randomUUID(),
       property,
+      propertyId: propertyId || undefined,
+      building: property,
+      unit: unit.trim(),
+      roomSize: unit.trim(),
+      monthlyRent: rent,
       name: name.trim() || "Applicant",
       email: email.trim() || "not provided",
       notes: notes.trim(),
       status: "Submitted",
+      smStatus: "new",
       createdAt: new Date().toLocaleDateString(),
     };
     try {
@@ -136,10 +160,12 @@ export function FutureTenantWorkspace() {
       setName("");
       setEmail("");
       setNotes("");
+      setUnit("");
+      setMonthlyRent("");
       setSavedMsg(
-        "Application saved to the shared team database. Harborline will follow up shortly."
+        "Application saved. Harborline Sales & Marketing will review it; once approved you will appear on the property roster and rent will post to Accounts Receivable."
       );
-      setTimeout(() => setSavedMsg(null), 4000);
+      setTimeout(() => setSavedMsg(null), 5000);
     } catch (err) {
       setSavedMsg(
         err instanceof Error ? err.message : "Could not save application."
@@ -201,15 +227,41 @@ export function FutureTenantWorkspace() {
                 <span className="label-text mb-1">Property interest</span>
                 <select
                   className="select select-bordered w-full"
-                  value={property}
-                  onChange={(e) => setProperty(e.target.value)}
+                  value={propertyId || property}
+                  onChange={(e) => {
+                    const opt = propertyOptions.find(
+                      (p) => p.id === e.target.value || p.name === e.target.value
+                    );
+                    setProperty(opt?.name || e.target.value);
+                    setPropertyId(opt?.id || "");
+                  }}
                 >
                   {propertyOptions.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
+                    <option key={opt.id || opt.name} value={opt.id || opt.name}>
+                      {opt.name}
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="form-control w-full">
+                <span className="label-text mb-1">Unit / suite</span>
+                <input
+                  className="input input-bordered w-full"
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value)}
+                  placeholder="Suite 210"
+                  required
+                />
+              </label>
+              <label className="form-control w-full">
+                <span className="label-text mb-1">Monthly rent (USD)</span>
+                <input
+                  className="input input-bordered w-full"
+                  value={monthlyRent}
+                  onChange={(e) => setMonthlyRent(e.target.value)}
+                  placeholder="4850"
+                  required
+                />
               </label>
               <label className="form-control w-full">
                 <span className="label-text mb-1">Full name</span>

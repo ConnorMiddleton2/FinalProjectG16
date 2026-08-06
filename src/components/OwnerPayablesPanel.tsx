@@ -51,6 +51,8 @@ import {
   type OwnerPaymentMethod,
   type OwnerPaymentType,
 } from "@/lib/owner-payables";
+import { buildMissingOwnerRemittance } from "@/lib/demo-cycle";
+import { monthPeriodLabel } from "@/lib/seed-dates";
 
 const STATUS_BADGE: Record<OwnerPayableStatus, string> = {
   unpaid: "badge-warning",
@@ -143,6 +145,38 @@ export function OwnerPayablesPanel() {
     items,
     rentalReceivables,
     managedProperties,
+    saveOne,
+  ]);
+
+  // Create remittances for managed properties once rent has been collected.
+  useEffect(() => {
+    if (loading || arLoading) return;
+    const period = monthPeriodLabel(0);
+    let cancelled = false;
+    async function ensureRemittances() {
+      for (const property of managedProperties) {
+        const draft = buildMissingOwnerRemittance({
+          property,
+          period,
+          receivables: rentalReceivables,
+          existing: payables,
+        });
+        if (!draft || cancelled) continue;
+        await saveOne(draft);
+      }
+    }
+    void ensureRemittances();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loading,
+    arLoading,
+    arFingerprint,
+    feeFingerprint,
+    managedProperties,
+    rentalReceivables,
+    payables,
     saveOne,
   ]);
 

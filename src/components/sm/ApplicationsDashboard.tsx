@@ -5,6 +5,12 @@ import {
   COLLECTIONS,
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
+import type { Receivable } from "@/lib/accounts-receivable";
+import {
+  buildPropertyTenantFromApplication,
+  buildReceivableFromApplication,
+} from "@/lib/demo-cycle";
+import type { ManagementContractDraft, SharedPropertyTenant } from "@/lib/management-contract";
 import {
   buildTourPrompt,
   labelSlot,
@@ -41,6 +47,13 @@ export function ApplicationsDashboard() {
     items: events,
     saveOne: saveEvent,
   } = useSharedCollection<SmCalendarEvent>(COLLECTIONS.smCalendarEvents);
+  const { items: managedProperties } =
+    useSharedCollection<ManagementContractDraft>(COLLECTIONS.managedProperties);
+  const { saveOne: savePropertyTenant } =
+    useSharedCollection<SharedPropertyTenant>(COLLECTIONS.propertyTenants);
+  const { saveOne: saveReceivable } = useSharedCollection<Receivable>(
+    COLLECTIONS.rentalReceivables
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -115,10 +128,12 @@ export function ApplicationsDashboard() {
     await saveApp({
       ...draft,
       building: draft.building?.trim() || draft.property,
-      roomSize: draft.roomSize?.trim() || "",
+      roomSize: draft.roomSize?.trim() || draft.unit || "",
+      unit: draft.unit?.trim() || draft.roomSize?.trim() || "",
+      monthlyRent: draft.monthlyRent?.trim() || "",
       property:
-        draft.building && draft.roomSize
-          ? `${draft.building} · ${draft.roomSize}`
+        draft.building && (draft.roomSize || draft.unit)
+          ? `${draft.building} · ${draft.roomSize || draft.unit}`
           : draft.property,
       name: draft.name.trim(),
       email: draft.email.trim(),
@@ -127,6 +142,46 @@ export function ApplicationsDashboard() {
     setEditing(false);
     setMsg("Application updated.");
     setTimeout(() => setMsg(null), 2500);
+  }
+
+  /** Approve → property roster + current-month rental receivable. */
+  async function approveAndProvisionLease(app: SmTenantApplication) {
+    const tenant = buildPropertyTenantFromApplication(app, managedProperties);
+    if (!tenant) {
+      setMsg(
+        "Could not match this application to a managed property. Confirm the property name under Properties first."
+      );
+      setTimeout(() => setMsg(null), 4000);
+      return false;
+    }
+    await savePropertyTenant(tenant);
+
+    const receivable = buildReceivableFromApplication(app, managedProperties);
+    if (receivable) {
+      await saveReceivable(receivable);
+    } else {
+      setMsg(
+        "Tenant added to the property roster. Enter monthly rent on the application to also create an A/R charge."
+      );
+      setTimeout(() => setMsg(null), 4000);
+      return true;
+    }
+
+    setMsg(
+      `Approved — ${tenant.name} is on ${tenant.propertyName} and rent is on Accounts Receivable.`
+    );
+    setTimeout(() => setMsg(null), 4000);
+    return true;
+  }
+
+  async function updateReviewStatus(smStatus: SmTenantApplication["smStatus"]) {
+    if (!selected || !draft) return;
+    const next = { ...selected, ...draft, smStatus };
+    setDraft((d) => (d ? { ...d, smStatus } : d));
+    await saveApp(next);
+    if (smStatus === "approved") {
+      await approveAndProvisionLease(next);
+    }
   }
 
   async function sendTourPrompt() {
@@ -287,6 +342,32 @@ export function ApplicationsDashboard() {
                 />
                 <input
                   className="input input-bordered input-sm bg-white"
+                  placeholder="Unit / suite"
+                  value={draft.unit ?? draft.roomSize ?? ""}
+                  onChange={(e) =>
+                    setDraft((d) =>
+                      d
+                        ? {
+                            ...d,
+                            unit: e.target.value,
+                            roomSize: e.target.value,
+                          }
+                        : d
+                    )
+                  }
+                />
+                <input
+                  className="input input-bordered input-sm bg-white"
+                  placeholder="Monthly rent"
+                  value={draft.monthlyRent ?? ""}
+                  onChange={(e) =>
+                    setDraft((d) =>
+                      d ? { ...d, monthlyRent: e.target.value } : d
+                    )
+                  }
+                />
+                <input
+                  className="input input-bordered input-sm bg-white"
                   placeholder="Room / suite size"
                   value={draft.roomSize ?? ""}
                   onChange={(e) =>
@@ -318,6 +399,14 @@ export function ApplicationsDashboard() {
                   {draft.building || draft.property || "—"}
                 </p>
                 <p>
+                  <span className="opacity-60">Unit:</span>{" "}
+                  {draft.unit || draft.roomSize || "—"}
+                </p>
+                <p>
+                  <span className="opacity-60">Monthly rent:</span>{" "}
+                  {draft.monthlyRent ? `$${draft.monthlyRent}` : "—"}
+                </p>
+                <p>
                   <span className="opacity-60">Room / size:</span>{" "}
                   {draft.roomSize || "—"}
                 </p>
@@ -335,8 +424,7 @@ export function ApplicationsDashboard() {
                 onChange={(e) => {
                   const smStatus = e.target
                     .value as SmTenantApplication["smStatus"];
-                  setDraft((d) => (d ? { ...d, smStatus } : d));
-                  void saveApp({ ...selected, ...draft, smStatus });
+                  void updateReviewStatus(smStatus);
                 }}
               >
                 {SM_APP_STATUSES.map((s) => (

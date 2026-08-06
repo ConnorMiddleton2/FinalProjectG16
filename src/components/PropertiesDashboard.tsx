@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowLeft,
   Building2,
@@ -15,7 +15,14 @@ import {
 } from "@/components/AcquireManagementContractForm";
 import { PropertyDetailView } from "@/components/PropertyDetailView";
 import { teamLogout } from "@/app/team/actions";
-import type { ManagementContractDraft } from "@/lib/management-contract";
+import {
+  COLLECTIONS,
+  useSharedCollection,
+} from "@/hooks/useSharedCollection";
+import type {
+  ManagementContractDraft,
+  SharedPropertyTenant,
+} from "@/lib/management-contract";
 
 type Props = {
   pendingApplicationCount: number;
@@ -24,12 +31,33 @@ type Props = {
 export function PropertiesDashboard({ pendingApplicationCount }: Props) {
   const [mode, setMode] = useState<"list" | "acquire" | "detail">("list");
   const { contracts, refresh, loading, error } = useSavedContracts();
+  const { items: propertyTenants } = useSharedCollection<SharedPropertyTenant>(
+    COLLECTIONS.propertyTenants
+  );
   const [justSaved, setJustSaved] = useState<ManagementContractDraft | null>(
     null
   );
   const [selected, setSelected] = useState<ManagementContractDraft | null>(
     null
   );
+
+  const tenantCountByProperty = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of propertyTenants) {
+      if (t.status === "vacant") continue;
+      const key = t.propertyId || t.propertyName;
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  }, [propertyTenants]);
+
+  function liveTenantCount(c: ManagementContractDraft) {
+    return (
+      tenantCountByProperty.get(c.id) ??
+      tenantCountByProperty.get(c.propertyName) ??
+      (c.tenantCount ? Number(c.tenantCount) || 0 : 0)
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
@@ -169,9 +197,10 @@ export function PropertiesDashboard({ pendingApplicationCount }: Props) {
                           {c.occupancyPercent}% occupied
                         </span>
                       )}
-                      {c.tenantCount && (
+                      {liveTenantCount(c) > 0 && (
                         <span className="badge badge-ghost">
-                          {c.tenantCount} tenants
+                          {liveTenantCount(c)} tenant
+                          {liveTenantCount(c) === 1 ? "" : "s"}
                         </span>
                       )}
                       {c.feePercent && (
