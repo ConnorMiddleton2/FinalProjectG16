@@ -223,15 +223,12 @@ export function employeeNeedsModuleAccessSync(
 export function getEmployeeLoginModules(
   employee: Pick<HrEmployee, "department" | "category" | "moduleAccess">
 ): HrOpsModule[] {
-  const allowed = new Set(
-    resolveEmployeeModuleAccess(employee.department, employee.category)
-  );
-  for (const mod of employee.moduleAccess) {
-    if (!CATEGORY_MODULE_RESTRICTIONS[employee.category].includes(mod)) {
-      allowed.add(mod);
-    }
-  }
-  return [...allowed];
+  const restricted = CATEGORY_MODULE_RESTRICTIONS[employee.category];
+  const source =
+    employee.moduleAccess.length > 0
+      ? employee.moduleAccess
+      : resolveEmployeeModuleAccess(employee.department, employee.category);
+  return source.filter((mod) => !restricted.includes(mod));
 }
 
 /** Stable seed id for Cade Coburn (always upserted if missing). */
