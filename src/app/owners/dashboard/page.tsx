@@ -11,9 +11,11 @@ import {
 import { OwnerChangePasswordForm } from "@/components/OwnerChangePasswordForm";
 import { OwnerEmptyState } from "@/components/OwnerEmptyState";
 import { OwnerPortalHeader } from "@/components/OwnerPortalHeader";
+import { OwnerPropertyRevenuePanel } from "@/components/OwnerPropertyRevenuePanel";
 import { OwnerShell } from "@/components/OwnerShell";
 import { getCurrentOwner, readOwnerApplications } from "@/lib/owner-auth";
 import { getPendingApprovalsForOwner } from "@/lib/owner-approvals";
+import { buildOwnerPortfolioFinancials } from "@/lib/owner-property-financials";
 import {
   ensureDemoOwnerProperty,
   getPropertiesForOwner,
@@ -29,6 +31,9 @@ export default async function OwnerDashboardPage() {
   await ensureDemoOwnerProperty(owner);
   const properties = await getPropertiesForOwner(owner);
   const pendingApprovals = await getPendingApprovalsForOwner(owner.email);
+  const financials = await buildOwnerPortfolioFinancials(owner, {
+    trendMonths: 6,
+  });
   const myApplications = (await readOwnerApplications())
     .filter((a) => a.email.toLowerCase() === owner.email.toLowerCase())
     .sort(
@@ -118,6 +123,10 @@ export default async function OwnerDashboardPage() {
               </Link>
             </div>
           </div>
+        ) : null}
+
+        {properties.length > 0 ? (
+          <OwnerPropertyRevenuePanel financials={financials} />
         ) : null}
 
         {myApplications.length > 0 ? (
