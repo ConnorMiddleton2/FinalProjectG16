@@ -88,7 +88,8 @@ export function ownerPaymentMethodLabel(value: string) {
 }
 
 export function money(n: number) {
-  return n.toLocaleString("en-US", {
+  const value = Number.isFinite(n) ? n : 0;
+  return value.toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
@@ -186,6 +187,74 @@ export function computeNetDue(input: {
         input.reservesWithheld
     )
   );
+}
+
+/**
+ * Normalizes older fixed-fee owner-payable records into the current
+ * remittance-waterfall shape so the UI does not crash on stale seed data.
+ */
+export function normalizeOwnerPayable(
+  row: Partial<OwnerPayable> &
+    Pick<
+      OwnerPayable,
+      | "id"
+      | "paymentId"
+      | "ownerName"
+      | "ownerId"
+      | "property"
+      | "period"
+      | "paymentType"
+      | "amountPaid"
+      | "onHold"
+      | "statementApproved"
+      | "invoiceDate"
+      | "dueDate"
+      | "paymentMethod"
+      | "paymentReference"
+      | "fileName"
+      | "notes"
+      | "createdAt"
+    > & { rentalIncomeCollected?: number; amount?: number }
+): OwnerPayable {
+  const isLegacy =
+    row.grossRentCollected == null && row.rentalIncomeCollected != null;
+  const grossRentCollected =
+    row.grossRentCollected ?? row.rentalIncomeCollected ?? 0;
+  const managementFeePercent =
+    row.managementFeePercent ??
+    (row.paymentType === "monthly_distribution" ? MANAGEMENT_FEE_PERCENT : 0);
+  const managementFeeAmount =
+    row.managementFeeAmount ??
+    (row.paymentType === "monthly_distribution"
+      ? feeAmountFromPercent(grossRentCollected, managementFeePercent)
+      : 0);
+  const reimbursableExpenses = row.reimbursableExpenses ?? 0;
+  const reservesWithheld = row.reservesWithheld ?? 0;
+  const amount =
+    isLegacy && row.paymentType === "monthly_distribution"
+      ? computeNetDue({
+          grossRentCollected,
+          managementFeeAmount,
+          reimbursableExpenses,
+          reservesWithheld,
+        })
+      : (row.amount ??
+        computeNetDue({
+          grossRentCollected,
+          managementFeeAmount,
+          reimbursableExpenses,
+          reservesWithheld,
+        }));
+
+  return {
+    ...row,
+    grossRentCollected,
+    managementFeePercent,
+    managementFeeAmount,
+    reimbursableExpenses,
+    reservesWithheld,
+    amount,
+  };
 }
 
 export function emptyOwnerPayableForm() {

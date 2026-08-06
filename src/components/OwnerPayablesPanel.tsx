@@ -34,6 +34,7 @@ import {
   OWNER_PAYMENT_TYPES,
   parseNonNegativeAmount,
   parsePositiveAmount,
+  normalizeOwnerPayable,
   round2,
   seedOwnerPayables,
   statusOf,
@@ -56,13 +57,18 @@ type KnownOwner = { name: string; id: string; property?: string };
 
 export function OwnerPayablesPanel() {
   const {
-    items: payables,
+    items,
     saveOne,
     loading,
     error,
   } = useSharedCollection<OwnerPayable>(
     COLLECTIONS.ownerPayables,
     seedOwnerPayables
+  );
+
+  const payables = useMemo(
+    () => items.map((row) => normalizeOwnerPayable(row)),
+    [items]
   );
 
   const [showAddForm, setShowAddForm] = useState(false);
