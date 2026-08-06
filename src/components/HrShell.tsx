@@ -970,10 +970,10 @@ function AccessPanel({
   return (
     <div className="space-y-4 rounded-2xl border border-[var(--harbor-deep)]/12 bg-white/90 p-5 shadow-sm">
       <p className="text-sm opacity-65">
-        Sign-in access is determined by department and category. Recommended
-        modules are pre-checked below; you can grant extra modules or use
-        Apply type defaults to reset to the recommended set. Property staff
-        cannot access Management or Human resources.
+        Checked modules below determine what this employee can access in Ops.
+        Recommended modules for their department and category are marked;
+        use Apply type defaults to reset to that recommended set. Property
+        staff cannot access Management or Human resources.
       </p>
       <EmployeePicker
         employees={employees}
