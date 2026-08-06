@@ -1,3 +1,10 @@
+/**
+ * Detailed unit catalog used by unit detail pages and the portal mock layer.
+ *
+ * Prefer `@/lib/portal` services for async access. Keep mock/seed data out of
+ * React components — search cards use `getMockUnitsSync()` from unitService.
+ */
+
 export type UnitFee = {
   label: string;
   amount: string;

@@ -18,8 +18,14 @@ import {
   X,
 } from "lucide-react";
 import { useSavedUnits } from "@/hooks/useSavedUnits";
+import type { AvailabilityStatus } from "@/lib/portal/models";
+import {
+  getMockPropertyNames,
+  getMockSearchAmenities,
+  getMockUnitsSync,
+} from "@/lib/portal/services/unitService";
 
-type Availability = "Available now" | "Available soon" | "Waitlist";
+type Availability = AvailabilityStatus;
 type SortOption =
   | "price-asc"
   | "price-desc"
@@ -27,6 +33,7 @@ type SortOption =
   | "move-in"
   | "sqft";
 
+/** Search-card projection of the shared portal Unit model. */
 type Unit = {
   id: string;
   property: string;
@@ -59,144 +66,23 @@ type Filters = {
   availability: string;
 };
 
-const UNITS: Unit[] = [
-  {
-    id: "pier-12-305",
-    property: "Pier 12 Residences",
-    floorPlan: "Residence 305 · Harbor One",
-    location: "Downtown · Harbor Walk",
-    rent: 2450,
-    beds: 1,
-    baths: 1,
-    sqft: 1180,
-    availableDate: "2026-08-15",
-    listedAt: "2026-08-04",
-    petFriendly: true,
-    accessible: true,
-    amenities: ["Water views", "Covered parking", "Fitness room"],
-    availability: "Available now",
-    artwork: "from-[#0b2a32] via-[#1f7a8c] to-[#9ed7df]",
-  },
-  {
-    id: "canal-yard-a",
-    property: "Canal Yard Lofts",
-    floorPlan: "Loft A · Open Studio",
-    location: "Arts District · Canal Street",
-    rent: 2075,
-    beds: 0,
-    baths: 1,
-    sqft: 920,
-    availableDate: "2026-08-22",
-    listedAt: "2026-08-01",
-    petFriendly: true,
-    accessible: false,
-    amenities: ["High ceilings", "Bike storage", "Pet wash"],
-    availability: "Available now",
-    artwork: "from-[#4c5f54] via-[#8fa78e] to-[#e6d7b8]",
-  },
-  {
-    id: "harbor-court-3b",
-    property: "Harbor Court",
-    floorPlan: "Suite 3B · The Mariner",
-    location: "East Wharf · Seaport Avenue",
-    rent: 2790,
-    beds: 2,
-    baths: 2,
-    sqft: 1340,
-    availableDate: "2026-09-01",
-    listedAt: "2026-08-05",
-    petFriendly: true,
-    accessible: true,
-    amenities: ["Roof terrace", "Package room", "On-site team"],
-    availability: "Available soon",
-    artwork: "from-[#27384a] via-[#68849d] to-[#d4c29a]",
-  },
-  {
-    id: "wharf-east-402",
-    property: "Wharf East",
-    floorPlan: "Residence 402 · Tidal Two",
-    location: "East Wharf · Market Pier",
-    rent: 3180,
-    beds: 2,
-    baths: 2,
-    sqft: 1510,
-    availableDate: "2026-09-12",
-    listedAt: "2026-07-29",
-    petFriendly: false,
-    accessible: true,
-    amenities: ["Balcony", "Covered parking", "Elevator"],
-    availability: "Available soon",
-    artwork: "from-[#283b45] via-[#557d8d] to-[#b7c9d6]",
-  },
-  {
-    id: "pier-12-708",
-    property: "Pier 12 Residences",
-    floorPlan: "Residence 708 · Harbor Two",
-    location: "Downtown · Harbor Walk",
-    rent: 3495,
-    beds: 2,
-    baths: 2.5,
-    sqft: 1680,
-    availableDate: "2026-10-01",
-    listedAt: "2026-08-03",
-    petFriendly: true,
-    accessible: false,
-    amenities: ["Water views", "Private terrace", "Fitness room"],
-    availability: "Waitlist",
-    artwork: "from-[#102f3a] via-[#286d7b] to-[#d3b77d]",
-  },
-  {
-    id: "canal-yard-c",
-    property: "Canal Yard Lofts",
-    floorPlan: "Loft C · Gallery One",
-    location: "Arts District · Canal Street",
-    rent: 2325,
-    beds: 1,
-    baths: 1,
-    sqft: 1085,
-    availableDate: "2026-08-10",
-    listedAt: "2026-07-31",
-    petFriendly: true,
-    accessible: false,
-    amenities: ["High ceilings", "Coworking lounge", "Bike storage"],
-    availability: "Available now",
-    artwork: "from-[#3b4038] via-[#82917b] to-[#d9cbb2]",
-  },
-  {
-    id: "harbor-court-5a",
-    property: "Harbor Court",
-    floorPlan: "Suite 5A · The Beacon",
-    location: "East Wharf · Seaport Avenue",
-    rent: 3890,
-    beds: 3,
-    baths: 2,
-    sqft: 1920,
-    availableDate: "2026-09-20",
-    listedAt: "2026-08-02",
-    petFriendly: true,
-    accessible: true,
-    amenities: ["Roof terrace", "Package room", "Covered parking"],
-    availability: "Available soon",
-    artwork: "from-[#243949] via-[#6b879d] to-[#e0c78f]",
-  },
-  {
-    id: "marina-house-214",
-    property: "Marina House",
-    floorPlan: "Residence 214 · Cove One",
-    location: "North Marina · Anchor Lane",
-    rent: 1895,
-    beds: 1,
-    baths: 1,
-    sqft: 780,
-    availableDate: "2026-08-18",
-    listedAt: "2026-08-05",
-    petFriendly: false,
-    accessible: true,
-    amenities: ["Elevator", "Package room", "Transit nearby"],
-    availability: "Available now",
-    artwork: "from-[#1e3740] via-[#51808d] to-[#b8d5d7]",
-  },
-];
+const UNITS: Unit[] = getMockUnitsSync().map((unit) => ({
+  id: unit.id,
+  property: unit.property,
+  floorPlan: unit.floorPlan,
+  location: unit.location,
+  rent: unit.rent,
+  beds: unit.beds,
+  baths: unit.baths,
+  sqft: unit.sqft,
+  availableDate: unit.availableDate,
+  listedAt: unit.listedAt,
+  petFriendly: unit.petFriendly,
+  accessible: unit.accessible,
+  amenities: unit.amenities,
+  availability: unit.availability,
+  artwork: unit.artwork[0] ?? "from-[#1e3740] via-[#51808d] to-[#b8d5d7]",
+}));
 
 const EMPTY_FILTERS: Filters = {
   property: "",
@@ -212,18 +98,9 @@ const EMPTY_FILTERS: Filters = {
   availability: "",
 };
 
-const AMENITIES = [
-  "Water views",
-  "Covered parking",
-  "Fitness room",
-  "Roof terrace",
-  "Elevator",
-  "Package room",
-  "Bike storage",
-  "High ceilings",
-];
+const AMENITIES = getMockSearchAmenities();
 
-const PROPERTIES = Array.from(new Set(UNITS.map((unit) => unit.property)));
+const PROPERTIES = getMockPropertyNames();
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
