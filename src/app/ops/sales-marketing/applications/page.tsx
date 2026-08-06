@@ -1,12 +1,9 @@
-import { redirect } from "next/navigation";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { requireOpsModule } from "@/lib/team-auth";
 import { SmShell } from "@/components/sm/SmShell";
 import { ApplicationsDashboard } from "@/components/sm/ApplicationsDashboard";
 
 export default async function SmApplicationsPage() {
-  if (!(await hasTeamAccess())) {
-    redirect("/team");
-  }
+  await requireOpsModule("sales-marketing");
 
   return (
     <SmShell

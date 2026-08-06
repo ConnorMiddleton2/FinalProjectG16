@@ -1,10 +1,9 @@
-import { redirect } from "next/navigation";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { requireOpsModule } from "@/lib/team-auth";
 import { MgShell } from "@/components/mgmt/MgShell";
 import { CapExDashboard } from "@/components/mgmt/CapExDashboard";
 
 export default async function Page() {
-  if (!(await hasTeamAccess())) redirect("/team");
+  await requireOpsModule("management");
   return (
     <MgShell
       title="Capital expenditures"

@@ -6,16 +6,14 @@ import {
   getAwaitingSignatureApplications,
   getPendingOwnerApplications,
 } from "@/lib/owner-auth";
-import { hasTeamAccess } from "@/lib/team-auth";
+import { requireOpsModule } from "@/lib/team-auth";
 import {
   AwaitingSignatureCard,
   PendingApplicationCard,
 } from "../PendingApplicationCard";
 
 export default async function PendingApplicationsPage() {
-  if (!(await hasTeamAccess())) {
-    redirect("/team");
-  }
+  await requireOpsModule("properties");
 
   const [pending, awaiting] = await Promise.all([
     getPendingOwnerApplications(),
