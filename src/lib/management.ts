@@ -286,7 +286,7 @@ export const MGMT_BUDGET_DEPARTMENTS: {
   {
     id: "maintenance",
     title: "Maintenance",
-    blurb: "Trades, make-ready, amenities, and related property upkeep.",
+    blurb: "HVAC, plumbing, trades, and related property upkeep.",
   },
   {
     id: "sales_marketing",
@@ -305,19 +305,15 @@ export const MGMT_BUDGET_CATEGORIES: Record<
   Array<{ key: string; label: string; defaultBudgeted: number }>
 > = {
   maintenance: [
-    { key: "general", label: "General", defaultBudgeted: 8000 },
-    { key: "emergency", label: "Emergency", defaultBudgeted: 10000 },
-    { key: "make_ready", label: "Make-ready", defaultBudgeted: 12000 },
     { key: "hvac", label: "HVAC", defaultBudgeted: 15000 },
     { key: "plumbing", label: "Plumbing", defaultBudgeted: 9000 },
     { key: "electrical", label: "Electrical", defaultBudgeted: 8000 },
-    { key: "appliances", label: "Appliances", defaultBudgeted: 6000 },
-    { key: "painting_drywall", label: "Painting & Drywall", defaultBudgeted: 7000 },
-    { key: "doors_locks", label: "Doors & Locks", defaultBudgeted: 4000 },
+    { key: "structural", label: "Structural", defaultBudgeted: 10000 },
+    { key: "janitorial", label: "Janitorial", defaultBudgeted: 6000 },
     { key: "landscaping", label: "Landscaping", defaultBudgeted: 5000 },
-    { key: "housekeeping", label: "Housekeeping", defaultBudgeted: 6000 },
-    { key: "amenities", label: "Amenities", defaultBudgeted: 4500 },
-    { key: "pest_control", label: "Pest Control", defaultBudgeted: 3500 },
+    { key: "security", label: "Security", defaultBudgeted: 4000 },
+    { key: "appliance", label: "Appliance", defaultBudgeted: 6000 },
+    { key: "general", label: "General repair", defaultBudgeted: 12000 },
     { key: "other", label: "Other", defaultBudgeted: 3000 },
   ],
   sales_marketing: [
@@ -579,30 +575,33 @@ export type CategorySpend = { approved: number; pending: number };
 
 /** Map maintenance / work-order category strings onto budget category keys. */
 export function normalizeMaintCategoryKey(raw: string): string {
-  const k = raw.toLowerCase().replace(/\s+/g, "_");
+  const k = raw.toLowerCase().replace(/\s+/g, "_").replace(/&/g, "and");
   const map: Record<string, string> = {
-    appliance: "appliances",
-    appliances: "appliances",
-    janitorial: "housekeeping",
-    housekeeping: "housekeeping",
-    structural: "other",
-    security: "other",
-    painting: "painting_drywall",
-    painting_drywall: "painting_drywall",
-    doors: "doors_locks",
-    doors_locks: "doors_locks",
-    make_ready: "make_ready",
-    makeready: "make_ready",
-    pest: "pest_control",
-    pest_control: "pest_control",
-    emergency: "emergency",
-    amenities: "amenities",
-    landscaping: "landscaping",
     hvac: "hvac",
     plumbing: "plumbing",
     electrical: "electrical",
+    structural: "structural",
+    janitorial: "janitorial",
+    landscaping: "landscaping",
+    security: "security",
+    appliance: "appliance",
+    appliances: "appliance",
     general: "general",
+    general_repair: "general",
+    general_repairs: "general",
     other: "other",
+    // Legacy Management keys → canonical work-order categories
+    housekeeping: "janitorial",
+    painting: "structural",
+    painting_drywall: "structural",
+    doors: "structural",
+    doors_locks: "structural",
+    make_ready: "general",
+    makeready: "general",
+    emergency: "general",
+    amenities: "other",
+    pest: "other",
+    pest_control: "other",
   };
   return map[k] ?? k;
 }
@@ -636,7 +635,7 @@ export function spendForBudgetCategory(input: {
   }>;
   /** Approved maintenance invoices/receipts. */
   maintDocs?: Array<{
-    amount: string;
+    amount: string | number;
     category: string;
     property: string;
     documentDate: string;
@@ -795,6 +794,83 @@ export function normalizeDepartmentBudgetLines(
       updatedAt: now,
     };
   });
+}
+
+export type MaintenanceBudgetViewLine = {
+  id: string;
+  categoryKey: string;
+  label: string;
+  budgeted: number;
+};
+
+/** True when Management has created maintenance budget rows for property + year. */
+export function hasMaintenanceBudgetYear(
+  items: DepartmentBudget[],
+  propertyId: string,
+  fiscalYear: number
+) {
+  return items.some(
+    (r) =>
+      r.propertyId === propertyId &&
+      r.fiscalYear === fiscalYear &&
+      r.department === "maintenance"
+  );
+}
+
+/**
+ * Maintenance department view of Management-pushed budgets for one
+ * property + fiscal year. Empty when Management has not created that year.
+ */
+export function maintenanceBudgetViewLines(input: {
+  items: DepartmentBudget[];
+  packs: PropertyBudgetPack[];
+  propertyId: string;
+  propertyName: string;
+  fiscalYear: number;
+}): MaintenanceBudgetViewLine[] {
+  if (
+    !hasMaintenanceBudgetYear(
+      input.items,
+      input.propertyId,
+      input.fiscalYear
+    )
+  ) {
+    return [];
+  }
+  const pack =
+    input.packs.find(
+      (p) =>
+        p.propertyId === input.propertyId &&
+        p.fiscalYear === input.fiscalYear
+    ) ?? null;
+  if (pack && !pack.enabledBuiltIns.includes("maintenance")) {
+    return [];
+  }
+  const depts = activeDepartmentsFromPack(pack);
+  const maint = depts.find((d) => d.id === "maintenance");
+  if (!maint) return [];
+  return normalizeDepartmentBudgetLines(
+    "maintenance",
+    maint.categories,
+    input.items,
+    {
+      propertyId: input.propertyId,
+      propertyName: input.propertyName,
+      fiscalYear: input.fiscalYear,
+    }
+  ).map((line) => ({
+    id: line.id,
+    categoryKey: normalizeMaintCategoryKey(line.categoryKey),
+    label: line.label,
+    budgeted: yearlyFromMonths(ensureMonths(line)),
+  }));
+}
+
+export function propertyNamesMatch(a: string, b: string) {
+  const x = a.toLowerCase().trim();
+  const y = b.toLowerCase().trim();
+  if (!x || !y) return false;
+  return x === y || x.includes(y) || y.includes(x);
 }
 
 /** Create category lines for enabled departments on a pack. */
