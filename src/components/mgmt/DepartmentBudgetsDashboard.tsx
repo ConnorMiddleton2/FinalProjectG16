@@ -55,9 +55,7 @@ import {
   type SmReceipt,
 } from "@/lib/sales-marketing";
 import {
-  seedBudget,
   seedDocuments,
-  type BudgetLine,
   type MaintenanceDocument,
 } from "@/lib/maintenance";
 import {
@@ -131,10 +129,6 @@ function DepartmentBudgetsDashboardInner() {
   const { items: deptExpenses } = useSharedCollection<DepartmentExpense>(
     COLLECTIONS.departmentExpenses,
     seedDepartmentExpenses
-  );
-  const { items: maintBudgetLines } = useSharedCollection<BudgetLine>(
-    COLLECTIONS.budgetLines,
-    seedBudget
   );
   const { items: maintDocs } = useSharedCollection<MaintenanceDocument>(
     COLLECTIONS.maintenanceDocuments,
@@ -662,7 +656,6 @@ function DepartmentBudgetsDashboardInner() {
           propertyName: selectedProperty?.name,
           smReceipts,
           deptExpenses,
-          maintBudgetLines,
           maintDocs,
         })
       );
@@ -675,7 +668,6 @@ function DepartmentBudgetsDashboardInner() {
     selectedProperty?.name,
     smReceipts,
     deptExpenses,
-    maintBudgetLines,
     maintDocs,
   ]);
 
