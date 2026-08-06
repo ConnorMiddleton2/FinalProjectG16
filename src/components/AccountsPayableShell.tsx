@@ -20,7 +20,7 @@ const TABS: {
   {
     id: "expenses",
     label: "Operating expenses",
-    description: "Vendor invoices for maintenance, utilities, and other ops costs",
+    description: "Vendor invoices for maintenance, utilities, and other ops costs (includes Management-approved queue items)",
     icon: Wrench,
   },
   {

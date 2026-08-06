@@ -218,6 +218,21 @@ export function isDocumentApproved(doc: MaintenanceDocument): boolean {
   return normalizeMaintenanceDocument(doc).approvalStatus === "approved";
 }
 
+/** Invoices go to Accounts Payable after approval; receipts apply to budget only. */
+export function maintenanceDocumentForwardsToAp(
+  doc: MaintenanceDocument
+): boolean {
+  return normalizeMaintenanceDocument(doc).kind === "invoice";
+}
+
+/** Only approved receipts count toward Maintenance budget spend. */
+export function maintenanceDocumentAppliesToBudget(
+  doc: MaintenanceDocument
+): boolean {
+  const n = normalizeMaintenanceDocument(doc);
+  return Boolean(n.applyToBudget) && n.kind === "receipt";
+}
+
 export function approvalStatusLabel(status: DocumentApprovalStatus): string {
   if (status === "approved") return "Approved";
   if (status === "rejected") return "Rejected";
