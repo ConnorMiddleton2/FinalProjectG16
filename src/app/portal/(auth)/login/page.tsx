@@ -5,14 +5,14 @@ import { TenantPortalAuth } from "@/components/portal/auth/TenantPortalAuth";
 /**
  * Current-tenant portal login.
  * Demo cookies are cleared in the auth proxy when this path is hit,
- * so the form always shows (including sample credentials in demo mode).
+ * so the form always shows empty for a normal sign-in.
  * Multi-role workspace auth remains at `/login`.
  */
 export default function PortalLoginPage() {
   return (
     <TenantAuthShell
-      title="Future tenant sign in"
-      subtitle="Sign in or create an account to apply and track your Harborline application."
+      title="Tenant sign in"
+      subtitle="Sign in to your CPMC dashboard, or create an account to start an application."
     >
       <Suspense
         fallback={

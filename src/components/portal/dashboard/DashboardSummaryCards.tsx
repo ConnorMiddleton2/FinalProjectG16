@@ -15,58 +15,70 @@ type Props = {
   summary: DashboardSummary;
 };
 
-const cards = [
+type SummaryCard = {
+  key: string;
+  label: string;
+  href?: string;
+  icon: typeof CircleDollarSign;
+  value: (s: DashboardSummary) => string;
+  isStatus?: boolean;
+};
+
+const cards: SummaryCard[] = [
   {
     key: "rent",
     label: "Next rent amount",
-    href: "/portal/payments/make",
+    href: "/portal/payments",
     icon: CircleDollarSign,
-    value: (s: DashboardSummary) => s.nextRentAmount,
+    value: (s) => s.nextRentAmount,
   },
   {
     key: "due",
     label: "Rent due date",
     href: "/portal/payments",
     icon: CalendarClock,
-    value: (s: DashboardSummary) => s.rentDueDate,
+    value: (s) => s.rentDueDate,
   },
   {
     key: "status",
     label: "Payment status",
     href: "/portal/payments",
     icon: FileWarning,
-    value: (s: DashboardSummary) => s.paymentStatus,
-    isStatus: true as const,
+    value: (s) => s.paymentStatus,
+    isStatus: true,
   },
   {
     key: "lease-end",
     label: "Lease end date",
     href: "/portal/lease",
     icon: ScrollText,
-    value: (s: DashboardSummary) => s.leaseEndDate,
+    value: (s) => s.leaseEndDate,
   },
   {
     key: "maint",
     label: "Open maintenance",
     href: "/portal/maintenance",
     icon: ClipboardList,
-    value: (s: DashboardSummary) => String(s.openMaintenanceCount),
+    value: (s) => String(s.openMaintenanceCount),
   },
   {
     key: "ann",
     label: "Unread announcements",
     href: "/portal/announcements",
     icon: Bell,
-    value: (s: DashboardSummary) => String(s.unreadAnnouncements),
+    value: (s) => String(s.unreadAnnouncements),
   },
   {
     key: "msg",
     label: "Unread messages",
     href: "/portal/messages",
     icon: MessagesSquare,
-    value: (s: DashboardSummary) => String(s.unreadMessages),
+    value: (s) => String(s.unreadMessages),
   },
-] as const;
+];
+
+const cardClassName =
+  "flex h-full flex-col gap-3 rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/80 p-4 shadow-sm";
 
 export function DashboardSummaryCards({ summary }: Props) {
   return (
@@ -78,31 +90,41 @@ export function DashboardSummaryCards({ summary }: Props) {
         {cards.map((card) => {
           const Icon = card.icon;
           const value = card.value(summary);
+          const body = (
+            <>
+              <span className="flex items-center gap-2 text-sm text-[var(--harbor-muted)]">
+                <Icon
+                  className="h-4 w-4 text-[var(--harbor-mid)]"
+                  aria-hidden="true"
+                />
+                {card.label}
+              </span>
+              {card.isStatus ? (
+                <span
+                  className={`badge badge-lg w-fit ${paymentStatusClass(summary.paymentStatus)}`}
+                >
+                  {value}
+                </span>
+              ) : (
+                <span className="font-display text-2xl tracking-tight text-[var(--harbor-ink)]">
+                  {value}
+                </span>
+              )}
+            </>
+          );
+
           return (
             <li key={card.key}>
-              <Link
-                href={card.href}
-                className="flex h-full flex-col gap-3 rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/80 p-4 shadow-sm portal-motion-safe transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--harbor-mid)]"
-              >
-                <span className="flex items-center gap-2 text-sm text-[var(--harbor-muted)]">
-                  <Icon
-                    className="h-4 w-4 text-[var(--harbor-mid)]"
-                    aria-hidden="true"
-                  />
-                  {card.label}
-                </span>
-                {"isStatus" in card && card.isStatus ? (
-                  <span
-                    className={`badge badge-lg w-fit ${paymentStatusClass(summary.paymentStatus)}`}
-                  >
-                    {value}
-                  </span>
-                ) : (
-                  <span className="font-display text-2xl tracking-tight text-[var(--harbor-ink)]">
-                    {value}
-                  </span>
-                )}
-              </Link>
+              {card.href ? (
+                <Link
+                  href={card.href}
+                  className={`${cardClassName} portal-motion-safe transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--harbor-mid)]`}
+                >
+                  {body}
+                </Link>
+              ) : (
+                <div className={cardClassName}>{body}</div>
+              )}
             </li>
           );
         })}

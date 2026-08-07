@@ -39,6 +39,8 @@ export const COLLECTIONS = {
   propertyBudgetPacks: "property_budget_packs",
   apPayables: "ap_payables",
   missedPayments: "missed_payments",
+  /** Management overdue-tenant escalation cases (checklists, eviction, cure flags). */
+  overdueTenantCases: "overdue_tenant_cases",
   capitalExpenditures: "capital_expenditures",
   hrEmployees: "hr_employees",
   hrPayStubs: "hr_pay_stubs",
@@ -49,10 +51,18 @@ export const COLLECTIONS = {
   bankTransactions: "bank_transactions",
   /** Management requests for additional owner cash when a property is short. */
   ownerCashCalls: "owner_cash_calls",
+  /** Biweekly (or other) payroll runs with liability buckets. */
+  payrollRuns: "payroll_runs",
+  /** Aggregated payroll liabilities for a run (net pay, taxes, benefits). */
+  payrollLiabilities: "payroll_liabilities",
   /** Prospect / tenant portal login accounts. */
   tenantAccounts: "tenant_accounts",
   /** S&M ↔ prospect messages in the tenant portal. */
   tenantPortalMessages: "tenant_portal_messages",
+  /** Tenant-reported check payments awaiting A/R approval before bank deposit. */
+  pendingCheckPayments: "pending_check_payments",
+  /** One active claim per tenant/period so debit/check cannot double-pay. */
+  portalBalanceClaims: "portal_balance_claims",
   /** Fixed assets / PP&E by property (depreciation feeds financial statements). */
   propertyAssets: "property_assets",
 } as const;
@@ -67,22 +77,31 @@ type SharedRow = {
   updated_at: string;
 };
 
-/** List all records in a shared collection (newest first). */
+/** List all records in a shared collection (newest first). Paginates past PostgREST defaults. */
 export async function listSharedRecords<T extends { id: string }>(
   client: SupabaseClient,
   collection: SharedCollection
 ): Promise<T[]> {
-  const { data, error } = await client
-    .from("shared_records")
-    .select("id, payload, created_at, updated_at")
-    .eq("collection", collection)
-    .order("updated_at", { ascending: false });
+  const pageSize = 1000;
+  const rows: SharedRow[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const to = from + pageSize - 1;
+    const { data, error } = await client
+      .from("shared_records")
+      .select("id, payload, created_at, updated_at")
+      .eq("collection", collection)
+      .order("updated_at", { ascending: false })
+      .range(from, to);
 
-  if (error) {
-    throw new Error(`Failed to load ${collection}: ${error.message}`);
+    if (error) {
+      throw new Error(`Failed to load ${collection}: ${error.message}`);
+    }
+    const batch = (data ?? []) as SharedRow[];
+    rows.push(...batch);
+    if (batch.length < pageSize) break;
   }
 
-  return ((data ?? []) as SharedRow[]).map((row) => {
+  return rows.map((row) => {
     const payload = row.payload ?? {};
     return {
       ...payload,

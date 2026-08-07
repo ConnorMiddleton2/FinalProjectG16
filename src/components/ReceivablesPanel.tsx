@@ -4,7 +4,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Eye,
   FileText,
+  LoaderCircle,
   Plus,
+  Sparkles,
   TriangleAlert,
   Upload,
 } from "lucide-react";
@@ -18,6 +20,7 @@ import {
   COLLECTIONS,
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
+import { generateManagementFeesAction } from "@/app/ops/ar/actions";
 import {
   balanceOf,
   chargeTypeLabel,
@@ -69,6 +72,7 @@ export function ReceivablesPanel({ kind }: Props) {
     saveOne,
     loading,
     error,
+    refresh,
   } = useSharedCollection<Receivable>(collection, seed);
   const { items: tenants } = useSharedCollection<TenantRecord>(
     COLLECTIONS.tenants,
@@ -87,7 +91,29 @@ export function ReceivablesPanel({ kind }: Props) {
   const [formError, setFormError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [receiptAmount, setReceiptAmount] = useState("");
+  const [generatingFees, setGeneratingFees] = useState(false);
   const today = todayIso();
+
+  async function handleGenerateManagementFees() {
+    setGeneratingFees(true);
+    setFormError(null);
+    try {
+      const result = await generateManagementFeesAction({ monthsAgo: 0 });
+      setSavedMsg(
+        `Generated management fees for ${result.period}: ${result.count} propert${result.count === 1 ? "y" : "ies"} · ${money(result.totalFee)}. Created AR (Miscellaneous) and AP (Operating expenses). ${result.created} new, ${result.updated} updated, ${result.skipped} skipped.`
+      );
+      setTimeout(() => setSavedMsg(null), 8000);
+      await refresh();
+    } catch (err) {
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : "Could not generate management fees."
+      );
+    } finally {
+      setGeneratingFees(false);
+    }
+  }
 
   function matchesFilters(row: Receivable) {
     if (
@@ -329,10 +355,34 @@ export function ReceivablesPanel({ kind }: Props) {
 
     try {
       await saveOne(next);
+      if (amountReceived > 0) {
+        const { creditPropertyBankFromAr } = await import(
+          "@/app/ops/banks/ledger-bridge-actions"
+        );
+        const bank = await creditPropertyBankFromAr({
+          propertyName: property,
+          tenantName: customerName,
+          unit: next.unit,
+          amount: amountReceived,
+          method: next.paymentMethod || "AR opening receipt",
+          relatedId: next.id,
+        });
+        if (bank && "error" in bank) {
+          setSavedMsg(
+            `${receivableId} saved, but bank credit failed: ${bank.error}`
+          );
+          setTimeout(() => setSavedMsg(null), 5000);
+          setShowAddForm(false);
+          setForm(emptyReceivableForm(kind));
+          return;
+        }
+      }
       setShowAddForm(false);
       setForm(emptyReceivableForm(kind));
       setSavedMsg(
-        `${receivableId} for ${customerName} added to accounts receivable.`
+        amountReceived > 0
+          ? `${receivableId} for ${customerName} added — ${money(amountReceived)} credited to ${property} bank.`
+          : `${receivableId} for ${customerName} added to accounts receivable.`
       );
       setTimeout(() => setSavedMsg(null), 4000);
     } catch (saveError) {
@@ -357,17 +407,19 @@ export function ReceivablesPanel({ kind }: Props) {
       );
       return;
     }
+    if (!row.property.trim()) {
+      setFormError(
+        "This receivable has no property. Assign a property so the payment credits the correct bank account."
+      );
+      return;
+    }
 
     setFormError(null);
-    await saveOne({
-      ...row,
-      amountReceived: round2(row.amountReceived + amount),
-    });
     try {
       const { creditPropertyBankFromAr } = await import(
         "@/app/ops/banks/ledger-bridge-actions"
       );
-      await creditPropertyBankFromAr({
+      const bank = await creditPropertyBankFromAr({
         propertyName: row.property,
         tenantName: row.customerName,
         unit: row.unit,
@@ -375,14 +427,27 @@ export function ReceivablesPanel({ kind }: Props) {
         method: row.paymentMethod || "AR receipt",
         relatedId: row.id,
       });
-    } catch {
-      /* bank post best-effort */
+      if (bank && "error" in bank) {
+        setFormError(bank.error ?? "Could not post to the property bank.");
+        return;
+      }
+
+      await saveOne({
+        ...row,
+        amountReceived: round2(row.amountReceived + amount),
+      });
+      setReceiptAmount("");
+      setSavedMsg(
+        `Recorded ${money(amount)} on ${row.receivableId} — credited ${row.property} operating bank.`
+      );
+      setTimeout(() => setSavedMsg(null), 4000);
+    } catch (err) {
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : "Could not apply receipt to bank account."
+      );
     }
-    setReceiptAmount("");
-    setSavedMsg(
-      `Recorded a ${money(amount)} receipt on ${row.receivableId} (credited property bank when matched).`
-    );
-    setTimeout(() => setSavedMsg(null), 4000);
   }
 
   const title = isRental ? "Rental income receivable" : "Miscellaneous receivable";
@@ -401,61 +466,11 @@ export function ReceivablesPanel({ kind }: Props) {
             {savedMsg}
           </div>
         ) : null}
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="form-control">
-            <span className="mb-1 text-sm opacity-70">Property</span>
-            <select
-              className="select select-bordered bg-white"
-              value={propertyFilter}
-              onChange={(e) => setPropertyFilter(e.target.value)}
-            >
-              <option value="all">All properties</option>
-              {knownProperties.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="form-control">
-            <span className="mb-1 text-sm opacity-70">Payment status</span>
-            <select
-              className="select select-bordered bg-white"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="all">All statuses</option>
-              <option value="open">Open (unpaid / partial)</option>
-              <option value="unpaid">Unpaid</option>
-              <option value="partially_paid">Partially paid</option>
-              <option value="paid">Paid</option>
-              <option value="disputed">Disputed</option>
-            </select>
-          </label>
-          <label className="form-control">
-            <span className="mb-1 text-sm opacity-70">Due status</span>
-            <select
-              className="select select-bordered bg-white"
-              value={dueFilter}
-              onChange={(e) => setDueFilter(e.target.value)}
-            >
-              <option value="all">Any due date</option>
-              <option value="open">Has balance</option>
-              <option value="overdue">Overdue</option>
-              <option value="current">Current (not overdue)</option>
-            </select>
-          </label>
-          <label className="form-control">
-            <span className="mb-1 text-sm opacity-70">Search</span>
-            <input
-              className="input input-bordered bg-white"
-              placeholder="Customer, unit, ID…"
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-            />
-          </label>
-        </div>
+        {formError && !showAddForm && !viewingId ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {formError}
+          </div>
+        ) : null}
 
         <section className={`${apCardClass} p-6`}>
           <div className="flex flex-wrap items-start justify-between gap-6">
@@ -473,14 +488,31 @@ export function ReceivablesPanel({ kind }: Props) {
                 collected
               </p>
             </div>
-            <button
-              type="button"
-              onClick={openAddForm}
-              className="btn gap-2 border-0 bg-[var(--harbor-ink)] text-[var(--harbor-sand)] hover:bg-[var(--harbor-deep)]"
-            >
-              <Plus className="h-4 w-4" />
-              Add {singular}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {isRental ? (
+                <button
+                  type="button"
+                  disabled={generatingFees}
+                  onClick={() => void handleGenerateManagementFees()}
+                  className="btn gap-2 border border-[var(--harbor-deep)]/20 bg-white text-[var(--harbor-ink)] hover:bg-[var(--harbor-sand)]/60"
+                >
+                  {generatingFees ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  Generate management fee (that will create the AR and AP)
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={openAddForm}
+                className="btn gap-2 border-0 bg-[var(--harbor-ink)] text-[var(--harbor-sand)] hover:bg-[var(--harbor-deep)]"
+              >
+                <Plus className="h-4 w-4" />
+                Add {singular}
+              </button>
+            </div>
           </div>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -513,22 +545,88 @@ export function ReceivablesPanel({ kind }: Props) {
           </div>
         ) : null}
 
-        <section className={`overflow-x-auto ${apCardClass}`}>
-          <table className="table">
+        <div className="space-y-3">
+          <div
+            className={`${apCardClass} grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4`}
+          >
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-xs font-medium text-[var(--harbor-ink)]/65">
+                Property
+              </span>
+              <select
+                className="select select-bordered w-full bg-white"
+                value={propertyFilter}
+                onChange={(e) => setPropertyFilter(e.target.value)}
+              >
+                <option value="all">All properties</option>
+                {knownProperties.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-xs font-medium text-[var(--harbor-ink)]/65">
+                Payment status
+              </span>
+              <select
+                className="select select-bordered w-full bg-white"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All statuses</option>
+                <option value="open">Open (unpaid / partial)</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="partially_paid">Partially paid</option>
+                <option value="paid">Paid</option>
+                <option value="disputed">Disputed</option>
+              </select>
+            </div>
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-xs font-medium text-[var(--harbor-ink)]/65">
+                Due status
+              </span>
+              <select
+                className="select select-bordered w-full bg-white"
+                value={dueFilter}
+                onChange={(e) => setDueFilter(e.target.value)}
+              >
+                <option value="all">Any due date</option>
+                <option value="open">Has balance</option>
+                <option value="overdue">Overdue</option>
+                <option value="current">Current (not overdue)</option>
+              </select>
+            </div>
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-xs font-medium text-[var(--harbor-ink)]/65">
+                Search
+              </span>
+              <input
+                className="input input-bordered w-full bg-white"
+                placeholder="Customer, unit, ID…"
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <section className={`overflow-x-auto ${apCardClass}`}>
+            <table className="table w-full table-fixed text-sm">
             <thead>
               <tr>
-                <th className="text-right">Billed</th>
-                <th className="text-right">Received</th>
-                <th className="text-right">Balance</th>
-                <th>Status</th>
-                <th>Due date</th>
-                <th>Receivable ID</th>
-                <th>Invoice</th>
-                <th>{isRental ? "Tenant" : "Customer"}</th>
-                <th>ID</th>
-                <th>Property / unit</th>
-                <th>Period</th>
-                <th>Category</th>
+                <th className="w-[7%] text-right">Billed</th>
+                <th className="w-[7%] text-right">Received</th>
+                <th className="w-[7%] text-right">Balance</th>
+                <th className="w-[8%]">Status</th>
+                <th className="w-[7%]">Due date</th>
+                <th className="w-[9%]">Receivable ID</th>
+                <th className="w-[6%]">Invoice</th>
+                <th className="w-[11%]">{isRental ? "Tenant" : "Customer"}</th>
+                <th className="w-[6%]">ID</th>
+                <th className="w-[14%]">Property / unit</th>
+                <th className="w-[8%]">Period</th>
+                <th className="w-[10%]">Category</th>
               </tr>
             </thead>
             <tbody>
@@ -579,9 +677,9 @@ export function ReceivablesPanel({ kind }: Props) {
                       <td className="whitespace-nowrap text-sm">
                         {row.dueDate || "—"}
                       </td>
-                      <td className="text-sm">
-                        <p className="font-medium">{row.receivableId}</p>
-                        <p className="text-xs opacity-55">
+                      <td className="min-w-0 text-sm">
+                        <p className="truncate font-medium">{row.receivableId}</p>
+                        <p className="truncate text-xs opacity-55">
                           Invoiced {row.invoiceDate || "—"}
                         </p>
                       </td>
@@ -599,9 +697,16 @@ export function ReceivablesPanel({ kind }: Props) {
                           View
                         </button>
                       </td>
-                      <td className="text-sm">{row.customerName}</td>
-                      <td className="text-sm opacity-70">{row.customerId}</td>
-                      <td className="text-sm">
+                      <td className="min-w-0 truncate text-sm" title={row.customerName}>
+                        {row.customerName}
+                      </td>
+                      <td className="min-w-0 truncate text-sm opacity-70" title={row.customerId}>
+                        {row.customerId}
+                      </td>
+                      <td
+                        className="min-w-0 truncate text-sm"
+                        title={`${row.property}${row.unit ? ` · ${row.unit}` : ""}`}
+                      >
                         {row.property}
                         {row.unit ? ` · ${row.unit}` : ""}
                       </td>
@@ -638,6 +743,7 @@ export function ReceivablesPanel({ kind }: Props) {
             ) : null}
           </table>
         </section>
+        </div>
       </div>
 
       {showAddForm ? (

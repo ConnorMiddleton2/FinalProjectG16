@@ -21,6 +21,10 @@ import {
   seedRentalReceivables,
 } from "@/lib/accounts-receivable";
 import {
+  seedPayableInvoices,
+  type PayableInvoice,
+} from "@/lib/accounts-payable";
+import {
   activeDepartmentsFromPack,
   budgetPackId,
   budgetTotalForYear,
@@ -133,6 +137,10 @@ function DepartmentBudgetsDashboardInner() {
   const { items: maintDocs } = useSharedCollection<MaintenanceDocument>(
     COLLECTIONS.maintenanceDocuments,
     seedDocuments
+  );
+  const { items: payableInvoices } = useSharedCollection<PayableInvoice>(
+    COLLECTIONS.payableInvoices,
+    seedPayableInvoices
   );
 
   const thisYear = new Date().getFullYear();
@@ -657,6 +665,7 @@ function DepartmentBudgetsDashboardInner() {
           smReceipts,
           deptExpenses,
           maintDocs,
+          payableInvoices,
         })
       );
     }
@@ -669,6 +678,7 @@ function DepartmentBudgetsDashboardInner() {
     smReceipts,
     deptExpenses,
     maintDocs,
+    payableInvoices,
   ]);
 
   const periodTotal = lines.reduce((s, l) => {

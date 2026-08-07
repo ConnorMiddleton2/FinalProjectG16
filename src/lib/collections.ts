@@ -22,11 +22,17 @@ export type NoticeDeliveryStatus =
   | "Failed — mailing address missing"
   | "Paused";
 
-export type NoticeKind = "weekly_rent_overdue" | "day90_escalation";
+export type NoticeKind =
+  | "weekly_rent_overdue"
+  | "day60_escalation"
+  | "day90_escalation";
+
+/** Days overdue before the account is handed to management automatically. */
+export const MANAGEMENT_REVIEW_DAYS = 60;
 
 export type CollectionsNotice = {
   id: string;
-  /** Weekly: tenantId|obligationId|weekIndex. Day-90: tenantId|obligationId|day90-escalation */
+  /** Weekly: tenantId|obligationId|weekIndex. Escalation: …|day60-escalation (legacy day90 kept). */
   uniqueKey: string;
   tenantId: string;
   tenantName: string;
@@ -95,7 +101,8 @@ export type ManagementAlertFollowUp =
 
 export type ManagementAlert = {
   id: string;
-  alertType: "eviction_review_90_day";
+  /** Legacy id kept for stored rows; new alerts use management_review_60_day. */
+  alertType: "management_review_60_day" | "eviction_review_90_day";
   tenantId: string;
   tenantName: string;
   property: string;
@@ -123,7 +130,10 @@ export type ManagementAlert = {
 };
 
 export const EVICTION_REVIEW_STATUS_LABEL =
-  "90+ days overdue — management and legal review required.";
+  "60+ days overdue — management review required.";
+
+/** @deprecated Use EVICTION_REVIEW_STATUS_LABEL (now 60-day handoff). */
+export const MANAGEMENT_REVIEW_STATUS_LABEL = EVICTION_REVIEW_STATUS_LABEL;
 
 export type CollectionsStage =
   | "current"
@@ -235,6 +245,13 @@ export function noticeUniqueKey(
   return `${normalizeCustomerId(tenantId)}|${obligationId}|${overdueWeekIndex}`;
 }
 
+export function day60EscalationUniqueKey(
+  tenantId: string,
+  obligationId: string
+): string {
+  return `${normalizeCustomerId(tenantId)}|${obligationId}|day60-escalation`;
+}
+
 export function day90EscalationUniqueKey(
   tenantId: string,
   obligationId: string
@@ -249,6 +266,14 @@ export function noticeRecordId(
 ): string {
   const safeObl = obligationId.replace(/[^a-zA-Z0-9_-]/g, "_");
   return `cn-${normalizeCustomerId(tenantId)}-${safeObl}-w${overdueWeekIndex}`;
+}
+
+export function day60EscalationRecordId(
+  tenantId: string,
+  obligationId: string
+): string {
+  const safeObl = obligationId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return `cn-${normalizeCustomerId(tenantId)}-${safeObl}-day60-escalation`;
 }
 
 export function day90EscalationRecordId(
@@ -303,8 +328,12 @@ function formatMoney(amount: number): string {
   });
 }
 
+export const GENERAL_60_DAY_ESCALATION_STATEMENT =
+  "Unresolved qualifying rent at 60 days overdue is automatically referred to CPMC management for review. This does not mean eviction is automatic.";
+
+/** @deprecated Prefer GENERAL_60_DAY_ESCALATION_STATEMENT */
 export const GENERAL_90_DAY_ESCALATION_STATEMENT =
-  "If the qualifying unpaid rent remains unresolved for 90 days after the due date, the account will be referred to Harborline management for management and legal review, which may include review of available lease-enforcement remedies.";
+  GENERAL_60_DAY_ESCALATION_STATEMENT;
 
 export function resolveChannelStatuses(contact: {
   email: string;
@@ -348,14 +377,21 @@ export function resolveChannelStatuses(contact: {
 }
 
 export function isWeeklyNotice(n: CollectionsNotice): boolean {
-  return n.noticeType !== "day90_escalation";
+  return !isEscalationNotice(n);
 }
 
-export function isDay90EscalationNotice(n: CollectionsNotice): boolean {
+export function isEscalationNotice(n: CollectionsNotice): boolean {
   return (
+    n.noticeType === "day60_escalation" ||
     n.noticeType === "day90_escalation" ||
+    n.uniqueKey.endsWith("|day60-escalation") ||
     n.uniqueKey.endsWith("|day90-escalation")
   );
+}
+
+/** @deprecated Prefer isEscalationNotice */
+export function isDay90EscalationNotice(n: CollectionsNotice): boolean {
+  return isEscalationNotice(n);
 }
 
 export function stageLabel(stage: CollectionsStage): string {
@@ -367,9 +403,9 @@ export function stageLabel(stage: CollectionsStage): string {
     case "days_30":
       return "30+ days overdue";
     case "days_60":
-      return "60+ days overdue";
+      return "60+ days overdue — management review";
     case "days_90_review":
-      return EVICTION_REVIEW_STATUS_LABEL;
+      return "90+ days overdue — continued management review";
     case "paused":
       return "Notices paused";
     case "payment_plan":
@@ -490,11 +526,15 @@ export function buildTenantCollectionsSnapshot(
   const oldestUnpaidDueDate = oldest ? oldest.receivable.dueDate : "";
   const completedOverdueWeeks = oldest ? oldest.completedOverdueWeeks : 0;
   const escalationDate = oldestUnpaidDueDate
-    ? overdueThresholdDate(oldestUnpaidDueDate, 90)
+    ? overdueThresholdDate(oldestUnpaidDueDate, MANAGEMENT_REVIEW_DAYS)
     : "";
 
   const notice12 = weeklyNotices.find(
-    (n) => n.noticeSequenceNumber === 12 || n.overdueWeekIndex === 12
+    (n) =>
+      n.noticeSequenceNumber === 8 ||
+      n.overdueWeekIndex === 8 ||
+      n.noticeSequenceNumber === 12 ||
+      n.overdueWeekIndex === 12
   );
   const notice12Date = notice12 ? notice12.generatedAt.slice(0, 10) : "";
   const day90EscalationNoticeDate = day90EscalationNotice
@@ -546,7 +586,7 @@ export function buildTenantCollectionsSnapshot(
     ) ?? null;
 
   const managementReviewRequired =
-    daysOverdue >= 90 ||
+    daysOverdue >= MANAGEMENT_REVIEW_DAYS ||
     !!openAlert ||
     !!day90EscalationNotice ||
     alerts.some(
@@ -560,7 +600,7 @@ export function buildTenantCollectionsSnapshot(
   else if (accountState?.accountDisputed) stage = "disputed";
   else if (accountState?.noticesPaused) stage = "paused";
   else if (daysOverdue >= 90) stage = "days_90_review";
-  else if (daysOverdue >= 60) stage = "days_60";
+  else if (daysOverdue >= MANAGEMENT_REVIEW_DAYS) stage = "days_60";
   else if (daysOverdue >= 30) stage = "days_30";
   else if (daysOverdue >= 1) stage = "overdue";
 
@@ -608,11 +648,15 @@ export function matchesCollectionsFilter(
     case "days_30":
       return snap.daysOverdue >= 30;
     case "days_60":
-      return snap.daysOverdue >= 60;
+      return snap.daysOverdue >= MANAGEMENT_REVIEW_DAYS;
     case "days_90":
       return snap.daysOverdue >= 90;
     case "review_required":
-      return snap.managementReviewRequired || snap.stage === "days_90_review";
+      return (
+        snap.managementReviewRequired ||
+        snap.daysOverdue >= MANAGEMENT_REVIEW_DAYS ||
+        snap.stage === "days_90_review"
+      );
     case "notices_due":
       return snap.noticesCurrentlyDue;
     case "paused":
@@ -651,12 +695,16 @@ export function buildNoticeDraft(input: {
     (createdBy === "system"
       ? new Date(`${noticeDueDay}T12:00:00`).toISOString()
       : now.toISOString());
-  const escalationDate = overdueThresholdDate(r.dueDate, 90);
+  const escalationDate = overdueThresholdDate(
+    r.dueDate,
+    MANAGEMENT_REVIEW_DAYS
+  );
   const nextNoticeDate = addCalendarDays(r.dueDate, (weekIndex + 1) * 7);
   const balance = formatMoney(openReceivableAmount(r));
   const property = tenant.propertyLeased || r.property || "";
   const unit = tenant.unit || r.unit || "";
-  const isFinalPreEscalation = weekIndex === 12;
+  /** Week 8 ≈ day 56 — final notice before 60-day management handoff. */
+  const isFinalPreEscalation = weekIndex === 8;
   const priorCount = input.priorWeeklyCount ?? Math.max(0, weekIndex - 1);
 
   const headerFacts = [
@@ -678,19 +726,19 @@ export function buildNoticeDraft(input: {
   let noticeBody: string;
 
   if (isFinalPreEscalation) {
-    subject = `Final pre-escalation notice — 6 days remaining before management review — ${tenant.name}`;
+    subject = `Final pre-escalation notice — management review in 4 days — ${tenant.name}`;
     noticeBody = [
-      "Final pre-escalation notice — 6 days remaining before management review",
+      "Final pre-escalation notice — 4 days remaining before management review",
       "",
-      `This is the twelfth weekly notice regarding the unresolved rent obligation identified below. If the qualifying unpaid balance remains unresolved on ${formatIsoDisplay(escalationDate)}, Harborline management will be notified and the account will enter management and legal review. This review may include consideration of available lease-enforcement remedies. This notice does not state that an eviction has already occurred or that eviction is automatic.`,
+      `This is the eighth weekly notice regarding the unresolved rent obligation identified below. If the qualifying unpaid balance remains unresolved on ${formatIsoDisplay(escalationDate)}, CPMC management will be notified and the account will enter management review. This notice does not state that an eviction has already occurred or that eviction is automatic.`,
       "",
       headerFacts,
-      `Exact 90-day escalation date: ${formatIsoDisplay(escalationDate)}`,
+      `Exact 60-day escalation date: ${formatIsoDisplay(escalationDate)}`,
       `Previous weekly notices generated: ${priorCount}`,
-      "Next required action: Pay the qualifying unpaid balance, submit a written dispute, or contact Harborline management immediately.",
+      "Next required action: Pay the qualifying unpaid balance, submit a written dispute, or contact CPMC management immediately.",
       "Instructions: Remit payment for the overdue rent, document any approved dispute, or contact management regarding a payment arrangement before the escalation date.",
-      "Warning: Unresolved qualifying rent at day 90 will be referred to Harborline management and legal review.",
-      GENERAL_90_DAY_ESCALATION_STATEMENT,
+      "Warning: Unresolved qualifying rent at day 60 will be referred to CPMC management.",
+      GENERAL_60_DAY_ESCALATION_STATEMENT,
       channels.contactWarning,
       "Simulated notice only — no email or postal delivery was performed.",
     ]
@@ -703,7 +751,7 @@ export function buildNoticeDraft(input: {
       "",
       headerFacts,
       "",
-      GENERAL_90_DAY_ESCALATION_STATEMENT,
+      GENERAL_60_DAY_ESCALATION_STATEMENT,
       "This notice does not state that eviction is automatic.",
       channels.contactWarning,
       "Simulated notice only — no email or postal delivery was performed.",
@@ -747,7 +795,7 @@ export function buildNoticeDraft(input: {
   };
 }
 
-export function buildDay90EscalationDraft(input: {
+export function buildDay60EscalationDraft(input: {
   tenant: TenantRecord;
   obligation: QualifyingObligation;
   weeklyNotices: CollectionsNotice[];
@@ -762,7 +810,10 @@ export function buildDay90EscalationDraft(input: {
   const tenantId = normalizeCustomerId(tenant.id);
   const contact = getTenantContact(tenant);
   const channels = resolveChannelStatuses(contact);
-  const escalationDate = overdueThresholdDate(r.dueDate, 90);
+  const escalationDate = overdueThresholdDate(
+    r.dueDate,
+    MANAGEMENT_REVIEW_DAYS
+  );
   const generatedAt = new Date(`${escalationDate}T12:00:00`).toISOString();
   const weekly = input.weeklyNotices
     .filter(
@@ -781,14 +832,14 @@ export function buildDay90EscalationDraft(input: {
   const balance = formatMoney(openReceivableAmount(r));
   const property = tenant.propertyLeased || r.property || "";
   const unit = tenant.unit || r.unit || "";
-  const days = Math.max(obligation.daysOverdue, 90);
+  const days = Math.max(obligation.daysOverdue, MANAGEMENT_REVIEW_DAYS);
   const reviewStatus = input.reviewStatus || "open";
 
-  const subject = `Day-90 management and legal review notification — ${tenant.name}`;
+  const subject = `Day-60 management review notification — ${tenant.name}`;
   const noticeBody = [
-    "Day-90 escalation communication",
+    "Day-60 escalation communication",
     "",
-    "The qualifying unpaid rent obligation identified below has reached 90 days overdue. Harborline management has been notified, and the account has entered management and legal review. Management will evaluate the account, lease terms, payment history, notices, disputes, payment-plan status, and any other relevant information before determining the appropriate next steps. This notice does not mean that an eviction has already occurred or that eviction is automatic.",
+    "The qualifying unpaid rent obligation identified below has reached 60 days overdue. CPMC management has been notified, and the account has been sent to the management portal for review. Management will evaluate the account, lease terms, payment history, notices, disputes, payment-plan status, and any other relevant information before determining the appropriate next steps. This notice does not mean that an eviction has already occurred or that eviction is automatic.",
     "",
     `Tenant: ${tenant.name}`,
     `Property: ${property}`,
@@ -803,7 +854,7 @@ export function buildDay90EscalationDraft(input: {
     `Current review status: ${reviewStatus}`,
     `Intended email address: ${contact.email || "Not on file"}`,
     `Intended mailing address: ${contact.mailingAddress || "Not on file"}`,
-    "How to contact management: Reply to Harborline management through the authorized operations channel regarding payment, dispute, or documentation. Do not treat this notice as a court filing or eviction order.",
+    "How to contact management: Reply to CPMC management through the authorized operations channel regarding payment, dispute, or documentation. Do not treat this notice as a court filing or eviction order.",
     channels.contactWarning,
     "Simulated notice only — no email or postal delivery was performed.",
   ]
@@ -811,8 +862,8 @@ export function buildDay90EscalationDraft(input: {
     .join("\n");
 
   return {
-    id: day90EscalationRecordId(tenantId, obligationId),
-    uniqueKey: day90EscalationUniqueKey(tenantId, obligationId),
+    id: day60EscalationRecordId(tenantId, obligationId),
+    uniqueKey: day60EscalationUniqueKey(tenantId, obligationId),
     tenantId,
     tenantName: tenant.name,
     property,
@@ -822,9 +873,9 @@ export function buildDay90EscalationDraft(input: {
     unpaidAmount: openReceivableAmount(r),
     originalDueDate: r.dueDate,
     daysOverdue: days,
-    noticeSequenceNumber: 90,
+    noticeSequenceNumber: MANAGEMENT_REVIEW_DAYS,
     overdueWeekIndex: 0,
-    noticeType: "day90_escalation",
+    noticeType: "day60_escalation",
     intendedEmail: contact.email,
     intendedMailingAddress: contact.mailingAddress,
     generatedAt,
@@ -843,8 +894,15 @@ export function buildDay90EscalationDraft(input: {
   };
 }
 
+/** @deprecated Prefer buildDay60EscalationDraft */
+export function buildDay90EscalationDraft(
+  input: Parameters<typeof buildDay60EscalationDraft>[0]
+): CollectionsNotice {
+  return buildDay60EscalationDraft(input);
+}
+
 /**
- * Idempotent catch-up: missing weekly notices + day-90 escalation communications.
+ * Idempotent catch-up: missing weekly notices + day-60 escalation communications.
  */
 export function planMissingNoticeCatchUp(input: {
   tenants: TenantRecord[];
@@ -913,13 +971,26 @@ export function planMissingNoticeCatchUp(input: {
       }
     }
 
-    if (obligation.daysOverdue >= 90) {
-      const d90Key = day90EscalationUniqueKey(
+    if (obligation.daysOverdue >= MANAGEMENT_REVIEW_DAYS) {
+      const d60Key = day60EscalationUniqueKey(
         obligation.tenantId,
         obligationId
       );
-      const d90Id = day90EscalationRecordId(obligation.tenantId, obligationId);
-      if (!existingKeys.has(d90Key) && !existingKeys.has(d90Id)) {
+      const d60Id = day60EscalationRecordId(obligation.tenantId, obligationId);
+      const legacy90Key = day90EscalationUniqueKey(
+        obligation.tenantId,
+        obligationId
+      );
+      const legacy90Id = day90EscalationRecordId(
+        obligation.tenantId,
+        obligationId
+      );
+      if (
+        !existingKeys.has(d60Key) &&
+        !existingKeys.has(d60Id) &&
+        !existingKeys.has(legacy90Key) &&
+        !existingKeys.has(legacy90Id)
+      ) {
         const allWeekly = [
           ...tenantWeeklyExisting,
           ...missing.filter(
@@ -929,7 +1000,7 @@ export function planMissingNoticeCatchUp(input: {
               isWeeklyNotice(n)
           ),
         ];
-        const draft = buildDay90EscalationDraft({
+        const draft = buildDay60EscalationDraft({
           tenant,
           obligation,
           weeklyNotices: allWeekly,
@@ -1076,15 +1147,20 @@ export function buildManagementAlertFromSnapshot(
   snap: TenantCollectionsSnapshot,
   now = new Date()
 ): ManagementAlert | null {
-  if (snap.daysOverdue < 90 || !snap.qualifyingObligations.length) return null;
+  if (
+    snap.daysOverdue < MANAGEMENT_REVIEW_DAYS ||
+    !snap.qualifyingObligations.length
+  ) {
+    return null;
+  }
   const oldest = snap.qualifyingObligations[0];
   const obligationId = obligationDisplayId(oldest.receivable);
   const managementNotifiedAt =
     snap.day90EscalationNoticeDate ||
-    overdueThresholdDate(oldest.receivable.dueDate, 90);
+    overdueThresholdDate(oldest.receivable.dueDate, MANAGEMENT_REVIEW_DAYS);
   return {
     id: managementAlertId(tenant.id, obligationId),
-    alertType: "eviction_review_90_day",
+    alertType: "management_review_60_day",
     tenantId: normalizeCustomerId(tenant.id),
     tenantName: tenant.name,
     property: tenant.propertyLeased || oldest.receivable.property || "",
@@ -1137,10 +1213,14 @@ export function portfolioCollectionsInsights(
     noticesDueThisWeek: snapshots.filter((s) => s.noticesCurrentlyDue).length,
     noticesGeneratedThisMonth: noticesThisMonth.length,
     tenants30: snapshots.filter((s) => s.daysOverdue >= 30).length,
-    tenants60: snapshots.filter((s) => s.daysOverdue >= 60).length,
+    tenants60: snapshots.filter(
+      (s) => s.daysOverdue >= MANAGEMENT_REVIEW_DAYS
+    ).length,
     tenants90: snapshots.filter((s) => s.daysOverdue >= 90).length,
     evictionReviewsRequired: snapshots.filter(
-      (s) => s.managementReviewRequired || s.daysOverdue >= 90
+      (s) =>
+        s.managementReviewRequired ||
+        s.daysOverdue >= MANAGEMENT_REVIEW_DAYS
     ).length,
     failedOrIncompleteNotices: failed.length,
   };

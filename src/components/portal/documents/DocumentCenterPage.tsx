@@ -28,6 +28,7 @@ import {
   type SortDirection,
   type TenantDocument,
 } from "@/lib/portal/documents-types";
+import { TENANT_PORTAL_LOGIN_PATH } from "@/lib/portal/auth";
 
 const SORT_OPTIONS: Array<{ value: DocumentSortKey; label: string }> = [
   { value: "dateAdded", label: "Date added" },
@@ -51,7 +52,6 @@ export function DocumentCenterPage() {
     successMessage,
     pendingAcknowledgments,
     reload,
-    loadDemoData,
     updateFilters,
     resetFilters,
     showSuccess,
@@ -120,23 +120,14 @@ export function DocumentCenterPage() {
                 {state.message}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn btn-neutral btn-sm gap-1"
-                onClick={reload}
-              >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                Try again
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={loadDemoData}
-              >
-                Preview demo tenant documents
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm gap-1"
+              onClick={reload}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Try again
+            </button>
           </div>
         </div>
       </div>
@@ -161,16 +152,9 @@ export function DocumentCenterPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/login" className="btn btn-neutral btn-sm">
+          <Link href={TENANT_PORTAL_LOGIN_PATH} className="btn btn-neutral btn-sm">
             Sign in
           </Link>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={loadDemoData}
-          >
-            Preview demo tenant documents
-          </button>
           <Link href="/portal/lease" className="btn btn-ghost btn-sm">
             Lease information
           </Link>
@@ -200,13 +184,6 @@ export function DocumentCenterPage() {
           <Link href="/portal/messages" className="btn btn-neutral btn-sm">
             Contact management
           </Link>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={loadDemoData}
-          >
-            Preview demo tenant documents
-          </button>
         </div>
       </div>
     );
@@ -215,7 +192,6 @@ export function DocumentCenterPage() {
   // success (or filtered empty handled below with filters UI)
   const viewerLabel =
     state.status === "success" ? state.viewerLabel : "Your account";
-  const source = state.status === "success" ? state.source : "mock";
   const totalAuthorized =
     state.status === "success" ? state.documents.length : 0;
 
@@ -225,8 +201,7 @@ export function DocumentCenterPage() {
         className="rounded-xl border border-success/20 bg-success/5 px-4 py-3 text-sm text-[var(--harbor-ink)]/80"
         role="status"
       >
-        Showing documents authorized for {viewerLabel}
-        {source === "mock" ? " (demo catalog)" : ""}. Other tenants’ files are
+        Showing documents authorized for {viewerLabel}. Other tenants’ files are
         never listed.
         {pendingAcknowledgments > 0
           ? ` ${pendingAcknowledgments} document${

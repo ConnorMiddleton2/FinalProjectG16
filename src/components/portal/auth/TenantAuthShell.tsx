@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Building2 } from "lucide-react";
 import { PORTAL_START_PATH } from "@/lib/portal/auth";
+import { BrandLogo } from "@/components/BrandLogo";
+import { COMPANY_SHORT } from "@/lib/brand";
 
 type Props = {
   children: React.ReactNode;
@@ -8,7 +9,7 @@ type Props = {
   subtitle: string;
 };
 
-/** Dedicated chrome for tenant portal login / signup / reset (not future-tenant apply). */
+/** Dedicated chrome for tenant portal login / signup / reset. */
 export function TenantAuthShell({ children, title, subtitle }: Props) {
   return (
     <div className="portal-page-bg min-h-screen overflow-x-hidden">
@@ -25,12 +26,10 @@ export function TenantAuthShell({ children, title, subtitle }: Props) {
             href={PORTAL_START_PATH}
             className="flex min-w-0 items-center gap-2.5 rounded-lg portal-focus focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--harbor-glow)]"
           >
-            <span className="rounded-xl bg-[var(--harbor-sand)]/15 p-2">
-              <Building2 className="h-5 w-5" aria-hidden="true" />
-            </span>
+            <BrandLogo size="sm" onDark />
             <span className="min-w-0">
               <span className="font-display block truncate text-lg leading-tight sm:text-xl">
-                Harborline
+                {COMPANY_SHORT}
               </span>
               <span className="block truncate text-[11px] text-[var(--harbor-sand)]/80 sm:text-xs">
                 Tenant portal

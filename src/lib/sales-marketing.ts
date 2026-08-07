@@ -36,7 +36,7 @@ export type SmTenantApplication = {
   name: string;
   email: string;
   notes: string;
-  status: "Submitted" | "In review";
+  status: "Submitted" | "In review" | "Completed";
   createdAt: string;
   /** Building / property of interest */
   building?: string;
@@ -48,6 +48,23 @@ export type SmTenantApplication = {
   unitId?: string;
   unitLabel?: string;
   proposedRent?: number;
+  /** Unit ids S&M offered in the latest availability send (1–5). */
+  availabilityOfferedUnitIds?: string[];
+  availabilityOfferedAt?: string;
+  /** When the applicant picked one offered unit. */
+  unitSelectedFromAvailabilityAt?: string;
+  /** After unit pick: applicant fills payment + agreement intake before signing. */
+  preLeaseFormStatus?: "pending" | "submitted";
+  preLeaseFormSubmittedAt?: string;
+  preLeaseFullName?: string;
+  preLeasePhone?: string;
+  preLeaseEmail?: string;
+  preLeaseEmergencyContact?: string;
+  preLeasePaymentMethod?: "ach" | "check" | "debit_card" | "monthly" | "card";
+  preLeaseAchLast4?: string;
+  preLeaseRentDueAck?: boolean;
+  preLeaseLateFeeAck?: boolean;
+  preLeaseAutoPayAck?: boolean;
   movedInAt?: string;
   smStatus?: SmApplicationStatus;
   communicated?: boolean;
@@ -61,6 +78,17 @@ export type SmTenantApplication = {
   leaseOfferedAt?: string;
   leaseSignedAt?: string;
   leaseSignedName?: string;
+  /** When S&M asks the applicant for another portal form. */
+  additionalFormsRequestedAt?: string;
+  documentsComplete?: boolean;
+  lookingFor?: string;
+  requiresGuarantor?: boolean;
+  guarantorName?: string;
+  guarantorPhone?: string;
+  employmentProof?: string;
+  idDocumentRef?: string;
+  dateOfBirth?: string;
+  phone?: string;
 };
 
 export type SmCode =
@@ -106,7 +134,7 @@ export type SmCalendarEvent = {
   end: string;
   notes: string;
   relatedApplicationId?: string;
-  source?: "harborline" | "google";
+  source?: "cpmc" | "google";
   googleEventId?: string;
   location?: string;
   /** Soft hold for offered tour options — show translucent on calendar */
@@ -259,7 +287,7 @@ export function emptyCalendarEvent(): Omit<SmCalendarEvent, "id"> {
     start: toLocalInput(start),
     end: toLocalInput(end),
     notes: "",
-    source: "harborline",
+    source: "cpmc",
     location: "",
   };
 }
@@ -313,7 +341,7 @@ export function seedCalendarEvents(): SmCalendarEvent[] {
   return [];
 }
 
-/** Demo Google Calendar pull — overlaps the seed Harborline tour on purpose. */
+/** Demo Google Calendar pull — overlaps the seed CPMC tour on purpose. */
 export function mockGoogleCalendarEvents(
   harborEvents: SmCalendarEvent[]
 ): SmCalendarEvent[] {
@@ -344,7 +372,7 @@ export function mockGoogleCalendarEvents(
       type: "other",
       start: toLocalInput(start),
       end: toLocalInput(end),
-      notes: "Imported from Google Calendar — conflicts with a Harborline event.",
+      notes: "Imported from Google Calendar — conflicts with a CPMC event.",
       source: "google",
       location: "Downtown Dental",
     },
@@ -357,7 +385,7 @@ export function mockGoogleCalendarEvents(
       end: toLocalInput(laterEnd),
       notes: "Imported from Google Calendar — no conflict.",
       source: "google",
-      location: "Harborline HQ",
+      location: "CPMC HQ",
     },
   ];
 }
@@ -443,7 +471,7 @@ export function buildTourPrompt(
   slots: { label: string }[]
 ) {
   const times = slots.map((s, i) => `${i + 1}) ${s.label}`).join("\n");
-  return `Hi ${applicantName}, we'd love for you to take a tour and see what you think. Does one of these appointment times work for you?\n\n${times}\n\nReply with the number that works best, or suggest another time. — Harborline Sales & Marketing`;
+  return `Hi ${applicantName}, we'd love for you to take a tour and see what you think. Does one of these appointment times work for you?\n\n${times}\n\nReply with the number that works best, or suggest another time. — CPMC Sales & Marketing`;
 }
 
 export function slotConflicts(

@@ -9,7 +9,6 @@ import type {
 } from "@/lib/portal/maintenance-types";
 import { MAINTENANCE_STATUSES } from "@/lib/portal/maintenance-types";
 import {
-  getMaintenanceRequestsDemoFixture,
   listMaintenanceRequests,
 } from "@/lib/portal/services/maintenanceService";
 
@@ -96,10 +95,6 @@ export function useMaintenanceRequests() {
     }
   }, [applyRequests]);
 
-  const loadDemoData = useCallback(() => {
-    applyRequests(getMaintenanceRequestsDemoFixture(), "mock");
-  }, [applyRequests]);
-
   useEffect(() => {
     void load();
   }, [load]);
@@ -169,7 +164,6 @@ export function useMaintenanceRequests() {
     grouped,
     counts,
     reload: load,
-    loadDemoData,
     updateFilters,
     resetFilters,
   };

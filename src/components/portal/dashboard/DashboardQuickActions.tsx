@@ -1,17 +1,11 @@
 import Link from "next/link";
-import {
-  FileDown,
-  MessagesSquare,
-  ScrollText,
-  TriangleAlert,
-  Wallet,
-} from "lucide-react";
+import { ScrollText, TriangleAlert, Wallet } from "lucide-react";
 
 const ACTIONS = [
   {
-    href: "/portal/payments/make",
-    label: "Pay Rent",
-    description: "Pay your next balance",
+    href: "/portal/payments",
+    label: "Payments",
+    description: "Amount due, late fees, and history",
     icon: Wallet,
   },
   {
@@ -25,18 +19,6 @@ const ACTIONS = [
     label: "View Lease",
     description: "Review terms and dates",
     icon: ScrollText,
-  },
-  {
-    href: "/portal/documents",
-    label: "Download Documents",
-    description: "Lease files and statements",
-    icon: FileDown,
-  },
-  {
-    href: "/portal/messages",
-    label: "Contact Management",
-    description: "Message the Harborline team",
-    icon: MessagesSquare,
   },
 ] as const;
 
@@ -52,7 +34,7 @@ export function DashboardQuickActions() {
       >
         Quick actions
       </h2>
-      <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+      <ul className="mt-4 grid gap-2">
         {ACTIONS.map((action) => {
           const Icon = action.icon;
           return (

@@ -28,7 +28,7 @@ export function getMockMoveOutContext(): MoveOutContext {
       {
         id: "c3",
         label: "Schedule final inspection",
-        detail: "Harborline confirms the inspection after acknowledging notice.",
+        detail: "CPMC confirms the inspection after acknowledging notice.",
       },
       {
         id: "c4",

@@ -56,7 +56,6 @@ export function MoveOutNoticePage() {
     goNextFromDetails,
     goBack,
     submitNotice,
-    advanceDemoStatus,
     startOver,
   } = useMoveOutNotice();
 
@@ -125,7 +124,7 @@ export function MoveOutNoticePage() {
           <p>
             <span className="font-medium">Important:</span> Submitting a
             move-out notice does <span className="font-semibold">not</span> mean
-            it is accepted. Harborline must acknowledge or approve the notice
+            it is accepted. CPMC must acknowledge or approve the notice
             before it is treated as approved.
           </p>
         </div>
@@ -186,7 +185,6 @@ export function MoveOutNoticePage() {
         <ConfirmationAndTracker
           context={context}
           notice={notice}
-          onAdvanceDemo={advanceDemoStatus}
           onStartOver={
             canStartNewMoveOutNotice(notice.status) ? startOver : undefined
           }
@@ -603,7 +601,7 @@ function DetailsStep({
           />
           <span className="text-sm text-[var(--harbor-ink)]/85">
             I understand that submitting this notice does not mean it is
-            accepted. Harborline must acknowledge or approve the notice before
+            accepted. CPMC must acknowledge or approve the notice before
             it is treated as approved, and final move-out steps still apply.
           </span>
         </label>
@@ -757,12 +755,10 @@ function ReviewStep({
 function ConfirmationAndTracker({
   context,
   notice,
-  onAdvanceDemo,
   onStartOver,
 }: {
   context: MoveOutContext;
   notice: MoveOutNoticeRecord;
-  onAdvanceDemo: () => void;
   onStartOver?: () => void;
 }) {
   const acknowledged = isMoveOutAcknowledgedOrLater(notice.status);
@@ -935,18 +931,6 @@ function ConfirmationAndTracker({
       </section>
 
       <div className="flex flex-wrap gap-2">
-        {notice.status === "Submitted" ||
-        notice.status === "Under Review" ||
-        notice.status === "Acknowledged" ||
-        notice.status === "Inspection Scheduled" ? (
-          <button
-            type="button"
-            className="btn btn-outline btn-sm min-h-11"
-            onClick={onAdvanceDemo}
-          >
-            Advance demo status
-          </button>
-        ) : null}
         {onStartOver ? (
           <button
             type="button"

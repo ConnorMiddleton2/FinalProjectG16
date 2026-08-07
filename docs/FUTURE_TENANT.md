@@ -1,6 +1,6 @@
 # Future Tenant Portal
 
-Leasing discovery and applicant workflows for Harborline prospects.
+Leasing discovery and applicant workflows for CPMC prospects.
 Connected to the Current Tenant Portal visually and via shared auth, but
 scoped under `/portal/future/*` so current-tenant routes stay unchanged.
 

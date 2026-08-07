@@ -4,23 +4,12 @@ import { FormEvent, useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
-import { portalDemoLogin } from "@/app/portal/demo-actions";
 import {
-  isFutureTenantApplyPath,
   isSafePortalNextPath,
   PORTAL_HOME_PATH,
   PORTAL_SIGNUP_PATH,
 } from "@/lib/portal/auth";
-import {
-  isPortalDemoCredentials,
-  PORTAL_DEMO_SESSION_STORAGE_KEY,
-  PORTAL_DEMO_TENANT,
-} from "@/lib/portal/portal-demo-auth";
 import { createClient } from "@/lib/supabase/client";
-import {
-  isTenantAuthDemoMode,
-  TENANT_AUTH_DEMO_SAMPLE,
-} from "@/lib/portal/tenant-auth-demo";
 import {
   mapAuthErrorMessage,
   normalizeEmail,
@@ -28,7 +17,7 @@ import {
   type FieldErrors,
 } from "@/lib/portal/tenant-auth-validation";
 
-const REMEMBER_EMAIL_KEY = "harborline.portal.rememberEmail.v1";
+const REMEMBER_EMAIL_KEY = "cpmc.portal.rememberEmail.v1";
 
 type Props = {
   onForgotPassword: () => void;
@@ -38,23 +27,16 @@ export function TenantLoginPanel({ onForgotPassword }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const formId = useId();
-  const demoMode = isTenantAuthDemoMode();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    try {
-      window.sessionStorage.removeItem(PORTAL_DEMO_SESSION_STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-
     let remembered = "";
     try {
       remembered = window.localStorage.getItem(REMEMBER_EMAIL_KEY) ?? "";
@@ -62,20 +44,15 @@ export function TenantLoginPanel({ onForgotPassword }: Props) {
       /* ignore */
     }
 
-    if (demoMode) {
-      setEmail(remembered || TENANT_AUTH_DEMO_SAMPLE.email);
-      setPassword(TENANT_AUTH_DEMO_SAMPLE.password);
-      setRememberMe(true);
-    } else if (remembered) {
+    if (remembered) {
       setEmail(remembered);
       setRememberMe(true);
     }
-  }, [demoMode]);
+  }, []);
 
   async function resolveDestination(): Promise<string> {
     const next = searchParams.get("next");
     if (next && isSafePortalNextPath(next)) return next;
-
     return PORTAL_HOME_PATH;
   }
 
@@ -101,51 +78,30 @@ export function TenantLoginPanel({ onForgotPassword }: Props) {
       /* ignore */
     }
 
-    if (isPortalDemoCredentials(email, password)) {
-      const isFuturePath = isFutureTenantApplyPath(portalDestination);
-      try {
-        window.sessionStorage.setItem(
-          PORTAL_DEMO_SESSION_STORAGE_KEY,
-          JSON.stringify({
-            ...PORTAL_DEMO_TENANT,
-            email: normalizeEmail(email),
-            displayName:
-              normalizeEmail(email) === TENANT_AUTH_DEMO_SAMPLE.email
-                ? `${TENANT_AUTH_DEMO_SAMPLE.firstName} ${TENANT_AUTH_DEMO_SAMPLE.lastName}`
-                : PORTAL_DEMO_TENANT.displayName,
-            lifecycle: isFuturePath ? "future" : "current",
-            tenantScopeId: isFuturePath
-              ? `future-${normalizeEmail(email)}`
-              : PORTAL_DEMO_TENANT.tenantScopeId,
-          })
-        );
-        if (isFuturePath) {
-          window.sessionStorage.setItem(
-            "harborline.portal.futureInviteSeed.v1",
-            JSON.stringify({
-              propertyLabel: "Harborline Demo Residences · Unit 204",
-              unit: TENANT_AUTH_DEMO_SAMPLE.unit,
-              invitationCode: TENANT_AUTH_DEMO_SAMPLE.invitationCode,
-            })
-          );
-        }
-      } catch {
-        /* private mode */
+    try {
+      const { tenantPortalLoginAction } = await import(
+        "@/app/portal/prospect-actions"
+      );
+      const portalLogin = await tenantPortalLoginAction(
+        {},
+        (() => {
+          const fd = new FormData();
+          fd.set("email", email);
+          fd.set("password", password);
+          return fd;
+        })()
+      );
+      if (!portalLogin?.error) {
+        router.push(portalDestination);
+        router.refresh();
+        return;
       }
-      try {
-        await portalDemoLogin(portalDestination);
-      } catch (err) {
-        const digest =
-          err && typeof err === "object" && "digest" in err
-            ? String((err as { digest?: string }).digest)
-            : "";
-        if (digest.startsWith("NEXT_REDIRECT")) return;
-        setLoading(false);
-        setError(
-          err instanceof Error ? err.message : "Demo tenant login failed."
-        );
-      }
-      return;
+    } catch (err) {
+      const digest =
+        err && typeof err === "object" && "digest" in err
+          ? String((err as { digest?: string }).digest)
+          : "";
+      if (digest.startsWith("NEXT_REDIRECT")) return;
     }
 
     try {
@@ -200,18 +156,8 @@ export function TenantLoginPanel({ onForgotPassword }: Props) {
         Tenant login
       </h2>
       <p className="mt-1 text-sm text-[var(--harbor-muted)]">
-        Sign in with the email Harborline has on file for your lease.
+        Sign in with the email from your application or lease.
       </p>
-
-      {demoMode ? (
-        <p
-          className="mt-3 rounded-xl border border-[var(--harbor-mid)]/25 bg-[var(--harbor-mist)]/60 px-3 py-2 text-xs text-[var(--harbor-ink)]/80"
-          role="note"
-        >
-          Demo mode sample credentials are prefilled for quick testing. They do
-          not create a production account.
-        </p>
-      ) : null}
 
       <div className="mt-5 space-y-4">
         <div className="form-control">
@@ -329,7 +275,10 @@ export function TenantLoginPanel({ onForgotPassword }: Props) {
 
       <p className="mt-4 text-center text-sm text-[var(--harbor-muted)]">
         Need an account?{" "}
-        <Link href={signupHref} className="link link-hover font-medium text-[var(--harbor-deep)]">
+        <Link
+          href={signupHref}
+          className="link link-hover font-medium text-[var(--harbor-deep)]"
+        >
           Create an account
         </Link>
       </p>

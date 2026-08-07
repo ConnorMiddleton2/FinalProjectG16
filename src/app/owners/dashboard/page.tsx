@@ -27,11 +27,19 @@ function statusLabel(status: string) {
   return status.replaceAll("_", " ");
 }
 
-export default async function OwnerDashboardPage() {
+export default async function OwnerDashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ agreement?: string; tempPassword?: string }>;
+}) {
   const owner = await getCurrentOwner();
   if (!owner) {
     redirect("/owners");
   }
+
+  const params = (await searchParams) ?? {};
+  const justSigned = params.agreement === "signed";
+  const tempPassword = params.tempPassword?.trim() || "";
 
   await ensureDemoOwnerProperty(owner);
   const properties = await getPropertiesForOwner(owner);
@@ -47,6 +55,9 @@ export default async function OwnerDashboardPage() {
     );
   const openApplications = myApplications.filter((a) =>
     ["pending", "needs_info", "awaiting_signature"].includes(a.status)
+  );
+  const completedApplications = myApplications.filter((a) =>
+    ["approved", "declined"].includes(a.status)
   );
 
   return (
@@ -72,7 +83,7 @@ export default async function OwnerDashboardPage() {
             Welcome, {owner.fullName}
           </h1>
           <p className="owner-muted mt-2 max-w-2xl text-sm leading-relaxed sm:text-base">
-            Track management applications and assets already under Harborline
+            Track management applications and assets already under CPMC
             contracts from this dashboard.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -96,6 +107,24 @@ export default async function OwnerDashboardPage() {
             </Link>
           </div>
         </div>
+
+        {justSigned ? (
+          <div className="owner-card border-emerald-200 bg-emerald-50/90 p-5 text-sm text-emerald-950">
+            <p className="font-semibold">
+              Agreement signed and returned to CPMC.
+            </p>
+            <p className="mt-1 opacity-85">
+              Your properties are on this dashboard. Remittances are Expected
+              Monthly Profit after operating expenses, management fee, and a
+              conservative residual — not gross rent.
+            </p>
+            {tempPassword ? (
+              <p className="mt-2 rounded-lg border border-emerald-300/60 bg-white/70 px-3 py-2 font-mono text-xs">
+                Temporary password: {tempPassword}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {owner.mustChangePassword ? (
           <div className="owner-card border-[color-mix(in_srgb,var(--harbor-glow)_55%,transparent)] bg-[color-mix(in_srgb,var(--harbor-glow)_16%,white)] p-5 welcome-rise">
@@ -168,45 +197,87 @@ export default async function OwnerDashboardPage() {
             <OwnerEmptyState
               icon={ClipboardList}
               title="No applications yet"
-              description="Submit a property for Harborline management. Pending applications appear here for you and for the management team."
+              description="Submit a property for CPMC management. Pending applications appear here for you and for the management team."
               actionHref="/owners/dashboard/apply"
               actionLabel="Submit application"
             />
           ) : (
-            <ul className="owner-stagger space-y-3">
-              {myApplications.map((app) => (
-                <li key={app.id}>
-                  <Link
-                    href={`/owners/status/${app.id}?email=${encodeURIComponent(owner.email)}`}
-                    className="owner-card owner-card-interactive group flex items-start justify-between gap-3 p-4"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-semibold text-[var(--harbor-ink)]">
-                        {app.companyName || app.fullName}
-                      </p>
-                      <p className="owner-muted mt-1 text-sm capitalize">
-                        {statusLabel(app.status)}
-                        {" · "}
-                        {app.properties.length} propert
-                        {app.properties.length === 1 ? "y" : "ies"}
-                        {app.contractId || app.contractSentAt
-                          ? " · Contract ready to review"
-                          : ""}
-                      </p>
-                      <p className="owner-muted mt-0.5 text-xs">
-                        Submitted{" "}
-                        {new Date(app.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </p>
-                    </div>
-                    <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-[var(--harbor-mid)] opacity-40 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-4">
+              {openApplications.length > 0 ? (
+                <ul className="owner-stagger space-y-3">
+                  {openApplications.map((app) => (
+                    <li key={app.id}>
+                      <Link
+                        href={`/owners/status/${app.id}?email=${encodeURIComponent(owner.email)}`}
+                        className="owner-card owner-card-interactive group flex items-start justify-between gap-3 p-4"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold text-[var(--harbor-ink)]">
+                            {app.companyName || app.fullName}
+                          </p>
+                          <p className="owner-muted mt-1 text-sm capitalize">
+                            {statusLabel(app.status)}
+                            {" · "}
+                            {app.properties.length} propert
+                            {app.properties.length === 1 ? "y" : "ies"}
+                            {app.status === "awaiting_signature"
+                              ? " · Contract ready to sign"
+                              : ""}
+                          </p>
+                          <p className="owner-muted mt-0.5 text-xs">
+                            Submitted{" "}
+                            {new Date(app.createdAt).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              }
+                            )}
+                          </p>
+                        </div>
+                        <ChevronRight className="mt-0.5 h-5 w-5 shrink-0 text-[var(--harbor-mid)] opacity-40 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="owner-muted text-sm">
+                  No open applications — signed agreements move to completed
+                  below and assets appear under management contracts.
+                </p>
+              )}
+
+              {completedApplications.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide opacity-55">
+                    Completed ({completedApplications.length})
+                  </p>
+                  <ul className="space-y-2">
+                    {completedApplications.map((app) => (
+                      <li key={app.id}>
+                        <Link
+                          href={`/owners/status/${app.id}?email=${encodeURIComponent(owner.email)}`}
+                          className="owner-card flex items-center justify-between gap-3 p-3 opacity-85"
+                        >
+                          <div>
+                            <p className="text-sm font-medium">
+                              {app.companyName || app.fullName}
+                            </p>
+                            <p className="owner-muted text-xs capitalize">
+                              {statusLabel(app.status)} ·{" "}
+                              {app.properties.length} asset
+                              {app.properties.length === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                          <ChevronRight className="h-4 w-4 opacity-40" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
           )}
         </section>
 
@@ -222,7 +293,7 @@ export default async function OwnerDashboardPage() {
             <OwnerEmptyState
               icon={Building2}
               title="No managed assets yet"
-              description="After management approves your application and the contract is signed, your properties appear here."
+              description="After you sign the management agreement, your properties appear here."
               actionHref="/owners/dashboard/apply"
               actionLabel="Submit application"
             />

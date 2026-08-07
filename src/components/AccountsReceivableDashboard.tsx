@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { OpsBrandHomeLink } from "@/components/OpsBrandHomeLink";
 import { useState } from "react";
 import { ArrowLeft, FilePlus2, Home, LogOut } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
-import { MonthlyMarginPanel } from "@/components/MonthlyMarginPanel";
+import { ArOverviewPanel } from "@/components/ArOverviewPanel";
+import { ArPendingChecksPanel } from "@/components/ArPendingChecksPanel";
 import { ReceivablesPanel } from "@/components/ReceivablesPanel";
 
 type ArTab = "rental" | "miscellaneous";
@@ -28,13 +30,10 @@ export function AccountsReceivableDashboard() {
   const [tab, setTab] = useState<ArTab>("rental");
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
+    <div className="min-h-screen bg-[var(--harbor-sand)]">
       <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Accounts receivable</p>
-          </div>
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <OpsBrandHomeLink subtitle="Accounts receivable" />
           <form action={teamLogout}>
             <button
               type="submit"
@@ -47,7 +46,7 @@ export function AccountsReceivableDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl space-y-6 px-6 py-10">
+      <main className="mx-auto max-w-[1600px] space-y-8 px-4 py-10 sm:px-6">
         <Link
           href="/ops"
           className="inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
@@ -56,18 +55,18 @@ export function AccountsReceivableDashboard() {
           Back to operations
         </Link>
 
+        <ArOverviewPanel />
+
+        <ArPendingChecksPanel />
+
         <div>
-          <h1 className="font-display text-4xl tracking-tight text-[var(--harbor-ink)]">
-            Accounts receivable
-          </h1>
-          <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/65">
-            Track rental income separately from miscellaneous tenant and
-            customer charges, record collections, and monitor overdue or
-            disputed balances.
+          <h2 className="text-lg font-semibold text-[var(--harbor-ink)]">
+            Receivable ledgers
+          </h2>
+          <p className="mt-1 text-sm text-[var(--harbor-ink)]/55">
+            Record charges, apply collections, and manage open invoices
           </p>
         </div>
-
-        <MonthlyMarginPanel />
 
         <div
           role="tablist"

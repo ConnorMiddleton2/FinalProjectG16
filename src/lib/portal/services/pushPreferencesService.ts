@@ -192,7 +192,7 @@ export async function sendTestPushNotification(): Promise<
     const sentAt = new Date().toISOString();
     const payload = {
       sentAt,
-      title: "Harborline test alert",
+      title: "CPMC test alert",
       body: "Push preferences are working. You will receive mobile-style alerts for enabled categories.",
     };
 

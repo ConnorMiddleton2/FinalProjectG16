@@ -20,6 +20,8 @@ export type MakePaymentContext = {
   allowCustomAmount: boolean;
   /** Soft max for custom amounts (typically current balance). */
   maxPayable: number;
+  /** True when the lease uses ACH autopay. */
+  achEnrolled: boolean;
   methods: SavedPaymentMethodSummary[];
 };
 

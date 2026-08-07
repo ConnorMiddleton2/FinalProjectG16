@@ -2,7 +2,7 @@ import { getMockConversations } from "@/lib/portal/messages-mock";
 import type { PortalConversation } from "@/lib/portal/messages-types";
 import { portalStorageKey } from "@/lib/portal/storage-key";
 
-const STORAGE_BASE = "harborline.portal.messages.v1";
+const STORAGE_BASE = "cpmc.portal.messages.v1";
 
 function canUseStorage() {
   return (

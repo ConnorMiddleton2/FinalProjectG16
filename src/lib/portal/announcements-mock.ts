@@ -54,13 +54,13 @@ export function getMockAnnouncements(): TenantAnnouncement[] {
     },
     {
       id: "ann-5",
-      title: "Harborline office closed for Memorial Day",
+      title: "CPMC office closed for Memorial Day",
       category: "Office closures",
       publishDate: "2026-04-25",
       expirationDate: "2026-05-27",
       priority: "High",
       message:
-        "The Harborline management office will be closed Monday, May 25 for Memorial Day. Emergency maintenance remains available through the portal and the after-hours line. Regular office hours resume Tuesday, May 26.",
+        "The CPMC management office will be closed Monday, May 25 for Memorial Day. Emergency maintenance remains available through the portal and the after-hours line. Regular office hours resume Tuesday, May 26.",
       attachment: null,
     },
     {
@@ -125,7 +125,7 @@ export function getMockAnnouncements(): TenantAnnouncement[] {
       expirationDate: null,
       priority: "Normal",
       message:
-        "Visitor parking remains Lot C after 5:00 p.m. and on weekends. Daytime visitors should use metered spaces on Harborline Pier. Towing is enforced for unmarked overnight stays in reserved garage stalls.",
+        "Visitor parking remains Lot C after 5:00 p.m. and on weekends. Daytime visitors should use metered spaces on CPMC Pier. Towing is enforced for unmarked overnight stays in reserved garage stalls.",
       attachment: null,
     },
     {

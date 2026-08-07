@@ -67,7 +67,7 @@ export const DEFAULT_PUSH_CATEGORIES: PushCategoryPreference[] = [
   {
     key: "messages",
     label: "Messages",
-    description: "New replies from Harborline management.",
+    description: "New replies from CPMC management.",
     enabled: true,
   },
   {

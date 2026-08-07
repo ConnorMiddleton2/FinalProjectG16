@@ -4,28 +4,19 @@ import {
   BarChart3,
   ClipboardCheck,
   Landmark,
-  ScrollText,
   Users,
   Wallet,
 } from "lucide-react";
 import { requireOpsModule } from "@/lib/team-auth";
 import { MgShell, tileClass } from "@/components/mgmt/MgShell";
-import { ManagementCollectionsPanel } from "@/components/ManagementCollectionsPanel";
 
 const categories = [
   {
-    title: "Owner accounts",
+    title: "Owner Accounts & Applications",
     href: "/ops/management/owners",
     icon: Users,
     blurb:
-      "Current owners — contact info, login email/password, linked assets, and password reset.",
-  },
-  {
-    title: "Owner applications & contracts",
-    href: "/ops/management/owner-applications",
-    icon: ScrollText,
-    blurb:
-      "Diligence, manager-signed contracts to the owner portal, and temp passwords.",
+      "Owner logins, linked assets, password resets, and diligence applications & contracts.",
   },
   {
     title: "Department budgets",
@@ -49,11 +40,11 @@ const categories = [
       "Business KPIs, property performance, and accountant financial statement packages.",
   },
   {
-    title: "Missed payments",
+    title: "Overdue tenants",
     href: "/ops/management/missed-payments",
     icon: AlertTriangle,
     blurb:
-      "Delinquency track records, foreclosure risk, and step-by-step escalation.",
+      "Delinquent tenants, open A/R balances, foreclosure risk, and escalation steps.",
   },
   {
     title: "Approve receipts & invoices",
@@ -70,7 +61,7 @@ export default async function ManagementHubPage() {
   return (
     <MgShell
       title="Management"
-      subtitle="Executive workspace for owners, CapEx, analytics, arrears, and spend approvals."
+      subtitle="Executive workspace for owners, CapEx, analytics, overdue tenants, and spend approvals."
     >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {categories.map(({ title, href, icon: Icon, blurb }) => (
@@ -88,10 +79,6 @@ export default async function ManagementHubPage() {
             </div>
           </Link>
         ))}
-      </div>
-
-      <div className="mt-8">
-        <ManagementCollectionsPanel />
       </div>
     </MgShell>
   );

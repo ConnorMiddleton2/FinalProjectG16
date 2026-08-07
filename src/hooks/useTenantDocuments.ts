@@ -67,7 +67,7 @@ export function useTenantDocuments() {
           status: "empty",
           filtered: false,
           message:
-            "No documents are available for your tenant account yet. Files Harborline shares with you will appear here.",
+            "No documents are available for your tenant account yet. Files CPMC shares with you will appear here.",
         });
         return;
       }
@@ -117,10 +117,6 @@ export function useTenantDocuments() {
       });
     }
   }, [applyAuthorized]);
-
-  const loadDemoData = useCallback(() => {
-    void load();
-  }, [load]);
 
   useEffect(() => {
     void load();
@@ -204,7 +200,6 @@ export function useTenantDocuments() {
     successMessage,
     pendingAcknowledgments,
     reload: () => void load(),
-    loadDemoData,
     updateFilters,
     resetFilters,
     showSuccess,

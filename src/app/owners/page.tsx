@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { ArrowLeft, Building2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
+import { COMPANY_NAME, COMPANY_SHORT } from "@/lib/brand";
 import { OwnerAlert } from "@/components/OwnerAlert";
 import { OwnerShell } from "@/components/OwnerShell";
 import {
@@ -40,14 +42,13 @@ export default function OwnerAuthPage() {
 
         <div className="owner-card welcome-rise-delay p-7 shadow-xl">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-[var(--harbor-ink)] p-2.5 text-[var(--harbor-sand)]">
-              <Building2 className="h-5 w-5" />
-            </div>
+            <BrandLogo size="md" />
             <div>
               <p className="font-display text-2xl leading-tight text-[var(--harbor-ink)]">
-                Harborline
+                {COMPANY_SHORT}
               </p>
-              <p className="owner-muted text-sm">Property owner portal</p>
+              <p className="owner-muted text-sm">{COMPANY_NAME}</p>
+              <p className="owner-muted mt-0.5 text-xs">Property owner portal</p>
             </div>
           </div>
 
@@ -90,7 +91,7 @@ export default function OwnerAuthPage() {
           <p className="owner-muted mt-2 text-sm leading-relaxed">
             {mode === "login"
               ? "Sign in with your email and password to open your owner dashboard."
-              : "Create an account with your email and password. After signup you can submit properties for Harborline management and track applications from your dashboard."}
+              : "Create an account with your email and password. After signup you can submit properties for CPMC management and track applications from your dashboard."}
           </p>
 
           {mode === "login" ? (
@@ -191,7 +192,7 @@ export default function OwnerAuthPage() {
           )}
 
           <p className="owner-muted mt-5 text-center text-xs leading-relaxed">
-            Already working with Harborline? Demo owners use password{" "}
+            Already working with CPMC? Demo owners use password{" "}
             <span className="font-medium text-[var(--harbor-ink)]">OwnerDemo1!</span>
           </p>
         </div>

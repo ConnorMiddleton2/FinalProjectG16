@@ -18,20 +18,10 @@ export async function portalDemoLogin(nextPath?: string) {
   redirect(destination);
 }
 
-/** Sets demo cookies without redirect — used to unlock private future routes. */
+/** Sets demo cookies without redirect. */
 export async function ensurePortalDemoCookies() {
   await setPortalDemoCookies();
   return { ok: true as const };
-}
-
-/** Demo cookie gate for Future Tenant Apply (applicant lifecycle set client-side). */
-export async function portalFutureDemoLogin(nextPath?: string) {
-  await setPortalDemoCookies();
-  const destination =
-    nextPath && isSafePortalNextPath(nextPath)
-      ? nextPath
-      : "/portal/future/apply";
-  redirect(destination);
 }
 
 export async function portalDemoLogout() {

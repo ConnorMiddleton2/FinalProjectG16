@@ -1,12 +1,6 @@
-import {
-  getEmptyTenantDashboard,
-  getMockTenantDashboard,
-} from "@/lib/portal/dashboard-mock";
+import { getEmptyTenantDashboard } from "@/lib/portal/dashboard-mock";
 import type { TenantDashboardData } from "@/lib/portal/models";
-import {
-  demoFixturesForSession,
-  sessionOwnsDemoFixtures,
-} from "@/lib/portal/tenant-scope";
+import { buildLiveDashboardFromSession } from "@/lib/portal/live-lease-from-session";
 import { requirePortalServiceSession } from "@/lib/portal/services/session";
 import {
   assertNotForcedError,
@@ -17,10 +11,7 @@ import {
 } from "@/lib/portal/services/shared";
 
 /**
- * Current-tenant dashboard aggregate service.
- *
- * BACKEND_TODO:
- *   GET /api/tenant/dashboard — scoped to auth.uid() lease membership
+ * Current-tenant dashboard — prefers Management AR / unit rent records.
  */
 
 export async function getDashboard(): Promise<
@@ -33,20 +24,19 @@ export async function getDashboard(): Promise<
   if (!auth.ok) return auth;
 
   try {
-    await simulateLatency(450);
+    await simulateLatency(200);
 
-    const live = await tryLoadLiveDashboard();
-    if (live === "empty") {
-      return ok(getEmptyTenantDashboard(), "live");
-    }
-    if (live) {
-      return ok(live, "live");
+    const fromMgmt = await fetchManagementDashboard();
+    if (fromMgmt) {
+      return ok(fromMgmt, "live");
     }
 
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok(getEmptyTenantDashboard(), "mock");
+    const fromAccount = buildLiveDashboardFromSession(auth.data);
+    if (fromAccount) {
+      return ok(fromAccount, "live");
     }
-    return ok(getMockTenantDashboard(), "mock");
+
+    return ok(getEmptyTenantDashboard(), "live");
   } catch (err) {
     return failFromUnknown(
       err,
@@ -57,20 +47,25 @@ export async function getDashboard(): Promise<
 }
 
 export function getDashboardDemoFixture(): TenantDashboardData {
-  return getMockTenantDashboard();
+  return getEmptyTenantDashboard();
 }
 
 export function getEmptyDashboardFixture(): TenantDashboardData {
   return getEmptyTenantDashboard();
 }
 
-async function tryLoadLiveDashboard(): Promise<
-  TenantDashboardData | "empty" | null
-> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key || url.includes("your-supabase") || key === "REPLACE_ME") {
+async function fetchManagementDashboard(): Promise<TenantDashboardData | null> {
+  try {
+    const res = await fetch("/api/portal/management-snapshot", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      dashboard?: TenantDashboardData | null;
+    };
+    return data.dashboard ?? null;
+  } catch {
     return null;
   }
-  return null;
 }

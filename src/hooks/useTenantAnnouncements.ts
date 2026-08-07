@@ -9,9 +9,7 @@ import {
   type TenantAnnouncement,
 } from "@/lib/portal/announcements-types";
 import { isAnnouncementRead } from "@/lib/portal/announcements-read-store";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import {
-  getAnnouncementsDemoFixture,
   listAnnouncements,
   markAllAnnouncementsAsRead,
   markAnnouncementAsRead,
@@ -63,7 +61,7 @@ export function useTenantAnnouncements() {
         setState({
           status: "empty",
           message:
-            "No announcements yet. Payment, maintenance, lease, and property updates from Harborline will appear here.",
+            "No announcements yet. Payment, maintenance, lease, and property updates from CPMC will appear here.",
         });
         return;
       }
@@ -96,16 +94,6 @@ export function useTenantAnnouncements() {
       });
     }
   }, [applyData]);
-
-  const loadDemoData = useCallback(async () => {
-    const session = await getPortalTenantSessionClient();
-    if (!session || !sessionOwnsDemoFixtures(session)) {
-      void load();
-      return;
-    }
-    tenantScopeRef.current = session.tenantScopeId;
-    applyData(getAnnouncementsDemoFixture(), "mock");
-  }, [applyData, load]);
 
   useEffect(() => {
     void load();
@@ -198,7 +186,6 @@ export function useTenantAnnouncements() {
     urgentUnread,
     actionMessage,
     reload: () => void load(),
-    loadDemoData: () => void loadDemoData(),
     markRead,
     markUnread,
     markAllRead,

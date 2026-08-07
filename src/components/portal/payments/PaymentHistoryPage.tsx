@@ -38,7 +38,6 @@ export function PaymentHistoryPage() {
     hasMore,
     successMessage,
     reload,
-    loadDemoData,
     updateFilters,
     resetFilters,
     loadMore,
@@ -58,7 +57,7 @@ export function PaymentHistoryPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `harborline-receipt-${record.confirmationNumber}.txt`;
+    a.download = `cpmc-receipt-${record.confirmationNumber}.txt`;
     a.click();
     URL.revokeObjectURL(url);
     showSuccess(`Receipt downloaded for ${record.confirmationNumber}.`);
@@ -99,23 +98,14 @@ export function PaymentHistoryPage() {
                 {state.message}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn btn-neutral btn-sm gap-1"
-                onClick={() => void reload()}
-              >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                Try again
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={loadDemoData}
-              >
-                Use demo data
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm gap-1"
+              onClick={() => void reload()}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Try again
+            </button>
           </div>
         </div>
       </div>
@@ -131,18 +121,9 @@ export function PaymentHistoryPage() {
         <p className="max-w-xl text-sm text-[var(--harbor-muted)]">
           {state.message}
         </p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="btn btn-neutral btn-sm"
-            onClick={loadDemoData}
-          >
-            Preview with demo data
-          </button>
-          <Link href="/portal/payments" className="btn btn-ghost btn-sm">
-            Back to payments
-          </Link>
-        </div>
+        <Link href="/portal/payments" className="btn btn-ghost btn-sm">
+          Back to payments
+        </Link>
       </div>
     );
   }
@@ -162,8 +143,7 @@ export function PaymentHistoryPage() {
           className="rounded-xl border border-success/20 bg-success/5 px-4 py-3 text-sm text-[var(--harbor-ink)]/80"
           role="status"
         >
-          Payment history loaded. Display-only demo records with masked payment
-          methods.
+          Payment history loaded.
         </div>
       )}
 

@@ -1,14 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { AlertCircle, LoaderCircle, RefreshCw } from "lucide-react";
 import { DashboardQuickActions } from "@/components/portal/dashboard/DashboardQuickActions";
+import { DashboardManagementContact } from "@/components/portal/dashboard/DashboardManagementContact";
 import { DashboardSections } from "@/components/portal/dashboard/DashboardSections";
 import { DashboardSummaryCards } from "@/components/portal/dashboard/DashboardSummaryCards";
 import { useTenantDashboard } from "@/hooks/useTenantDashboard";
 
 export function CurrentTenantDashboard() {
-  const { state, reload, loadDemoData } = useTenantDashboard();
+  const { state, reload } = useTenantDashboard();
 
   if (state.status === "loading") {
     return (
@@ -45,23 +45,14 @@ export function CurrentTenantDashboard() {
                 {state.message}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn btn-neutral btn-sm gap-1"
-                onClick={() => void reload()}
-              >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                Try again
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={loadDemoData}
-              >
-                Use demo data
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm gap-1"
+              onClick={() => void reload()}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Try again
+            </button>
           </div>
         </div>
       </div>
@@ -72,54 +63,55 @@ export function CurrentTenantDashboard() {
     return (
       <div className="space-y-4 rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/70 p-6 sm:p-8">
         <h2 className="text-lg font-semibold text-[var(--harbor-ink)]">
-          Nothing on your dashboard yet
+          Lease approved — finishing your tenant home
         </h2>
         <p className="max-w-xl text-sm text-[var(--harbor-ink)]/65">
-          {state.message}
+          {state.message} If Sales &amp; Marketing just approved you, refresh
+          once — your building and unit should appear on this current-tenant
+          dashboard (the applicant checklist is no longer shown after move-in).
         </p>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/portal/apply" className="btn btn-neutral btn-sm">
-            Apply for a property
-          </Link>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={loadDemoData}
-          >
-            Preview with demo data
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm gap-1"
-            onClick={() => void reload()}
-          >
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            Refresh
-          </button>
-        </div>
+        <button
+          type="button"
+          className="btn btn-neutral btn-sm gap-1"
+          onClick={() => void reload()}
+        >
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          Refresh dashboard
+        </button>
       </div>
     );
   }
 
-  const { data, source } = state;
+  const { data } = state;
+  const propertyLabel = data.lease
+    ? [data.lease.propertyName, data.lease.unit].filter(Boolean).join(" · ")
+    : null;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-[var(--harbor-ink)]/65">
-          Welcome back,{" "}
-          <span className="font-medium text-[var(--harbor-ink)]">
-            {data.tenantName}
-          </span>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--harbor-mid)]">
+          Current tenant
         </p>
-        <p
-          className="rounded-full bg-[var(--harbor-mist)]/80 px-3 py-1 text-xs text-[var(--harbor-ink)]/70"
-          role="status"
-        >
-          {source === "mock"
-            ? "Showing demo data"
-            : "Showing live account data"}
-        </p>
+        <h1 className="font-display text-3xl tracking-tight text-[var(--harbor-ink)] sm:text-4xl">
+          Welcome back, {data.tenantName}
+        </h1>
+        {propertyLabel ? (
+          <p className="text-base text-[var(--harbor-ink)]/80">
+            You are a tenant at{" "}
+            <span className="font-semibold text-[var(--harbor-ink)]">
+              {propertyLabel}
+            </span>
+            {data.lease?.monthlyRent && data.lease.monthlyRent !== "—"
+              ? ` · ${data.lease.monthlyRent}/mo`
+              : ""}
+            .
+          </p>
+        ) : (
+          <p className="text-sm text-[var(--harbor-ink)]/65">
+            Your lease assignment will appear here once linked.
+          </p>
+        )}
       </div>
 
       <div
@@ -127,10 +119,9 @@ export function CurrentTenantDashboard() {
         role="status"
         aria-live="polite"
       >
-        Dashboard loaded successfully.
-        {source === "mock"
-          ? " Live lease data is unavailable, so isolated mock data is shown."
-          : null}
+        {propertyLabel
+          ? `Lease active at ${propertyLabel}. Use payments, maintenance, and lease from the portal menu.`
+          : "Dashboard loaded successfully."}
       </div>
 
       <DashboardSummaryCards summary={data.summary} />
@@ -139,6 +130,8 @@ export function CurrentTenantDashboard() {
         <DashboardSections data={data} />
         <DashboardQuickActions />
       </div>
+
+      <DashboardManagementContact />
     </div>
   );
 }

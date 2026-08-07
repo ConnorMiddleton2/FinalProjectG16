@@ -39,7 +39,7 @@ function showLocalNotification(title: string, body: string) {
   if (!("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
   try {
-    new Notification(title, { body, tag: "harborline-test-push" });
+    new Notification(title, { body, tag: "cpmc-test-push" });
   } catch {
     /* ignore — insecure context / blocked */
   }

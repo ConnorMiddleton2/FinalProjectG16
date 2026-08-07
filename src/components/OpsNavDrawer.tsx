@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Landmark, LogOut, PanelLeftOpen, X } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
+import { BrandLogo } from "@/components/BrandLogo";
 import type { HrOpsModule } from "@/lib/hr";
 import {
   filterOpsWindows,
@@ -59,14 +60,23 @@ export function OpsNavDrawer({
   const panel = (
     <nav
       aria-label="Team member windows"
-      className={`relative flex h-full w-72 max-w-[85vw] flex-col bg-[var(--harbor-ink)] text-[var(--harbor-sand)] shadow-2xl ${
-        onHome && open ? "border-r border-[var(--harbor-sand)]/15" : ""
+      className={`relative flex h-full w-72 max-w-[85vw] flex-col bg-[var(--harbor-ink)] text-[var(--harbor-on-dark)] shadow-2xl ${
+        onHome && open ? "border-r border-white/15" : ""
       }`}
     >
-      <div className="flex items-start justify-between gap-3 border-b border-[var(--harbor-sand)]/15 px-4 py-3">
-        <div>
-          <p className="font-display text-xl leading-tight">Harborline</p>
-          <p className="text-[10px] opacity-70">
+      <div className="flex items-start justify-between gap-3 border-b border-[var(--harbor-sand)]/15 px-3 py-3">
+        <div className="min-w-0">
+          <Link
+            href="/ops"
+            className="inline-block rounded-lg transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--harbor-glow)]"
+            aria-label="CPMC operations home"
+            onClick={() => {
+              if (!onHome) setOpen(false);
+            }}
+          >
+            <BrandLogo size="xl" onDark className="!px-3 !py-2" />
+          </Link>
+          <p className="mt-2 text-[10px] opacity-70">
             Team member windows
             {current ? ` · ${current.label}` : ""}
           </p>
@@ -93,8 +103,8 @@ export function OpsNavDrawer({
                 aria-current={active ? "page" : undefined}
                 className={`flex items-start gap-2 rounded-lg px-2.5 py-1.5 transition ${
                   active
-                    ? "bg-[var(--harbor-sand)] text-[var(--harbor-ink)]"
-                    : "hover:bg-[var(--harbor-sand)]/10"
+                    ? "bg-[var(--harbor-mid)] text-[var(--harbor-on-dark)]"
+                    : "hover:bg-white/10"
                 }`}
               >
                 <Icon className="mt-0.5 h-4 w-4 shrink-0 opacity-80" />
@@ -116,11 +126,11 @@ export function OpsNavDrawer({
         })}
       </ul>
 
-      <div className="space-y-1 border-t border-[var(--harbor-sand)]/15 px-4 py-2.5">
+      <div className="space-y-1 border-t border-white/15 py-2.5 pl-16 pr-4">
         {allowedModules === null || allowedModules.includes("banks") ? (
           <Link
             href="/ops/banks"
-            className="btn btn-xs btn-ghost h-8 w-full justify-start gap-2 text-[var(--harbor-sand)]"
+            className="btn btn-xs btn-ghost h-8 w-full justify-start gap-2 text-[var(--harbor-on-dark)]"
           >
             <Landmark className="h-3.5 w-3.5" />
             Banks
@@ -129,7 +139,7 @@ export function OpsNavDrawer({
         <form action={teamLogout}>
           <button
             type="submit"
-            className="btn btn-xs btn-ghost h-8 w-full justify-start gap-2 text-[var(--harbor-sand)]"
+            className="btn btn-xs btn-ghost h-8 w-full justify-start gap-2 text-[var(--harbor-on-dark)]"
           >
             <LogOut className="h-3.5 w-3.5" />
             Sign out

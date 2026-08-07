@@ -7,7 +7,6 @@ import type {
 } from "@/lib/portal/dashboard-types";
 import {
   getDashboard,
-  getDashboardDemoFixture,
   getEmptyDashboardFixture,
 } from "@/lib/portal/services/dashboardService";
 
@@ -64,13 +63,9 @@ export function useTenantDashboard() {
     }
   }, [applyData]);
 
-  const loadDemoData = useCallback(() => {
-    applyData(getDashboardDemoFixture(), "mock");
-  }, [applyData]);
-
   useEffect(() => {
     void load();
   }, [load]);
 
-  return { state, reload: load, loadDemoData };
+  return { state, reload: load };
 }

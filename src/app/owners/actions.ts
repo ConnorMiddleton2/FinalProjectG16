@@ -111,5 +111,9 @@ export async function ownerApply(
 
 export async function ownerLogout() {
   await clearOwnerSession();
+  const { clearTenantPortalSession } = await import(
+    "@/lib/tenant-portal-accounts"
+  );
+  await clearTenantPortalSession();
   redirect("/");
 }

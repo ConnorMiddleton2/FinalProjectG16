@@ -1,8 +1,4 @@
 import {
-  getMockRenewalContext,
-  getMockSubmittedRenewalRequest,
-} from "@/lib/portal/renewal-mock";
-import {
   clearStoredRenewalRequest,
   loadStoredRenewalRequest,
   saveStoredRenewalRequest,
@@ -13,7 +9,6 @@ import type {
   RenewalRequest,
   RenewalStatus,
 } from "@/lib/portal/models";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import { requirePortalServiceSession } from "@/lib/portal/services/session";
 import {
   assertNotForcedError,
@@ -50,27 +45,12 @@ export async function getRenewalBundle(): Promise<ServiceResult<RenewalBundle>> 
   try {
     await simulateLatency(DEFAULT_LOAD_DELAY_MS);
     // BACKEND_TODO: live eligibility + existing request for session lease
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok(
-        {
-          context: {
-            ...getMockRenewalContext(),
-            eligibility: {
-              eligible: false,
-              reason: "No lease is linked to this tenant account yet.",
-            },
-          },
-          request: null,
-        },
-        "mock"
-      );
-    }
     return ok(
       {
-        context: getMockRenewalContext(),
+        context: emptyRenewalContext(),
         request: loadStoredRenewalRequest(auth.data.tenantScopeId),
       },
-      "mock"
+      "live"
     );
   } catch (err) {
     return failFromUnknown(
@@ -188,9 +168,26 @@ export async function clearRenewalRequest(): Promise<
 }
 
 export function getRenewalContextDemoFixture(): RenewalContext {
-  return getMockRenewalContext();
+  return emptyRenewalContext();
 }
 
-export function getSubmittedRenewalDemoFixture(): RenewalRequest {
-  return getMockSubmittedRenewalRequest();
+export function getSubmittedRenewalDemoFixture(): RenewalRequest | null {
+  return null;
+}
+
+function emptyRenewalContext(): RenewalContext {
+  return {
+    leaseNumber: "—",
+    propertyName: "—",
+    unitNumber: "—",
+    currentMonthlyRent: "—",
+    leaseEndDate: "",
+    renewalDeadline: "",
+    eligibility: {
+      eligible: false,
+      reason: "No lease is linked to this tenant account yet.",
+    },
+    availableTerms: [],
+    conditions: [],
+  };
 }

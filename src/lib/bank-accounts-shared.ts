@@ -3,6 +3,8 @@
  * Server ledger logic lives in `bank-accounts.ts` (do not import that from client components).
  */
 
+import { periodsMatch } from "@/lib/seed-dates";
+
 export const CORPORATE_BANK_ID = "bank-corporate";
 export const CONSERVATIVE_MARGIN_RATE = 0.05; // 5% of monthly rent roll held back
 
@@ -85,4 +87,72 @@ export function seedBankTransactions(): BankTransaction[] {
 
 export function seedOwnerCashCalls(): OwnerCashCall[] {
   return [];
+}
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+/** Cash free to remit after reserved / earmarked balances. */
+export function bankCashAvailable(
+  account: Pick<BankAccount, "balance" | "reservedBalance">
+) {
+  return Math.max(
+    0,
+    round2(
+      (Number(account.balance) || 0) - (Number(account.reservedBalance) || 0)
+    )
+  );
+}
+
+/** Sum bank ledger activity for a property (by propertyId or name) and period. */
+export function sumBankTxnAmount(
+  txns: Pick<
+    BankTransaction,
+    | "propertyId"
+    | "propertyName"
+    | "period"
+    | "kind"
+    | "direction"
+    | "amount"
+    | "accountId"
+  >[],
+  input: {
+    propertyId?: string;
+    propertyName?: string;
+    accountId?: string;
+    period?: string;
+    kinds?: BankTxnKind[];
+    direction?: "credit" | "debit";
+  }
+) {
+  const nameKey = (input.propertyName || "").trim().toLowerCase();
+  const kinds = input.kinds ? new Set(input.kinds) : null;
+  return round2(
+    txns
+      .filter((t) => {
+        if (input.accountId && t.accountId !== input.accountId) return false;
+        if (input.propertyId) {
+          if (t.propertyId && t.propertyId !== input.propertyId) return false;
+          if (
+            !t.propertyId &&
+            nameKey &&
+            (t.propertyName || "").trim().toLowerCase() !== nameKey
+          ) {
+            return false;
+          }
+        } else if (nameKey) {
+          if ((t.propertyName || "").trim().toLowerCase() !== nameKey) {
+            return false;
+          }
+        }
+        if (input.period && !periodsMatch(t.period || "", input.period)) {
+          return false;
+        }
+        if (kinds && !kinds.has(t.kind)) return false;
+        if (input.direction && t.direction !== input.direction) return false;
+        return true;
+      })
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
+  );
 }

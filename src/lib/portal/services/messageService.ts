@@ -1,4 +1,3 @@
-import { getMockConversations } from "@/lib/portal/messages-mock";
 import { truncatePreview } from "@/lib/portal/messages-format";
 import {
   getInitialConversations,
@@ -10,7 +9,6 @@ import type {
   MessageAttachment,
   MessageCategory,
 } from "@/lib/portal/models";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import { requirePortalServiceSession } from "@/lib/portal/services/session";
 import {
   assertNotForcedError,
@@ -49,13 +47,7 @@ export async function listConversations(): Promise<
   try {
     await simulateLatency(450);
     // BACKEND_TODO: live inbox where session user is a participant
-    return ok(
-      getInitialConversations(
-        auth.data.tenantScopeId,
-        sessionOwnsDemoFixtures(auth.data)
-      ),
-      "mock"
-    );
+    return ok(getInitialConversations(auth.data.tenantScopeId, false), "live");
   } catch (err) {
     return failFromUnknown(err, "Could not load your messages.", "network");
   }
@@ -100,7 +92,7 @@ export async function startConversation(input: {
 
     if (shouldFail) {
       // Persist the failed outbound so the UI can offer retry.
-      const existing = getInitialConversations(auth.data.tenantScopeId, sessionOwnsDemoFixtures(auth.data));
+      const existing = getInitialConversations(auth.data.tenantScopeId, false);
       saveStoredConversations([conversation, ...existing], auth.data.tenantScopeId);
       return fail(
         "Message could not be delivered. You can retry from the conversation.",
@@ -108,7 +100,7 @@ export async function startConversation(input: {
       );
     }
 
-    const existing = getInitialConversations(auth.data.tenantScopeId, sessionOwnsDemoFixtures(auth.data));
+    const existing = getInitialConversations(auth.data.tenantScopeId, false);
     saveStoredConversations([conversation, ...existing], auth.data.tenantScopeId);
     return ok(conversation, "mock");
   } catch (err) {
@@ -191,11 +183,11 @@ export function persistConversations(
 }
 
 export function getConversationsDemoFixture(): Conversation[] {
-  return getMockConversations();
+  return [];
 }
 
 export function emptyMessagesMessage(): string {
-  return "No messages yet. Start a conversation with Harborline management below.";
+  return "No messages yet. Start a conversation with CPMC management below.";
 }
 
 /** Re-export delay constant for hooks that still orchestrate send UX. */

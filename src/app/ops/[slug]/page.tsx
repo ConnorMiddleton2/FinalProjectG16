@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { OpsBrandHomeLink } from "@/components/OpsBrandHomeLink";
 import { notFound } from "next/navigation";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
@@ -21,13 +22,10 @@ export default async function OpsDashboardPage({ params }: Props) {
   await requireOpsModule(dash.module);
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
+    <div className="min-h-screen bg-[var(--harbor-sand)]">
       <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Background management</p>
-          </div>
+          <OpsBrandHomeLink subtitle="Background management" />
           <form action={teamLogout}>
             <button
               type="submit"

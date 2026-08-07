@@ -1,23 +1,21 @@
 import Link from "next/link";
+import { Download, History, Wallet } from "lucide-react";
 import {
-  CreditCard,
-  Download,
-  History,
-  PlusCircle,
-  RefreshCw,
-  Wallet,
-} from "lucide-react";
+  COMPANY_MANAGEMENT_EMAIL,
+  COMPANY_MANAGEMENT_PHONE,
+  COMPANY_SHORT,
+} from "@/lib/brand";
 
 type Props = {
-  onManageAutopay: () => void;
-  onAddPaymentMethod: () => void;
+  achEnrolled: boolean;
+  amountDue: string;
   onDownloadLatestReceipt: () => void;
   canDownloadReceipt: boolean;
 };
 
 export function PaymentsActions({
-  onManageAutopay,
-  onAddPaymentMethod,
+  achEnrolled,
+  amountDue,
   onDownloadLatestReceipt,
   canDownloadReceipt,
 }: Props) {
@@ -30,38 +28,37 @@ export function PaymentsActions({
         id="payments-actions-heading"
         className="text-lg font-semibold text-[var(--harbor-ink)]"
       >
-        Actions
+        How to pay
       </h2>
-      <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-        <li>
+
+      {achEnrolled ? (
+        <p className="mt-3 text-sm text-[var(--harbor-ink)]/75">
+          ACH is enrolled on this lease. Rent is drafted automatically — no
+          manual portal payment is required.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3 text-sm text-[var(--harbor-ink)]/75">
+          <p>
+            You are not on ACH. Pay with a debit card in the portal, or write a
+            check and give it to {COMPANY_SHORT} management.
+          </p>
           <Link
             href="/portal/payments/make"
-            className="btn btn-neutral btn-lg w-full justify-start gap-2 min-h-12"
+            className="btn btn-neutral w-full justify-start gap-2 min-h-12"
           >
             <Wallet className="h-4 w-4" aria-hidden="true" />
-            Pay rent / balance
+            Pay {amountDue} with debit
           </Link>
-        </li>
-        <li>
-          <button
-            type="button"
-            className="btn btn-outline w-full justify-start gap-2 border-[var(--harbor-deep)]/20"
-            onClick={onManageAutopay}
-          >
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            Manage Autopay
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className="btn btn-outline w-full justify-start gap-2 border-[var(--harbor-deep)]/20"
-            onClick={onAddPaymentMethod}
-          >
-            <PlusCircle className="h-4 w-4" aria-hidden="true" />
-            Add Payment Method
-          </button>
-        </li>
+          <p className="rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/40 px-3 py-3 text-xs leading-relaxed">
+            <strong className="text-[var(--harbor-ink)]">Check option:</strong>{" "}
+            Make the check payable to {COMPANY_SHORT} and deliver it to
+            management. Contact {COMPANY_MANAGEMENT_EMAIL} or{" "}
+            {COMPANY_MANAGEMENT_PHONE} to arrange drop-off.
+          </p>
+        </div>
+      )}
+
+      <ul className="mt-4 grid gap-2 border-t border-[var(--harbor-deep)]/10 pt-4">
         <li>
           <button
             type="button"
@@ -70,7 +67,7 @@ export function PaymentsActions({
             disabled={!canDownloadReceipt}
           >
             <Download className="h-4 w-4" aria-hidden="true" />
-            Download Receipt
+            Download latest receipt
           </button>
         </li>
         <li>
@@ -79,16 +76,8 @@ export function PaymentsActions({
             className="btn btn-ghost w-full justify-start gap-2"
           >
             <History className="h-4 w-4" aria-hidden="true" />
-            View Full Payment History
+            Full payment history
           </Link>
-        </li>
-        <li className="pt-1">
-          <p className="flex items-start gap-2 px-1 text-xs text-[var(--harbor-ink)]/55">
-            <CreditCard className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            Payments are display-only. This project has no live payment
-            provider, and complete card or bank details are never stored in the
-            browser.
-          </p>
         </li>
       </ul>
     </section>

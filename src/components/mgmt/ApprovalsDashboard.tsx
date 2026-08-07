@@ -243,7 +243,7 @@ export function ApprovalsDashboard() {
     if (status === "approved") {
       await forwardToAccountsPayable(row);
       setMsg(
-        "Approved — queued for payment and added to Operating expenses in Accounts Payable."
+        "Approved — added to Operating expenses in Accounts Payable."
       );
     } else {
       setMsg("Declined.");
@@ -434,10 +434,8 @@ export function ApprovalsDashboard() {
 
               {alreadyQueued ? (
                 <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-                  Already queued in Accounts Payable
-                  {invoiceOnFile
-                    ? " (payment queue + operating expenses)."
-                    : "."}
+                  Already in Accounts Payable
+                  {invoiceOnFile ? " (Operating expenses)." : "."}
                 </p>
               ) : selectedMaint && !selectedMaintForwardsToAp ? (
                 <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
@@ -488,7 +486,7 @@ export function ApprovalsDashboard() {
                       await forwardToAccountsPayable(selected);
                     }
                     setMsg(
-                      "Forwarded to Accounts Payable (payment queue + operating expenses)."
+                      "Forwarded to Accounts Payable (Operating expenses)."
                     );
                     setTimeout(() => setMsg(null), 3500);
                   }}

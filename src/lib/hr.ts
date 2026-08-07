@@ -298,7 +298,7 @@ export function employeeDisplayName(e: Pick<HrEmployee, "firstName" | "lastName"
   return `${e.firstName} ${e.lastName}`.trim() || e.employeeId || "Unnamed";
 }
 
-/** Next Harborline employee code (HL-####) from existing roster. */
+/** Next CPMC employee code (HL-####) from existing roster. */
 export function nextEmployeeId(employees: Pick<HrEmployee, "employeeId">[]): string {
   let max = 0;
   for (const e of employees) {
@@ -388,10 +388,10 @@ export function makeCadeEmployee(now = new Date().toISOString()): HrEmployee {
     phone: "",
     department,
     category,
-    jobTitle: "Team member",
+    jobTitle: "Director of Operations",
     status: "active",
     propertyId: "",
-    propertyName: "Harborline Corporate",
+    propertyName: "CPMC Corporate",
     moduleAccess: resolveEmployeeModuleAccess(department, category),
     passwordHash: CADE_PASSWORD_HASH,
     temporaryPassword: CADE_DEMO.password,
@@ -403,7 +403,7 @@ export function makeCadeEmployee(now = new Date().toISOString()): HrEmployee {
     federalWithholding: "Married filing jointly â€” W-4 on file",
     stateWithholding: "CA â€” standard",
     deductionsNotes: "Health insurance, 401(k) 4%",
-    directDepositBank: "Harborline Credit Union",
+    directDepositBank: "CPMC Credit Union",
     directDepositAccountLast4: "4821",
     directDepositRoutingLast4: "1220",
     payrollNotes: "",

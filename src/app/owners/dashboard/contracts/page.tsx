@@ -52,8 +52,8 @@ export default async function OwnerContractsPage() {
             Management contracts
           </h1>
           <p className="owner-muted mt-2 max-w-2xl text-sm leading-relaxed sm:text-base">
-            Agreements between you and Harborline Management for properties under
-            management. These are the same records Harborline staff create—scoped
+            Agreements between you and CPMC Property Management Company for properties under
+            management. These are the same records CPMC staff create—scoped
             to your owner account only.
           </p>
         </div>
@@ -62,9 +62,9 @@ export default async function OwnerContractsPage() {
           <OwnerEmptyState
             icon={ScrollText}
             title="No management contracts yet"
-            description="When Harborline acquires a management engagement under your email, it will appear here."
-            actionHref="/owners/status"
-            actionLabel="Check application status"
+            description="When CPMC acquires a management engagement under your email, it will appear here."
+            actionHref="/owners/dashboard/apply"
+            actionLabel="Submit an application"
           />
         ) : (
           <ul className="owner-stagger space-y-4">

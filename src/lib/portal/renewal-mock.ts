@@ -58,7 +58,7 @@ export function getMockRenewalContext(): RenewalContext {
         id: "cond-2",
         title: "Offer timing",
         detail:
-          "Harborline reviews requests and may issue an offer before your renewal deadline. Terms and rent estimates can change until an offer is accepted in writing.",
+          "CPMC reviews requests and may issue an offer before your renewal deadline. Terms and rent estimates can change until an offer is accepted in writing.",
       },
       {
         id: "cond-3",
@@ -98,7 +98,7 @@ export function getMockSubmittedRenewalRequest(): RenewalRequestRecord {
         id: "t2",
         status: "Under Review",
         at: "2026-04-22T10:00:00.000Z",
-        note: "Harborline is reviewing eligibility and term options.",
+        note: "CPMC is reviewing eligibility and term options.",
       },
     ],
   };

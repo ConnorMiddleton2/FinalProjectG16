@@ -68,8 +68,9 @@ export async function OwnerBankActivityPanel({
           Owner distributions &amp; cash calls
         </h2>
         <p className="owner-muted mt-1 text-sm">
-          Residuals Harborline remits from property operating accounts, and any
-          requests for additional owner funding when a property is short.
+          When Accounts Payable records a remittance payment, the property
+          operating account is debited, CPMC&apos;s management fee lands in the
+          corporate account, and the owner distribution shows here as received.
         </p>
       </div>
 
@@ -102,7 +103,10 @@ export async function OwnerBankActivityPanel({
           </h3>
           <ul className="divide-y divide-[var(--harbor-deep)]/10 rounded-xl border border-[var(--harbor-deep)]/10 bg-white/80">
             {myRemits.map((p) => {
-              const balance = Math.max(0, (p.amount || 0) - (p.amountPaid || 0));
+              const paid = Number(p.amountPaid) || 0;
+              const owed = Number(p.amount) || 0;
+              const balance = Math.max(0, owed - paid);
+              const fullyPaid = balance <= 0.001 || p.status === "paid";
               return (
                 <li
                   key={p.id}
@@ -114,12 +118,23 @@ export async function OwnerBankActivityPanel({
                     </p>
                     <p className="opacity-60">
                       {p.period || p.dueDate || ""} ·{" "}
-                      {balance <= 0 || p.status === "paid" ? "Paid" : "Pending"}
+                      {fullyPaid
+                        ? "Received"
+                        : paid > 0
+                          ? `Partial · ${money(paid)} received`
+                          : "Awaiting remittance"}
                     </p>
                   </div>
-                  <p className="tabular-nums font-semibold">
-                    {money(p.amount || 0)}
-                  </p>
+                  <div className="text-right">
+                    <p className="tabular-nums font-semibold">
+                      {money(fullyPaid ? owed : paid > 0 ? paid : owed)}
+                    </p>
+                    {!fullyPaid && paid > 0 ? (
+                      <p className="text-xs opacity-55">
+                        of {money(owed)}
+                      </p>
+                    ) : null}
+                  </div>
                 </li>
               );
             })}

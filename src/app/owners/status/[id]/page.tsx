@@ -9,6 +9,7 @@ import {
   listOwnerProposedContracts,
 } from "@/lib/owner-application-portal";
 import { OwnerApplicationPropertySummary } from "@/components/OwnerApplicationPropertySummary";
+import { getCurrentOwner } from "@/lib/owner-auth";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -36,18 +37,18 @@ export default async function OwnerApplicationDetailPage({
 }: Props) {
   const { id } = await params;
   const { email: emailParam } = await searchParams;
-  const email = (emailParam ?? "").trim().toLowerCase();
+  const owner = await getCurrentOwner();
+  const email = (emailParam ?? owner?.email ?? "").trim().toLowerCase();
 
   if (!email) {
     return (
       <OwnerShell variant="auth">
         <div className="mx-auto max-w-lg px-6 py-12">
-          <OwnerAlert variant="error" title="Email required">
-            Open this application from{" "}
-            <Link href="/owners/status" className="underline">
-              Check application status
+          <OwnerAlert variant="error" title="Sign in required">
+            <Link href="/owners" className="underline">
+              Sign in to the owner portal
             </Link>{" "}
-            so we can verify it belongs to you.
+            to view this application.
           </OwnerAlert>
         </div>
       </OwnerShell>
@@ -72,7 +73,8 @@ export default async function OwnerApplicationDetailPage({
     (c) => c.status === "pending_owner_signature"
   );
 
-  const backHref = `/owners/status`;
+  const backHref = owner ? "/owners/dashboard" : "/owners";
+  const backLabel = owner ? "Back to portfolio" : "Owner access";
 
   return (
     <OwnerShell variant="auth">
@@ -82,7 +84,7 @@ export default async function OwnerApplicationDetailPage({
           className="owner-muted inline-flex items-center gap-2 text-sm transition hover:text-[var(--harbor-ink)]"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to status lookup
+          {backLabel}
         </Link>
 
         <div className="owner-card space-y-5 p-6 shadow-xl sm:p-7">
@@ -105,7 +107,7 @@ export default async function OwnerApplicationDetailPage({
           </div>
 
           {app.accountMessage ? (
-            <OwnerAlert variant="info" title="Message from Harborline">
+            <OwnerAlert variant="info" title="Message from CPMC">
               <span className="whitespace-pre-wrap">{app.accountMessage}</span>
             </OwnerAlert>
           ) : null}
@@ -155,7 +157,7 @@ export default async function OwnerApplicationDetailPage({
                 Management terms to review
               </h2>
               <p className="owner-muted text-xs">
-                Harborline set these terms during diligence. Review carefully
+                CPMC set these terms during diligence. Review carefully
                 before signing the management agreement below.
               </p>
               <dl className="grid gap-2 text-sm sm:grid-cols-2">
@@ -216,7 +218,7 @@ export default async function OwnerApplicationDetailPage({
           <p className="text-xs opacity-50">
             Submitted {new Date(app.createdAt).toLocaleString()} · ID{" "}
             <span className="font-mono">{app.id}</span>
-            {app.mgmtStatus ? ` · Harborline: ${app.mgmtStatus.replaceAll("_", " ")}` : ""}
+            {app.mgmtStatus ? ` · CPMC: ${app.mgmtStatus.replaceAll("_", " ")}` : ""}
           </p>
         </div>
 
@@ -230,14 +232,14 @@ export default async function OwnerApplicationDetailPage({
 
           {related.length === 0 ? (
             <p className="owner-muted text-sm">
-              No contract has been sent yet. When Harborline signs and sends an
+              No contract has been sent yet. When CPMC signs and sends an
               agreement, it will appear here for you to review and sign.
             </p>
           ) : (
             <div className="space-y-5">
               {awaitingSignature.length > 0 ? (
                 <OwnerAlert variant="info" title="Action needed">
-                  Harborline sent a management agreement for your signature.
+                  CPMC sent a management agreement for your signature.
                 </OwnerAlert>
               ) : null}
               {related.map((c) => (
@@ -256,11 +258,11 @@ export default async function OwnerApplicationDetailPage({
                       {c.status.replaceAll("_", " ")}
                     </span>
                   </div>
-                  {c.harborlineSignedBy ? (
+                  {c.cpmcSignedBy ? (
                     <p className="text-xs opacity-60">
-                      Signed by Harborline ({c.harborlineSignedBy})
-                      {c.harborlineSignedAt
-                        ? ` · ${new Date(c.harborlineSignedAt).toLocaleString()}`
+                      Signed by CPMC ({c.cpmcSignedBy})
+                      {c.cpmcSignedAt
+                        ? ` · ${new Date(c.cpmcSignedAt).toLocaleString()}`
                         : ""}
                     </p>
                   ) : null}
@@ -288,8 +290,11 @@ export default async function OwnerApplicationDetailPage({
         </div>
 
         {app.status === "approved" ? (
-          <Link href="/owners" className="owner-btn-primary">
-            Go to owner login
+          <Link
+            href={owner ? "/owners/dashboard" : "/owners"}
+            className="owner-btn-primary"
+          >
+            {owner ? "Back to portfolio" : "Go to owner login"}
           </Link>
         ) : null}
       </div>

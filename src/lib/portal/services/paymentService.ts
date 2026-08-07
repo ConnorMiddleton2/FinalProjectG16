@@ -1,19 +1,18 @@
 import {
   getEmptyPaymentsOverview,
-  getMockPaymentsOverview,
 } from "@/lib/portal/payments-mock";
-import { getMockPaymentHistory } from "@/lib/portal/payment-history-mock";
 import {
   buildMockConfirmation,
-  getMockMakePaymentContext,
   maskMethodSummary,
-  mockProcessPayment,
 } from "@/lib/portal/make-payment-mock";
 import type { PaymentConfirmation } from "@/lib/portal/make-payment-types";
 import type { MakePaymentContext } from "@/lib/portal/make-payment-types";
 import type { PaymentHistoryRecord } from "@/lib/portal/models";
 import type { PaymentsOverview, SavedPaymentMethodSummary } from "@/lib/portal/models";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
+import {
+  buildLiveMakePaymentFromSession,
+  buildLivePaymentsFromSession,
+} from "@/lib/portal/live-lease-from-session";
 import { requirePortalServiceSession } from "@/lib/portal/services/session";
 import {
   assertNotForcedError,
@@ -24,15 +23,41 @@ import {
   type ServiceResult,
 } from "@/lib/portal/services/shared";
 
-/**
- * Payments service — balance, history, and make-payment processing.
- *
- * BACKEND_TODO:
- *   GET  /api/tenant/payments/overview
- *   GET  /api/tenant/payments/history
- *   POST /api/tenant/payments  (tokenized method only — never raw PAN)
- */
+type ManagementPayload = {
+  payments?: PaymentsOverview | null;
+  makePayment?: MakePaymentContext | null;
+  history?: PaymentHistoryRecord[] | null;
+  pendingCheck?: PaymentsOverview["pendingCheck"];
+};
 
+async function fetchManagementPayments(): Promise<ManagementPayload | null> {
+  try {
+    const res = await fetch("/api/portal/management-snapshot", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as ManagementPayload;
+  } catch {
+    return null;
+  }
+}
+
+function paymentsHasBill(data: PaymentsOverview) {
+  const due = Number(String(data.amountDue).replace(/[^0-9.-]/g, ""));
+  const bal = Number(String(data.currentBalance).replace(/[^0-9.-]/g, ""));
+  return (
+    (Number.isFinite(due) && due > 0.009) ||
+    (Number.isFinite(bal) && bal > 0.009) ||
+    data.transactions.length > 0 ||
+    data.ledger.length > 0
+  );
+}
+
+/**
+ * Payments service — balance and history from Management rental receivables,
+ * with session lease fallback when AR is not linked yet.
+ */
 export async function getPaymentsOverview(): Promise<
   ServiceResult<PaymentsOverview>
 > {
@@ -44,11 +69,41 @@ export async function getPaymentsOverview(): Promise<
 
   try {
     await simulateLatency(DEFAULT_LOAD_DELAY_MS);
-    // BACKEND_TODO: live overview scoped to session tenant lease
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok(getEmptyPaymentsOverview(), "mock");
+    const mgmt = await fetchManagementPayments();
+    if (mgmt?.payments && paymentsHasBill(mgmt.payments)) {
+      return ok(
+        {
+          ...mgmt.payments,
+          pendingCheck:
+            mgmt.payments.pendingCheck ?? mgmt.pendingCheck ?? null,
+        },
+        "live"
+      );
     }
-    return ok(getMockPaymentsOverview(), "mock");
+
+    const fromSession = buildLivePaymentsFromSession(auth.data);
+    if (fromSession) {
+      return ok(
+        {
+          ...fromSession,
+          pendingCheck: mgmt?.pendingCheck ?? mgmt?.payments?.pendingCheck ?? null,
+        },
+        "live"
+      );
+    }
+
+    if (mgmt?.payments) {
+      return ok(
+        {
+          ...mgmt.payments,
+          pendingCheck:
+            mgmt.payments.pendingCheck ?? mgmt.pendingCheck ?? null,
+        },
+        "live"
+      );
+    }
+
+    return ok(getEmptyPaymentsOverview(), "live");
   } catch (err) {
     return failFromUnknown(
       err,
@@ -69,11 +124,11 @@ export async function getPaymentHistory(): Promise<
 
   try {
     await simulateLatency(DEFAULT_LOAD_DELAY_MS);
-    // BACKEND_TODO: live history scoped to session tenant
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok([], "mock");
+    const mgmt = await fetchManagementPayments();
+    if (mgmt?.history) {
+      return ok(mgmt.history, "live");
     }
-    return ok(getMockPaymentHistory(), "mock");
+    return ok([], "live");
   } catch (err) {
     return failFromUnknown(
       err,
@@ -94,30 +149,36 @@ export async function getMakePaymentContext(): Promise<
 
   try {
     await simulateLatency(DEFAULT_LOAD_DELAY_MS);
-    const base = getMockMakePaymentContext();
-    if (auth.data.propertyName || auth.data.unit) {
-      return ok(
-        {
-          ...base,
-          propertyLabel: [auth.data.propertyName, auth.data.unit]
-            .filter(Boolean)
-            .join(" · "),
-        },
-        "live"
-      );
+    const mgmt = await fetchManagementPayments();
+    if (mgmt?.makePayment && mgmt.makePayment.currentBalance > 0) {
+      return ok(mgmt.makePayment, "live");
     }
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok(
-        {
-          ...base,
-          propertyLabel: "Your leased unit",
-          currentBalance: base.currentRent,
-          maxPayable: base.currentRent,
-        },
-        "live"
-      );
+    const fromSession = buildLiveMakePaymentFromSession(auth.data);
+    if (fromSession) {
+      return ok(fromSession, "live");
     }
-    return ok(base, "mock");
+    if (mgmt?.makePayment) {
+      return ok(mgmt.makePayment, "live");
+    }
+    const propertyLabel =
+      [auth.data.propertyName, auth.data.unit].filter(Boolean).join(" · ") ||
+      "Your leased unit";
+    const rent = Number(auth.data.monthlyRent) || 0;
+    return ok(
+      {
+        propertyLabel,
+        currentBalance: rent,
+        currentRent: rent,
+        lateFee: 0,
+        dueDate: "—",
+        currencySymbol: "$",
+        allowCustomAmount: true,
+        maxPayable: rent,
+        achEnrolled: false,
+        methods: [],
+      },
+      "live"
+    );
   } catch (err) {
     return failFromUnknown(
       err,
@@ -150,16 +211,7 @@ export async function submitPayment(input: {
     });
 
     if (bank && "error" in bank && bank.error) {
-      // Fall back to mock confirmation for demo tenants without a bank link
-      if (sessionOwnsDemoFixtures(auth.data)) {
-        await mockProcessPayment();
-        return ok(buildMockConfirmation(input), "mock");
-      }
-      return failFromUnknown(
-        new Error(bank.error),
-        bank.error,
-        "validation"
-      );
+      return failFromUnknown(new Error(bank.error), bank.error, "validation");
     }
 
     const confirmationNumber =
@@ -194,7 +246,7 @@ export async function submitPayment(input: {
 }
 
 export function getPaymentsOverviewDemoFixture(): PaymentsOverview {
-  return getMockPaymentsOverview();
+  return getEmptyPaymentsOverview();
 }
 
 export function getEmptyPaymentsOverviewFixture(): PaymentsOverview {
@@ -202,7 +254,18 @@ export function getEmptyPaymentsOverviewFixture(): PaymentsOverview {
 }
 
 export function getMakePaymentContextSync(): MakePaymentContext {
-  return getMockMakePaymentContext();
+  return {
+    propertyLabel: "Your leased unit",
+    currentBalance: 0,
+    currentRent: 0,
+    lateFee: 0,
+    dueDate: "—",
+    currencySymbol: "$",
+    allowCustomAmount: true,
+    maxPayable: 0,
+    achEnrolled: false,
+    methods: [],
+  };
 }
 
 export function buildPaymentConfirmation(input: {

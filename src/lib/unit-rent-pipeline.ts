@@ -170,6 +170,7 @@ export async function moveInTenantAtUnitRent(input: {
       ok: true;
       monthlyRent: number;
       receivableId: string;
+      tenantId: string;
       unit: SharedPropertyTenant;
     }
   | { error: string }
@@ -208,6 +209,7 @@ export async function moveInTenantAtUnitRent(input: {
     leaseEnd,
     monthlyRent: String(round2(rent)),
     status: "active",
+    achAutopay: true,
   };
   await upsertSharedRecord(
     client,
@@ -228,6 +230,7 @@ export async function moveInTenantAtUnitRent(input: {
     ageYears: 0,
     dateLeased: today,
     leaseEnd,
+    achAutopay: true,
   };
   await upsertSharedRecord(
     client,
@@ -314,6 +317,331 @@ export async function moveInTenantAtUnitRent(input: {
     ok: true,
     monthlyRent: round2(rent),
     receivableId: receivable.id,
+    tenantId: tenant.id,
     unit: occupied,
   };
+}
+
+const DEMO_TENANT_FIRST = [
+  "Jordan",
+  "Casey",
+  "Riley",
+  "Avery",
+  "Morgan",
+  "Quinn",
+  "Taylor",
+  "Jamie",
+  "Cameron",
+  "Reese",
+  "Skyler",
+  "Parker",
+  "Hayden",
+  "Drew",
+  "Emerson",
+  "Finley",
+  "Harper",
+  "Logan",
+  "Sawyer",
+  "Rowan",
+];
+const DEMO_TENANT_LAST = [
+  "Nguyen",
+  "Patel",
+  "Brooks",
+  "Rivera",
+  "Kim",
+  "Walsh",
+  "Ortiz",
+  "Chen",
+  "Bailey",
+  "Singh",
+];
+
+function moneyParse(raw: string | undefined): number {
+  if (!raw) return 0;
+  const n = Number(String(raw).replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * When CPMC takes on a property, create occupied + vacant unit roster,
+ * tenant window records, and current-month AR so management and owner revenue
+ * share the same operational data (no rent-roll-only phantom revenue).
+ */
+export async function onboardExistingTenantsFromApplication(input: {
+  application: OwnerApplication;
+  propertyIds: string[];
+}): Promise<{ tenantCount: number; unitCount: number; receivableCount: number }> {
+  const client = await createClient();
+  const managed = await listSharedRecords<ManagementContractDraft>(
+    client,
+    COLLECTIONS.managedProperties
+  );
+  const existingUnits = await listSharedRecords<SharedPropertyTenant>(
+    client,
+    COLLECTIONS.propertyTenants
+  );
+  const existingTenants = await listSharedRecords<TenantRecord>(
+    client,
+    COLLECTIONS.tenants
+  );
+
+  const period = periodNow();
+  const today = new Date().toISOString().slice(0, 10);
+  const leaseEndDate = new Date();
+  leaseEndDate.setFullYear(leaseEndDate.getFullYear() + 1);
+  const leaseEnd = leaseEndDate.toISOString().slice(0, 10);
+
+  let tenantCount = 0;
+  let unitCount = 0;
+  let receivableCount = 0;
+
+  for (let i = 0; i < input.propertyIds.length; i++) {
+    const propertyId = input.propertyIds[i];
+    const property = managed.find((p) => p.id === propertyId);
+    if (!property) continue;
+
+    const alreadyOccupied = existingUnits.some(
+      (u) =>
+        u.propertyId === propertyId &&
+        u.status === "active" &&
+        Boolean(u.name?.trim())
+    );
+    if (alreadyOccupied) continue;
+
+    const appProp = input.application.properties[i] || input.application.properties[0];
+    const suites = Math.max(
+      1,
+      Math.round(
+        moneyParse(appProp?.unitsSuites) ||
+          moneyParse(property.unitsSuites) ||
+          1
+      )
+    );
+    const occupancyPct = Math.min(
+      100,
+      Math.max(
+        0,
+        moneyParse(appProp?.occupancyPercent) ||
+          moneyParse(property.occupancyPercent) ||
+          85
+      )
+    );
+    let occupied = Math.round(
+      moneyParse(appProp?.tenantCount) ||
+        moneyParse(property.tenantCount) ||
+        (suites * occupancyPct) / 100
+    );
+    occupied = Math.min(suites, Math.max(0, occupied));
+    if (occupied === 0 && occupancyPct > 0) {
+      occupied = Math.max(1, Math.round((suites * occupancyPct) / 100));
+      occupied = Math.min(suites, occupied);
+    }
+
+    const roll =
+      moneyParse(appProp?.monthlyRentRoll) ||
+      moneyParse(property.monthlyRentRoll) ||
+      0;
+    const rentEach =
+      occupied > 0 && roll > 0
+        ? round2(roll / occupied)
+        : round2(Math.max(900, roll / Math.max(suites, 1) || 1200));
+
+    const rentableSf =
+      moneyParse(appProp?.rentableSf) ||
+      moneyParse(appProp?.squareFeet) ||
+      moneyParse(property.rentableSf) ||
+      moneyParse(property.grossSf) ||
+      0;
+    const sqftEach = Math.max(400, Math.round(rentableSf / suites) || 800);
+
+    const propertyName =
+      property.propertyName ||
+      appProp?.propertyName ||
+      appProp?.location ||
+      "Managed property";
+    const slug = propertyName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 24);
+
+    for (let u = 0; u < suites; u++) {
+      const unitLabel =
+        suites <= 26
+          ? `Suite ${String.fromCharCode(65 + u)}`
+          : `Unit ${u + 1}`;
+      const unitId = `${propertyId}-onboard-${u + 1}`;
+      const isOccupied = u < occupied;
+      const first = DEMO_TENANT_FIRST[u % DEMO_TENANT_FIRST.length];
+      const last =
+        DEMO_TENANT_LAST[u % DEMO_TENANT_LAST.length];
+      const tenantName = isOccupied ? `${first} ${last}` : "";
+      const tenantEmail = isOccupied
+        ? `${first.toLowerCase()}.${last.toLowerCase()}.${u + 1}@${slug || "tenant"}.cpmc.demo`
+        : "";
+
+      const row: SharedPropertyTenant = {
+        id: unitId,
+        propertyId,
+        propertyName,
+        unit: unitLabel,
+        name: tenantName,
+        email: tenantEmail,
+        phone: isOccupied
+          ? `662-555-${String(1000 + u).slice(-4)}`
+          : "",
+        leaseStart: isOccupied ? today : "",
+        leaseEnd: isOccupied ? leaseEnd : "",
+        monthlyRent: String(rentEach),
+        sqft: String(sqftEach),
+        status: isOccupied ? "active" : "vacant",
+        achAutopay: isOccupied ? u % 4 !== 3 : false,
+        floorPlan:
+          property.propertyType === "multifamily" ||
+          property.propertyType === "mixed-use"
+            ? u % 3 === 0
+              ? "Studio"
+              : u % 3 === 1
+                ? "1 bedroom"
+                : "2 bedroom"
+            : "Suite",
+        askingRent: String(rentEach),
+        fairMarketRent: String(rentEach),
+        sourceApplicationId: input.application.id,
+      };
+      await upsertSharedRecord(
+        client,
+        COLLECTIONS.propertyTenants,
+        row.id,
+        row as unknown as Record<string, unknown>
+      );
+      unitCount += 1;
+
+      if (!isOccupied) continue;
+
+      const tenantId = `ten-onboard-${unitId}`;
+      if (!existingTenants.some((t) => t.id === tenantId)) {
+        // ~15% past due for realism; rest current with rent collected
+        const pastDue = u % 7 === 0;
+        const tenant: TenantRecord = {
+          id: tenantId,
+          name: tenantName,
+          unit: unitLabel,
+          propertyLeased: propertyName,
+          category: pastDue ? "past_due" : "active",
+          pendingDue: pastDue ? rentEach : 0,
+          monthlyRent: rentEach,
+          sqft: sqftEach,
+          ageYears: 28 + (u % 30),
+          dateLeased: today,
+          leaseEnd,
+          paymentStatus: pastDue ? "late" : "current",
+          achAutopay: u % 4 !== 3,
+        };
+        await upsertSharedRecord(
+          client,
+          COLLECTIONS.tenants,
+          tenant.id,
+          tenant as unknown as Record<string, unknown>
+        );
+        tenantCount += 1;
+
+        const receivableId = `RR-ONBOARD-${propertyId}-${u + 1}-${period}`
+          .replace(/\s+/g, "")
+          .toUpperCase();
+        const receivable: Receivable = {
+          id: `ar-onboard-${unitId}-${period}`,
+          receivableId,
+          kind: "rental",
+          customerName: tenantName,
+          customerId: tenantId,
+          property: propertyName,
+          unit: unitLabel,
+          period,
+          category: "base_rent",
+          amount: rentEach,
+          amountReceived: pastDue ? 0 : rentEach,
+          disputed: false,
+          invoiceDate: `${period}-01`,
+          dueDate: `${period}-05`,
+          paymentMethod: pastDue ? "" : "ACH",
+          paymentReference: pastDue ? "" : `ONB-${period}-${u + 1}`,
+          fileName: "",
+          description: `Monthly base rent — ${propertyName} · ${unitLabel}`,
+          notes: `Auto-onboarded from owner application ${input.application.id}`,
+          createdAt: new Date().toISOString(),
+        };
+        await upsertSharedRecord(
+          client,
+          COLLECTIONS.rentalReceivables,
+          receivable.id,
+          receivable as unknown as Record<string, unknown>
+        );
+        receivableCount += 1;
+
+        const contract: TenantContract = {
+          id: `tcon-onboard-${unitId}`,
+          property: propertyName,
+          term: "12 months",
+          rent: String(rentEach),
+          status: "Active",
+          propertyId,
+          unit: unitLabel,
+          tenantName,
+          tenantEmail,
+        };
+        await upsertSharedRecord(
+          client,
+          COLLECTIONS.tenantContracts,
+          contract.id,
+          contract as unknown as Record<string, unknown>
+        );
+
+        const invoice: TenantInvoice = {
+          id: `inv-onboard-${unitId}-${period}`,
+          label: `${propertyName} · ${unitLabel} rent — ${period}`,
+          amount: String(rentEach),
+          due: `${period}-05`,
+          status: pastDue ? "Overdue" : "Paid",
+          propertyId,
+          propertyName,
+          unit: unitLabel,
+          tenantName,
+          tenantEmail,
+          dueDate: `${period}-05`,
+        };
+        await upsertSharedRecord(
+          client,
+          COLLECTIONS.tenantInvoices,
+          invoice.id,
+          invoice as unknown as Record<string, unknown>
+        );
+      }
+    }
+
+    // Keep managed property aggregates in sync with onboarded roster
+    await upsertSharedRecord(
+      client,
+      COLLECTIONS.managedProperties,
+      propertyId,
+      {
+        ...property,
+        tenantCount: String(occupied),
+        unitsSuites: String(suites),
+        occupancyPercent: String(
+          Math.round((occupied / Math.max(suites, 1)) * 100)
+        ),
+        monthlyRentRoll: String(round2(rentEach * occupied)),
+        notes: [
+          property.notes,
+          `Existing tenants auto-onboarded ${today} from application ${input.application.id} (${occupied} occupied / ${suites} units).`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      } as unknown as Record<string, unknown>
+    );
+  }
+
+  return { tenantCount, unitCount, receivableCount };
 }

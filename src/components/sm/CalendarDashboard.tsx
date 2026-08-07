@@ -162,7 +162,7 @@ export function CalendarDashboard() {
       ...form,
       id: crypto.randomUUID(),
       title,
-      source: "harborline",
+      source: "cpmc",
     });
     setForm(emptyCalendarEvent());
     setShowForm(false);
@@ -302,7 +302,7 @@ export function CalendarDashboard() {
                 Calendar conflicts ({conflicts.length})
               </h2>
               <p className="text-sm text-amber-900/80">
-                Google and Harborline events overlap. Keep one and move the
+                Google and CPMC events overlap. Keep one and move the
                 other, or pick a custom time.
               </p>
             </div>
@@ -322,7 +322,7 @@ export function CalendarDashboard() {
               >
                 <p className="text-sm font-medium">Overlap</p>
                 <p className="mt-1 text-sm">
-                  <span className="font-semibold">Harborline:</span>{" "}
+                  <span className="font-semibold">CPMC:</span>{" "}
                   {c.harbor.title} · {formatRange(c.harbor.start, c.harbor.end)}
                 </p>
                 <p className="text-sm">
@@ -335,14 +335,14 @@ export function CalendarDashboard() {
                     className="btn btn-outline btn-xs"
                     onClick={() => void keepHarborMoveGoogle(c)}
                   >
-                    Keep Harborline · move Google +2h
+                    Keep CPMC · move Google +2h
                   </button>
                   <button
                     type="button"
                     className="btn btn-outline btn-xs"
                     onClick={() => void keepGoogleMoveHarbor(c)}
                   >
-                    Keep Google · move Harborline +2h
+                    Keep Google · move CPMC +2h
                   </button>
                   <button
                     type="button"
@@ -355,7 +355,7 @@ export function CalendarDashboard() {
                       })
                     }
                   >
-                    Reschedule Harborline…
+                    Reschedule CPMC…
                   </button>
                   <button
                     type="button"
@@ -515,7 +515,7 @@ export function CalendarDashboard() {
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="text-xs uppercase tracking-wide opacity-55">
-                {expanded.source === "google" ? "Google Calendar" : "Harborline"}{" "}
+                {expanded.source === "google" ? "Google Calendar" : "CPMC"}{" "}
                 · {eventTypeLabel(expanded.type)}
               </p>
               <h2 className="text-xl font-semibold text-[var(--harbor-ink)]">

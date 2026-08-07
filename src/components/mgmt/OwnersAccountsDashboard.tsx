@@ -1,14 +1,18 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import {
   Building2,
   Eye,
   EyeOff,
+  ExternalLink,
   KeyRound,
   PlusCircle,
   RefreshCw,
+  Trash2,
   UserRound,
+  X,
 } from "lucide-react";
 import {
   COLLECTIONS,
@@ -17,15 +21,45 @@ import {
 import type { OwnerAccount, OwnerApplication } from "@/lib/owner-auth";
 import type { ManagementContractDraft } from "@/lib/management-contract";
 import {
+  assetCategoryLabel,
+  type PropertyAsset,
+} from "@/lib/property-assets";
+import {
   isHashedPassword,
   ownerPasswordForAdmin,
 } from "@/lib/owner-credentials";
 import {
   createOwnerAccountFromManagement,
+  deleteOwnerAccountFromManagement,
   resetOwnerAccountPassword,
   setOwnerAccountPassword,
   updateOwnerAccountProfile,
 } from "@/app/ops/management/owners/actions";
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex w-full flex-col gap-1.5">
+      <span className="text-xs font-medium text-[var(--harbor-ink)]/65">
+        {label}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+function money(n: number) {
+  return n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
 
 export function OwnersAccountsDashboard() {
   const {
@@ -41,8 +75,14 @@ export function OwnersAccountsDashboard() {
   const { items: properties } = useSharedCollection<ManagementContractDraft>(
     COLLECTIONS.managedProperties
   );
+  const { items: assets } = useSharedCollection<PropertyAsset>(
+    COLLECTIONS.propertyAssets
+  );
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [previewPropertyId, setPreviewPropertyId] = useState<string | null>(
+    null
+  );
   const [query, setQuery] = useState("");
   const [showPassword, setShowPassword] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
@@ -50,6 +90,7 @@ export function OwnersAccountsDashboard() {
   const [creating, setCreating] = useState(false);
 
   const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [notes, setNotes] = useState("");
@@ -106,6 +147,16 @@ export function OwnersAccountsDashboard() {
     );
   }, [properties, selected]);
 
+  const previewProperty =
+    selectedProperties.find((p) => p.id === previewPropertyId) ?? null;
+
+  const previewAssets = useMemo(() => {
+    if (!previewProperty) return [];
+    return assets
+      .filter((a) => a.propertyId === previewProperty.id)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [assets, previewProperty]);
+
   function flash(message: string) {
     setMsg(message);
     setTimeout(() => setMsg(null), 5000);
@@ -114,17 +165,20 @@ export function OwnersAccountsDashboard() {
   function selectOwner(owner: OwnerAccount) {
     setSelectedId(owner.id);
     setFullName(owner.fullName || "");
+    setEmail(owner.email || "");
     setPhone(owner.phone || "");
     setCompanyName(owner.companyName || "");
     setNotes(owner.notes || "");
     setManualPassword("");
     setCreating(false);
+    setPreviewPropertyId(null);
   }
 
   useEffect(() => {
     if (!selected) return;
     setSelectedId(selected.id);
     setFullName(selected.fullName || "");
+    setEmail(selected.email || "");
     setPhone(selected.phone || "");
     setCompanyName(selected.companyName || "");
     setNotes(selected.notes || "");
@@ -138,6 +192,7 @@ export function OwnersAccountsDashboard() {
       const result = await updateOwnerAccountProfile({
         ownerId: selected.id,
         fullName,
+        email,
         phone,
         companyName,
         notes,
@@ -149,7 +204,33 @@ export function OwnersAccountsDashboard() {
       setOwners((prev) =>
         prev.map((o) => (o.id === result.account.id ? result.account : o))
       );
-      flash("Owner profile saved.");
+      flash("Owner account saved.");
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (!selected) return;
+    const label = selected.fullName || selected.email;
+    const ok = window.confirm(
+      `Remove owner account for “${label}”?\n\nThis deletes their portal login. Linked properties stay in the system but will no longer be tied to this account.`
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const result = await deleteOwnerAccountFromManagement({
+        ownerId: selected.id,
+      });
+      if ("error" in result) {
+        flash(result.error ?? "Something went wrong.");
+        return;
+      }
+      setOwners((prev) => prev.filter((o) => o.id !== selected.id));
+      setSelectedId(null);
+      flash(`Removed owner account ${result.email}.`);
+      await refresh();
     } finally {
       setBusy(false);
     }
@@ -490,49 +571,66 @@ export function OwnersAccountsDashboard() {
             </section>
 
             <form onSubmit={(e) => void handleSaveProfile(e)} className="space-y-3">
-              <p className="text-sm font-semibold">Account details</p>
-              <label className="form-control">
-                <span className="mb-1 text-xs opacity-70">Full name</span>
+              <p className="text-sm font-semibold">Edit account</p>
+              <Field label="Full name">
                 <input
-                  className="input input-bordered"
+                  className="input input-bordered w-full"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
+                  required
                 />
-              </label>
-              <label className="form-control">
-                <span className="mb-1 text-xs opacity-70">Phone</span>
+              </Field>
+              <Field label="Login email">
                 <input
-                  className="input input-bordered"
+                  type="email"
+                  className="input input-bordered w-full"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Phone">
+                <input
+                  className="input input-bordered w-full"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                 />
-              </label>
-              <label className="form-control">
-                <span className="mb-1 text-xs opacity-70">Company / entity</span>
+              </Field>
+              <Field label="Company / entity">
                 <input
-                  className="input input-bordered"
+                  className="input input-bordered w-full"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                 />
-              </label>
-              <label className="form-control">
-                <span className="mb-1 text-xs opacity-70">Internal notes</span>
+              </Field>
+              <Field label="Internal notes">
                 <textarea
-                  className="textarea textarea-bordered min-h-20"
+                  className="textarea textarea-bordered min-h-20 w-full"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                 />
-              </label>
+              </Field>
               <p className="text-xs opacity-55">
                 Created {selected.createdAt?.slice(0, 10) || "—"}
               </p>
-              <button
-                type="submit"
-                className="btn btn-neutral btn-sm"
-                disabled={busy}
-              >
-                Save account details
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="submit"
+                  className="btn btn-neutral btn-sm"
+                  disabled={busy}
+                >
+                  Save changes
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-error btn-sm gap-1"
+                  disabled={busy}
+                  onClick={() => void handleDeleteAccount()}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove account
+                </button>
+              </div>
             </form>
 
             <section className="space-y-2">
@@ -544,21 +642,143 @@ export function OwnersAccountsDashboard() {
                 <p className="text-sm opacity-60">No linked properties yet.</p>
               ) : (
                 <ul className="space-y-2">
-                  {selectedProperties.map((p) => (
-                    <li
-                      key={p.id}
-                      className="rounded-lg border border-base-300 px-3 py-2 text-sm"
-                    >
-                      <p className="font-medium">{p.propertyName}</p>
-                      <p className="text-xs opacity-60">
-                        {[p.streetAddress, p.city, p.state]
-                          .filter(Boolean)
-                          .join(", ")}
-                      </p>
-                    </li>
-                  ))}
+                  {selectedProperties.map((p) => {
+                    const assetCount = assets.filter(
+                      (a) => a.propertyId === p.id
+                    ).length;
+                    const previewOpen = previewPropertyId === p.id;
+                    return (
+                      <li
+                        key={p.id}
+                        className="rounded-lg border border-base-300 px-3 py-2.5 text-sm"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-medium">{p.propertyName}</p>
+                            <p className="text-xs opacity-60">
+                              {[p.streetAddress, p.city, p.state]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </p>
+                            <p className="mt-0.5 text-xs opacity-50">
+                              {assetCount} tracked asset
+                              {assetCount === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs gap-1"
+                              onClick={() =>
+                                setPreviewPropertyId(previewOpen ? null : p.id)
+                              }
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              {previewOpen ? "Hide preview" : "Preview assets"}
+                            </button>
+                            <Link
+                              href={`/ops/properties/${encodeURIComponent(p.id)}`}
+                              className="btn btn-neutral btn-xs gap-1"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                              Property viewer
+                            </Link>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
+
+              {previewProperty ? (
+                <div className="rounded-xl border border-[var(--harbor-deep)]/15 bg-[var(--harbor-sand)]/40 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold">
+                        {previewProperty.propertyName}
+                      </p>
+                      <p className="text-xs opacity-60">
+                        Asset & property preview
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs btn-square"
+                      aria-label="Close preview"
+                      onClick={() => setPreviewPropertyId(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3">
+                    {[
+                      ["Type", previewProperty.propertyType || "—"],
+                      ["Units / suites", previewProperty.unitsSuites || "—"],
+                      ["Rentable SF", previewProperty.rentableSf || "—"],
+                      [
+                        "Occupancy",
+                        previewProperty.occupancyPercent
+                          ? `${previewProperty.occupancyPercent}%`
+                          : "—",
+                      ],
+                      [
+                        "Mgmt fee",
+                        previewProperty.feePercent
+                          ? `${previewProperty.feePercent}%`
+                          : "—",
+                      ],
+                      ["Year built", previewProperty.yearBuilt || "—"],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <dt className="opacity-55">{label}</dt>
+                        <dd className="font-medium">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+
+                  <div>
+                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide opacity-55">
+                      Tracked assets
+                    </p>
+                    {previewAssets.length === 0 ? (
+                      <p className="text-sm opacity-60">
+                        No PP&amp;E assets on file for this property.
+                      </p>
+                    ) : (
+                      <ul className="max-h-48 space-y-1.5 overflow-y-auto">
+                        {previewAssets.map((a) => (
+                          <li
+                            key={a.id}
+                            className="rounded-md border border-base-300/80 bg-white/80 px-2.5 py-1.5 text-xs"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="font-medium">{a.name}</p>
+                                <p className="opacity-55">
+                                  {assetCategoryLabel(a.category)}
+                                </p>
+                              </div>
+                              <p className="shrink-0 tabular-nums font-medium">
+                                {money(a.costBasis)}
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <Link
+                    href={`/ops/properties/${encodeURIComponent(previewProperty.id)}`}
+                    className="btn btn-neutral btn-sm gap-1 w-full sm:w-auto"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open in property viewer
+                  </Link>
+                </div>
+              ) : null}
             </section>
 
             {selectedApps.length > 0 ? (

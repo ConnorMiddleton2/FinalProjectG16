@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { ArrowLeft, Building2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import {
   PORTAL_APPLY_PATH,
   PORTAL_START_PATH,
 } from "@/lib/portal/auth";
 import { resolvePortalPageMeta } from "@/lib/portal/nav";
+import { BrandLogo } from "@/components/BrandLogo";
+import { COMPANY_SHORT } from "@/lib/brand";
 
 type Props = {
   children: React.ReactNode;
@@ -14,7 +16,7 @@ type Props = {
 
 /**
  * Lightweight chrome for public portal routes (unauthorized).
- * Does not expose current-tenant navigation (those routes require login).
+ * Does not expose authenticated tenant navigation.
  */
 export function PortalPublicShell({
   children,
@@ -22,7 +24,7 @@ export function PortalPublicShell({
 }: Props) {
   const meta = resolvePortalPageMeta(pathname);
   const isUnauthorized = pathname.startsWith("/portal/unauthorized");
-  const contextLabel = isUnauthorized ? "Portal access" : "Future tenant";
+  const contextLabel = isUnauthorized ? "Portal access" : "Tenant portal";
 
   return (
     <div className="portal-page-bg min-h-screen overflow-x-hidden">
@@ -39,12 +41,10 @@ export function PortalPublicShell({
             href={PORTAL_START_PATH}
             className="flex min-w-0 items-center gap-2.5 rounded-lg portal-focus focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--harbor-glow)]"
           >
-            <span className="rounded-xl bg-[var(--harbor-sand)]/15 p-2">
-              <Building2 className="h-5 w-5" aria-hidden="true" />
-            </span>
+            <BrandLogo size="sm" onDark />
             <span className="min-w-0">
               <span className="font-display block truncate text-lg leading-tight sm:text-2xl">
-                Harborline
+                {COMPANY_SHORT}
               </span>
               <span className="block truncate text-[11px] text-[var(--harbor-sand)]/80 sm:text-xs">
                 {contextLabel}
@@ -53,7 +53,7 @@ export function PortalPublicShell({
           </Link>
 
           <nav
-            aria-label="Future tenant"
+            aria-label="Tenant portal"
             className="flex flex-wrap items-center gap-1 sm:gap-2"
           >
             <Link
@@ -67,7 +67,7 @@ export function PortalPublicShell({
               className="btn btn-ghost min-h-11 gap-1 text-[var(--harbor-sand)] portal-focus"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Choose path</span>
+              <span className="hidden sm:inline">Browse properties</span>
             </Link>
           </nav>
         </div>

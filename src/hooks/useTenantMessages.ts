@@ -19,10 +19,8 @@ import {
 } from "@/lib/portal/messages-validation";
 import {
   emptyMessagesMessage,
-  getConversationsDemoFixture,
   listConversations,
 } from "@/lib/portal/services/messageService";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 
 const SEND_DELAY_MS = 700;
 const TENANT_NAME = "Alex Tenant";
@@ -83,27 +81,6 @@ export function useTenantMessages() {
       });
     }
   }, []);
-
-  const loadDemoData = useCallback(() => {
-    void (async () => {
-      const session = await getPortalTenantSessionClient();
-      if (!session || !sessionOwnsDemoFixtures(session)) {
-        void load();
-        return;
-      }
-      tenantScopeRef.current = session.tenantScopeId;
-      const conversations = getConversationsDemoFixture();
-      if (conversations.length === 0) {
-        setState({
-          status: "empty",
-          message: emptyMessagesMessage(),
-        });
-        return;
-      }
-      setState({ status: "success", conversations, source: "mock" });
-      setSelectedId(conversations[0]?.id ?? null);
-    })();
-  }, [load]);
 
   useEffect(() => {
     void load();
@@ -219,7 +196,7 @@ export function useTenantMessages() {
         persist([conversation, ...existing]);
         setComposing(false);
         setSelectedId(conversationId);
-        showAction("Message sent to Harborline management.");
+        showAction("Message sent to CPMC management.");
         return true;
       } catch (err) {
         setSendError(
@@ -375,7 +352,6 @@ export function useTenantMessages() {
     actionMessage,
     unreadTotal,
     reload: () => void load(),
-    loadDemoData,
     selectConversation,
     startCompose,
     cancelCompose,

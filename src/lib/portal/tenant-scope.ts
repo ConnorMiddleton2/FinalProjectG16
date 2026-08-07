@@ -34,20 +34,18 @@ export function filterForTenant<T extends TenantOwned>(
 }
 
 /**
- * Demo Pier 12 fixtures are tagged with DEMO_TENANT_ID.
- * Other authenticated tenants receive empty results (not other tenants' rows).
+ * Demo Pier 12 fixtures are disabled for tenant portal — always empty.
  */
 export function demoFixturesForSession<T>(
-  session: PortalTenantSession,
-  demoItems: T[],
+  _session: PortalTenantSession,
+  _demoItems: T[],
   empty: T[] = []
 ): T[] {
-  if (session.tenantScopeId !== DEMO_TENANT_ID) return empty;
-  return demoItems;
+  return empty;
 }
 
-export function sessionOwnsDemoFixtures(session: PortalTenantSession): boolean {
-  return session.tenantScopeId === DEMO_TENANT_ID;
+export function sessionOwnsDemoFixtures(_session: PortalTenantSession): boolean {
+  return false;
 }
 
 export function denyCrossTenant<T>(

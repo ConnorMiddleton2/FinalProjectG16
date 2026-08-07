@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import {
   COLLECTIONS,
+  deleteSharedRecord,
   listSharedRecords,
   upsertSharedRecord,
 } from "@/lib/shared-store";
@@ -16,6 +17,7 @@ import {
   provisionPropertiesFromApplication,
   type ContractTermsInput,
 } from "@/lib/owner-properties";
+import { onboardExistingTenantsFromApplication } from "@/lib/unit-rent-pipeline";
 import { buildAgreementSections } from "@/lib/owner-contracts";
 import {
   normalizeOwnerApplicationProperty,
@@ -29,7 +31,7 @@ import { cookies } from "next/headers";
 export type { OwnerApplicationProperty } from "@/lib/owner-application-intake";
 export { propertyLocationLabel, propertySfLabel } from "@/lib/owner-application-intake";
 
-export const OWNER_COOKIE = "harborline_owner";
+export const OWNER_COOKIE = "cpmc_owner";
 
 export type OwnerAccount = {
   id: string;
@@ -251,6 +253,11 @@ export async function saveOwnerAccount(account: OwnerAccount) {
     account.id,
     account as unknown as Record<string, unknown>
   );
+}
+
+export async function deleteOwnerAccount(ownerId: string) {
+  const client = await createClient();
+  await deleteSharedRecord(client, COLLECTIONS.ownerAccounts, ownerId);
 }
 
 export async function createOwnerAccount(input: {
@@ -592,25 +599,42 @@ export async function signOwnerApplicationContract(input: {
         "This application is not waiting for a signature. Check status again." as const,
     };
   }
-  if (!app.contractPropertyIds?.length) {
-    return { error: "No contract was attached to this application." as const };
-  }
-
-  const temporaryPassword = generateTemporaryPassword();
-  const created = await createOwnerAccount({
-    email: app.email,
-    password: temporaryPassword,
-    fullName: app.fullName,
-    mustChangePassword: true,
-  });
-  if ("error" in created) {
-    return { error: created.error };
+  let propertyIds = app.contractPropertyIds ?? [];
+  if (propertyIds.length === 0) {
+    const provisioned = await provisionPropertiesFromApplication(app, {
+      terms: {
+        feePercent: app.proposedFeePercent?.trim() || undefined,
+        feeStructure: "percent_collections",
+      },
+    });
+    propertyIds = provisioned.map((p) => p.id);
   }
 
   const signedAt = new Date().toISOString();
-  await linkOwnerAccountToProperties(app.contractPropertyIds, created.account, {
+  let temporaryPassword: string | undefined;
+  let account = await findOwner(email);
+  if (!account) {
+    temporaryPassword = generateTemporaryPassword();
+    const created = await createOwnerAccount({
+      email: app.email,
+      password: temporaryPassword,
+      fullName: app.fullName,
+      mustChangePassword: true,
+    });
+    if ("error" in created) {
+      return { error: created.error };
+    }
+    account = created.account;
+  }
+
+  await linkOwnerAccountToProperties(propertyIds, account, {
     signedAt,
     signatureName,
+  });
+
+  await onboardExistingTenantsFromApplication({
+    application: { ...app, contractPropertyIds: propertyIds },
+    propertyIds,
   });
 
   const updated: OwnerApplication = {
@@ -619,12 +643,43 @@ export async function signOwnerApplicationContract(input: {
     reviewerDecision: "approved",
     ownerSignedAt: signedAt,
     ownerSignatureName: signatureName,
-    loginRevealPassword: temporaryPassword,
-    credentialsIssuedAt: signedAt,
+    contractPropertyIds: propertyIds,
+    mgmtStatus: "account_provisioned",
+    loginRevealPassword: temporaryPassword || app.loginRevealPassword,
+    credentialsIssuedAt: temporaryPassword
+      ? signedAt
+      : app.credentialsIssuedAt,
+    accountMessage: temporaryPassword
+      ? `Agreement signed ${new Date(signedAt).toLocaleString()}. Use the temporary password below to sign in at /owners.`
+      : `Agreement signed ${new Date(signedAt).toLocaleString()}. Your assets now appear on your owner dashboard.`,
   };
   await writeApplication(updated);
 
-  const properties = await getManagedPropertiesByIds(app.contractPropertyIds);
+  // Keep OwnerContract in sync when Management sent one
+  if (app.contractId) {
+    const client = await createClient();
+    const contracts = await listSharedRecords<{
+      id: string;
+      status: string;
+      relatedApplicationId?: string;
+    }>(client, COLLECTIONS.ownerContracts);
+    const contract = contracts.find((c) => c.id === app.contractId);
+    if (contract) {
+      await upsertSharedRecord(
+        client,
+        COLLECTIONS.ownerContracts,
+        contract.id,
+        {
+          ...contract,
+          status: "fully_executed",
+          ownerSignedAt: signedAt,
+          ownerSignatureName: signatureName,
+        } as unknown as Record<string, unknown>
+      );
+    }
+  }
+
+  const properties = await getManagedPropertiesByIds(propertyIds);
   const summary: ApplicationStatusSummary = {
     id: updated.id,
     status: updated.status,
@@ -648,7 +703,7 @@ export async function signOwnerApplicationContract(input: {
     ok: true as const,
     application: summary,
     temporaryPassword,
-    email: created.email,
+    email: account.email,
   };
 }
 
@@ -693,17 +748,29 @@ export async function approveOwnerApplication(input: {
   const provisioned = await provisionPropertiesFromApplication(app, {
     owner: created.account,
   });
+  const propertyIds = provisioned.map((p) => p.id);
+  const signedAt = new Date().toISOString();
+  await linkOwnerAccountToProperties(propertyIds, created.account, {
+    signedAt,
+    signatureName: app.fullName,
+  });
+  await onboardExistingTenantsFromApplication({
+    application: { ...app, contractPropertyIds: propertyIds },
+    propertyIds,
+  });
 
   const updated: OwnerApplication = {
     ...app,
     status: "approved",
     reviewedBy: input.reviewedBy,
-    reviewedAt: new Date().toISOString(),
+    reviewedAt: signedAt,
     reviewNotes: input.reviewNotes?.trim() || app.reviewNotes || "",
     reviewerDecision: "approved",
-    contractPropertyIds: provisioned.map((p) => p.id),
+    contractPropertyIds: propertyIds,
+    ownerSignedAt: signedAt,
+    mgmtStatus: "account_provisioned",
     loginRevealPassword: temporaryPassword,
-    credentialsIssuedAt: new Date().toISOString(),
+    credentialsIssuedAt: signedAt,
   };
   await writeApplication(updated);
 
@@ -802,6 +869,10 @@ export async function changeOwnerPassword(input: {
 
 export async function setOwnerSession(email: string) {
   const jar = await cookies();
+  // Owner and tenant portal sessions must not overlap.
+  jar.delete("cpmc_tenant_portal");
+  jar.delete("cpmc_portal_tenant_v2");
+  jar.delete("cpmc_portal_tenant_ui_v2");
   jar.set({
     name: OWNER_COOKIE,
     value: email.toLowerCase(),

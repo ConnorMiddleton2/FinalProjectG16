@@ -139,7 +139,7 @@ export function validateTenantProfile(
     !values.communication.phoneCalls
   ) {
     errors.form =
-      "Keep at least one communication channel enabled so Harborline can reach you.";
+      "Keep at least one communication channel enabled so CPMC can reach you.";
   }
 
   return errors;

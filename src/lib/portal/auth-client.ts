@@ -12,23 +12,10 @@ import {
   resolveTenantScopeId,
   type PortalTenantSession,
 } from "@/lib/portal/auth";
-import {
-  PORTAL_DEMO_CLIENT_COOKIE,
-  PORTAL_DEMO_SESSION_STORAGE_KEY,
-  PORTAL_DEMO_TENANT,
-  isPortalDemoCookieValue,
-} from "@/lib/portal/portal-demo-auth";
+import { PORTAL_DEMO_SESSION_STORAGE_KEY } from "@/lib/portal/portal-demo-auth";
 import type { UserRole } from "@/lib/types";
 
-function readClientCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith(`${name}=`));
-  return match ? decodeURIComponent(match.split("=").slice(1).join("=")) : null;
-}
-
-/** Sync read — safe for useState initializers. */
+/** Sync read — safe for useState initializers. Legacy key may still exist. */
 export function readDemoSessionFromStorage(): PortalTenantSession | null {
   if (typeof window === "undefined") return null;
   try {
@@ -47,13 +34,9 @@ export function readDemoSessionFromStorage(): PortalTenantSession | null {
   return null;
 }
 
-function hasDemoCookie(): boolean {
-  return isPortalDemoCookieValue(readClientCookie(PORTAL_DEMO_CLIENT_COOKIE));
-}
-
 function resolveDemoSessionClient(): PortalTenantSession | null {
-  if (!hasDemoCookie()) return null;
-  return readDemoSessionFromStorage() ?? PORTAL_DEMO_TENANT;
+  // Portal demo cookie sessions are disabled — use tenant_accounts or Supabase.
+  return null;
 }
 
 /** Sync: future applicant from sessionStorage only. */
@@ -64,10 +47,6 @@ export function readFutureApplicantSessionSync(): PortalTenantSession | null {
 
 /** Sync: current-tenant demo present (blocks future portal). */
 export function readCurrentTenantSessionSync(): PortalTenantSession | null {
-  const stored = readDemoSessionFromStorage();
-  if (stored?.lifecycle === "current") return stored;
-  if (hasDemoCookie() && !stored) return PORTAL_DEMO_TENANT;
-  if (hasDemoCookie() && stored?.lifecycle !== "future") return stored;
   return null;
 }
 
@@ -109,7 +88,7 @@ async function resolveSupabaseTenantSession(): Promise<PortalTenantSession | nul
     ) {
       return {
         userId: user.id,
-        email: user.email ?? "tenant@harborline.local",
+        email: user.email ?? "tenant@cpmc.local",
         displayName:
           (user.user_metadata?.full_name as string | undefined)?.trim() ||
           user.email?.split("@")[0] ||
@@ -127,7 +106,7 @@ async function resolveSupabaseTenantSession(): Promise<PortalTenantSession | nul
     const role = profile?.role;
     if (role !== CURRENT_TENANT_ROLE && role != null) return null;
 
-    const email = user.email ?? "tenant@harborline.local";
+    const email = user.email ?? "tenant@cpmc.local";
     const displayName =
       profile?.full_name?.trim() ||
       email.split("@")[0] ||
@@ -147,6 +126,18 @@ async function resolveSupabaseTenantSession(): Promise<PortalTenantSession | nul
 }
 
 export async function getPortalTenantSessionClient(): Promise<PortalTenantSession | null> {
+  try {
+    const { getInjectedPortalSession } = await import(
+      "@/lib/portal/portal-session-inject"
+    );
+    const injected = getInjectedPortalSession();
+    if (injected?.role === CURRENT_TENANT_ROLE) {
+      return injected;
+    }
+  } catch {
+    /* ignore */
+  }
+
   try {
     const res = await fetch("/api/portal/session", {
       credentials: "same-origin",
@@ -181,10 +172,6 @@ export async function getFutureApplicantSessionClient(): Promise<PortalTenantSes
 }
 
 export async function getAnyPortalSessionClient(): Promise<PortalTenantSession | null> {
-  const stored = readDemoSessionFromStorage();
-  if (stored) return stored;
-  if (hasDemoCookie()) return PORTAL_DEMO_TENANT;
-
   const live = await resolveSupabaseTenantSession();
   if (live) return live;
   return null;

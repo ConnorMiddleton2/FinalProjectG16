@@ -6,7 +6,7 @@ Frontend route guards and client-side filtering **cannot** guarantee tenant isol
 
 1. Authenticate with Supabase Auth (or equivalent). Prefer `auth.getUser()` / JWT validation on every request — do not trust cookies or client flags alone for authorization decisions.
 2. Authorize current-tenant portal access only when `profiles.role = 'tenant'` (or the production equivalent claim in **`app_metadata`**, never editable `user_metadata`).
-3. Do **not** grant `/portal` private data to team/ops cookies (`harborline_team`), owner cookies, or other staff roles. Staff use `/ops` and role shells under `(app)`.
+3. Do **not** grant `/portal` private data to team/ops cookies (`cpmc_team`), owner cookies, or other staff roles. Staff use `/ops` and role shells under `(app)`.
 4. Map `auth.uid()` → **lease party / tenant id** via a server-side membership table (e.g. `lease_parties`, `tenant_members`). Never accept `tenantId` / `tenantScopeId` from the request body, query string, or path as the sole authority.
 
 ## Per-resource rules

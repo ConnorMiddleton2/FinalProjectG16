@@ -1,5 +1,5 @@
 /**
- * Harborline staffing model (property + corporate) for HR / payroll demos.
+ * CPMC staffing model (property + corporate) for HR / payroll demos.
  * Ratios approximate 2025–2026 multifamily / commercial PM norms:
  *   PM ~150–200 doors · leasing ~100–125 occupied · tech ~80–120 units.
  */

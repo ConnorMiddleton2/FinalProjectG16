@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  CheckCircle2,
   ClipboardList,
   LoaderCircle,
   RefreshCw,
@@ -18,7 +17,6 @@ import {
   canStartNewRenewalRequest,
   formatRenewalDate,
   formatRenewalDateTime,
-  isRenewalInProgress,
   renewalStatusClass,
 } from "@/lib/portal/renewal-format";
 import type {
@@ -51,7 +49,6 @@ export function RenewalRequestPage() {
     goNextFromMessage,
     goBack,
     submitRequest,
-    advanceDemoStatus,
     startOver,
   } = useLeaseRenewal();
 
@@ -193,7 +190,6 @@ export function RenewalRequestPage() {
         <StatusTracker
           context={context}
           request={request}
-          onAdvanceDemo={advanceDemoStatus}
           onStartOver={
             canStartNewRenewalRequest(request.status) ? startOver : undefined
           }
@@ -435,7 +431,7 @@ function SelectTermStep({
         Select preferred term
       </h2>
       <p className="mt-1 text-sm text-[var(--harbor-muted)]">
-        Choose the term you would like Harborline to consider. This is a
+        Choose the term you would like CPMC to consider. This is a
         preference only until an offer is issued and signed.
       </p>
 
@@ -546,7 +542,7 @@ function MessageStep({
         Optional notes for management (timing, questions, or special requests).
       </p>
       <label className="label mt-4" htmlFor={messageId}>
-        <span className="label-text font-medium">Message to Harborline</span>
+        <span className="label-text font-medium">Message to CPMC</span>
       </label>
       <textarea
         id={messageId}
@@ -653,7 +649,7 @@ function ReviewStep({
       </dl>
 
       <div className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-3 py-3 text-sm">
-        By submitting, you ask Harborline to review a renewal. You are not
+        By submitting, you ask CPMC to review a renewal. You are not
         signing a new lease yet.
       </div>
 
@@ -693,12 +689,10 @@ function ReviewStep({
 function StatusTracker({
   context,
   request,
-  onAdvanceDemo,
   onStartOver,
 }: {
   context: RenewalContext;
   request: RenewalRequestRecord;
-  onAdvanceDemo: () => void;
   onStartOver?: () => void;
 }) {
   return (
@@ -752,8 +746,8 @@ function StatusTracker({
 
         <div className="mt-4 rounded-xl border border-warning/30 bg-warning/10 px-3 py-3 text-sm">
           Status updates track your request only. Even when an offer is
-          available or marked accepted in this demo, a signed renewal is still
-          required to finalize.
+          available or marked accepted, a signed renewal is still required to
+          finalize.
         </div>
       </section>
 
@@ -823,25 +817,6 @@ function StatusTracker({
       </section>
 
       <div className="flex flex-wrap gap-2">
-        {isRenewalInProgress(request.status) ? (
-          <button
-            type="button"
-            className="btn btn-outline btn-sm min-h-11"
-            onClick={onAdvanceDemo}
-          >
-            Advance demo status
-          </button>
-        ) : null}
-        {request.status === "Offer Available" ? (
-          <button
-            type="button"
-            className="btn btn-neutral btn-sm min-h-11 gap-1"
-            onClick={onAdvanceDemo}
-          >
-            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            Mark offer accepted (demo)
-          </button>
-        ) : null}
         {onStartOver ? (
           <button
             type="button"

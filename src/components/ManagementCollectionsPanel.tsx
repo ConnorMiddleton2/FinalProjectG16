@@ -140,10 +140,14 @@ export function ManagementCollectionsPanel() {
     <section className="space-y-4">
       <div>
         <h2 className="font-display text-2xl text-[var(--harbor-ink)]">
-          Collections — 90-day management review
+          Collections — 60-day management review
         </h2>
+        <p className="mt-1 text-sm text-[var(--harbor-ink)]/65">
+          Accounts at 60+ days unpaid are handed to management automatically.
+          Review status, notices, and next steps live here.
+        </p>
         <p className="mt-1 max-w-3xl text-sm text-[var(--harbor-ink)]/70">
-          Internal alerts only when qualifying unpaid base rent reaches 90 days
+          Internal alerts when qualifying unpaid base rent reaches 60 days
           overdue. This does not authorize eviction, terminate a lease, or file
           legal action.
         </p>
@@ -162,7 +166,7 @@ export function ManagementCollectionsPanel() {
         </p>
       ) : openAlerts.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/70 px-6 py-10 text-center text-sm text-[var(--harbor-ink)]/65">
-          No open 90-day management-review alerts.
+          No open 60-day management-review alerts.
         </div>
       ) : (
         <ul className="space-y-4">

@@ -63,7 +63,6 @@ export function MessagesPage() {
     actionMessage,
     unreadTotal,
     reload,
-    loadDemoData,
     selectConversation,
     startCompose,
     cancelCompose,
@@ -115,23 +114,14 @@ export function MessagesPage() {
                 {state.message}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn btn-neutral btn-sm min-h-11 gap-1"
-                onClick={reload}
-              >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                Try again
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm min-h-11"
-                onClick={loadDemoData}
-              >
-                Use demo data
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm min-h-11 gap-1"
+              onClick={reload}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Try again
+            </button>
           </div>
         </div>
       </div>
@@ -198,11 +188,7 @@ export function MessagesPage() {
         className="rounded-xl border border-success/20 bg-success/5 px-4 py-3 text-sm text-[var(--harbor-ink)]/80"
         role="status"
       >
-        Secure messaging with Harborline management
-        {state.status === "success" && state.source === "mock"
-          ? " (demo inbox)"
-          : ""}
-        . This is an async message center — not live chat.
+        Secure messaging with CPMC management. This is an async message center — not live chat.
       </div>
 
       {actionMessage ? (
@@ -263,7 +249,7 @@ export function MessagesPage() {
               <p className="mt-1 max-w-xl text-sm text-[var(--harbor-muted)]">
                 {state.status === "empty"
                   ? state.message
-                  : "Start a conversation with Harborline management."}
+                  : "Start a conversation with CPMC management."}
               </p>
             </div>
           </div>
@@ -709,7 +695,7 @@ function NewMessageForm({
             New message
           </h2>
           <p className="mt-1 text-sm text-[var(--harbor-muted)]">
-            Send a secure message to Harborline management. Replies appear in
+            Send a secure message to CPMC management. Replies appear in
             this inbox (not live chat).
           </p>
         </div>
@@ -836,7 +822,7 @@ function NewMessageForm({
             required
             maxLength={MESSAGE_BODY_MAX}
             disabled={sending}
-            placeholder="How can Harborline help?"
+            placeholder="How can CPMC help?"
             aria-invalid={errors.body ? true : undefined}
             aria-describedby={errors.body ? bodyErrorId : undefined}
           />

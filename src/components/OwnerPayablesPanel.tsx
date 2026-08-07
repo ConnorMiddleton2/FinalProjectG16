@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  Check,
   Eye,
   FileText,
   Plus,
@@ -19,17 +20,37 @@ import {
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
 import {
-  rentCollectedFromReceivables,
+  operationalRentCollected,
   seedRentalReceivables,
   type Receivable,
 } from "@/lib/accounts-receivable";
-import type { ManagementContractDraft } from "@/lib/management-contract";
+import {
+  operatingExpensesForProperty,
+  seedPayableInvoices,
+  type PayableInvoice,
+} from "@/lib/accounts-payable";
+import type {
+  ManagementContractDraft,
+  SharedPropertyTenant,
+} from "@/lib/management-contract";
+import {
+  seedBankAccounts,
+  seedBankTransactions,
+  type BankAccount,
+  type BankTransaction,
+} from "@/lib/bank-accounts-shared";
+import {
+  payOwnerRemittanceAction,
+  provisionBankAccountsAction,
+} from "@/app/ops/banks/actions";
 import {
   applyLiveRentToRemittance,
   balanceOf,
+  buildMonthlyOwnerRemittance,
   computeNetDue,
   daysLate,
   emptyOwnerPayableForm,
+  findMonthlyOwnerRemittance,
   isOverdue,
   money,
   ownerPayableStatusLabel,
@@ -51,6 +72,7 @@ import {
   type OwnerPaymentMethod,
   type OwnerPaymentType,
 } from "@/lib/owner-payables";
+import { monthSlug } from "@/lib/seed-dates";
 
 const STATUS_BADGE: Record<OwnerPayableStatus, string> = {
   unpaid: "badge-warning",
@@ -78,8 +100,48 @@ export function OwnerPayablesPanel() {
     COLLECTIONS.rentalReceivables,
     seedRentalReceivables
   );
+  const { items: operatingExpenseInvoices } =
+    useSharedCollection<PayableInvoice>(
+      COLLECTIONS.payableInvoices,
+      seedPayableInvoices
+    );
+  const {
+    items: bankAccounts,
+    refresh: refreshBanks,
+  } = useSharedCollection<BankAccount>(
+    COLLECTIONS.bankAccounts,
+    seedBankAccounts
+  );
+  const { items: bankTxns, refresh: refreshBankTxns } =
+    useSharedCollection<BankTransaction>(
+      COLLECTIONS.bankTransactions,
+      seedBankTransactions
+    );
   const { items: managedProperties } =
     useSharedCollection<ManagementContractDraft>(COLLECTIONS.managedProperties);
+  const { items: propertyTenants } =
+    useSharedCollection<SharedPropertyTenant>(COLLECTIONS.propertyTenants);
+
+  useEffect(() => {
+    void (async () => {
+      await provisionBankAccountsAction();
+      await refreshBanks();
+      await refreshBankTxns();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function bankForProperty(propertyName: string, propertyId?: string) {
+    const nameKey = propertyName.trim().toLowerCase();
+    return (
+      bankAccounts.find(
+        (a) =>
+          a.kind === "property" &&
+          ((propertyId && a.propertyId === propertyId) ||
+            (a.propertyName || "").trim().toLowerCase() === nameKey)
+      ) ?? null
+    );
+  }
 
   const payables = useMemo(
     () => items.map((row) => normalizeOwnerPayable(row)),
@@ -93,6 +155,30 @@ export function OwnerPayablesPanel() {
         .join("|"),
     [rentalReceivables]
   );
+  const opexFingerprint = useMemo(
+    () =>
+      operatingExpenseInvoices
+        .map(
+          (i) =>
+            `${i.id}:${i.property}:${i.amount}:${i.amountPaid}:${i.invoiceDate}:${i.disputed}`
+        )
+        .join("|"),
+    [operatingExpenseInvoices]
+  );
+  const bankFingerprint = useMemo(
+    () =>
+      bankAccounts
+        .map(
+          (a) =>
+            `${a.id}:${a.propertyId}:${a.propertyName}:${a.balance}:${a.reservedBalance}`
+        )
+        .join("|") +
+      "|" +
+      bankTxns
+        .map((t) => `${t.id}:${t.kind}:${t.amount}:${t.period}:${t.propertyName}`)
+        .join("|"),
+    [bankAccounts, bankTxns]
+  );
   const feeFingerprint = useMemo(
     () =>
       managedProperties
@@ -104,25 +190,60 @@ export function OwnerPayablesPanel() {
     [managedProperties]
   );
 
-  // Keep unpaid monthly remittances aligned with live A/R + contract fee %.
+  // Create missing monthly remittances for managed properties, then keep
+  // unpaid rows aligned with live A/R + contract fee %.
   useEffect(() => {
-    if (loading || arLoading || items.length === 0) return;
+    if (loading || arLoading) return;
 
     let cancelled = false;
     async function syncFromLiveAr() {
+      const period = monthSlug(0);
+      const normalized = items.map((row) => normalizeOwnerPayable(row));
+
+      for (const property of managedProperties) {
+        if (!property.propertyName?.trim()) continue;
+        const existing = findMonthlyOwnerRemittance(
+          normalized,
+          property.propertyName,
+          period
+        );
+        if (existing) continue;
+        if (cancelled) return;
+        const bank = bankForProperty(property.propertyName, property.id);
+        const created = buildMonthlyOwnerRemittance({
+          property,
+          receivables: rentalReceivables,
+          propertyTenants,
+          operatingExpenses: operatingExpenseInvoices,
+          bankAccount: bank,
+          bankTxns,
+          monthsAgo: 0,
+        });
+        // Skip empty $0 remittances with no rent collected yet — still create
+        // when there is rent so properties like Willow Court appear on the ledger.
+        if (created.grossRentCollected <= 0 && created.amount <= 0) continue;
+        await saveOne(created);
+      }
+
       for (const raw of items) {
         const row = normalizeOwnerPayable(raw);
         if (row.paymentType !== "monthly_distribution") continue;
         if (row.amountPaid > 0) continue;
+        const bank = bankForProperty(row.property);
         const next = applyLiveRentToRemittance(
           row,
           rentalReceivables,
-          managedProperties
+          managedProperties,
+          operatingExpenseInvoices,
+          bank,
+          bankTxns,
+          propertyTenants
         );
         if (
           next.grossRentCollected === row.grossRentCollected &&
           next.managementFeePercent === row.managementFeePercent &&
           next.managementFeeAmount === row.managementFeeAmount &&
+          next.reimbursableExpenses === row.reimbursableExpenses &&
           next.amount === row.amount
         ) {
           continue;
@@ -139,10 +260,16 @@ export function OwnerPayablesPanel() {
     loading,
     arLoading,
     arFingerprint,
+    opexFingerprint,
+    bankFingerprint,
     feeFingerprint,
     items,
     rentalReceivables,
+    operatingExpenseInvoices,
+    bankAccounts,
+    bankTxns,
     managedProperties,
+    propertyTenants,
     saveOne,
   ]);
 
@@ -281,24 +408,31 @@ export function OwnerPayablesPanel() {
     setShowAddForm(true);
   }
 
-  // Prefill collected rent from live A/R when property + period are set.
+  // Prefill collected rent + operating expenses from live ledgers.
   useEffect(() => {
     if (!showAddForm || form.paymentType !== "monthly_distribution") return;
     const property = form.property.trim();
     const period = form.period.trim();
     if (!property || !period) return;
-    const collected = rentCollectedFromReceivables(
+    const collected = operationalRentCollected(
       rentalReceivables,
+      property,
+      period,
+      propertyTenants
+    );
+    const fee = resolveManagementFee(property, collected, managedProperties);
+    const expenses = operatingExpensesForProperty(
+      operatingExpenseInvoices,
       property,
       period
     );
-    const fee = resolveManagementFee(property, collected, managedProperties);
     setForm((prev) => ({
       ...prev,
       grossRentCollected: String(collected),
       managementFeePercent: String(fee.percent),
+      reimbursableExpenses: String(expenses),
     }));
-    // Only when property/period (or AR/contracts) change — not on every gross edit.
+    // Only when property/period (or AR/OpEx/contracts) change — not on every edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional deps
   }, [
     showAddForm,
@@ -306,6 +440,8 @@ export function OwnerPayablesPanel() {
     form.period,
     form.paymentType,
     rentalReceivables,
+    propertyTenants,
+    operatingExpenseInvoices,
     managedProperties,
   ]);
 
@@ -329,7 +465,13 @@ export function OwnerPayablesPanel() {
     const grossRentCollected =
       parseNonNegativeAmount(form.grossRentCollected) ?? 0;
     const reimbursableExpenses =
-      parseNonNegativeAmount(form.reimbursableExpenses) ?? 0;
+      form.paymentType === "monthly_distribution"
+        ? operatingExpensesForProperty(
+            operatingExpenseInvoices,
+            property,
+            period
+          )
+        : parseNonNegativeAmount(form.reimbursableExpenses) ?? 0;
     const reservesWithheld =
       parseNonNegativeAmount(form.reservesWithheld) ?? 0;
     const fee = resolveManagementFee(
@@ -351,7 +493,7 @@ export function OwnerPayablesPanel() {
     if (amount === null || amount <= 0) {
       setFormError(
         form.paymentType === "monthly_distribution"
-          ? `The rental income must exceed the ${fee.percent}% management fee, reimbursable expenses, and reserves withheld.`
+          ? `The rental income must exceed the ${fee.percent}% management fee, operating expenses, and reserves withheld.`
           : "Amount owed must be a positive dollar amount."
       );
       return;
@@ -460,15 +602,56 @@ export function OwnerPayablesPanel() {
     }
 
     setFormError(null);
-    await saveOne({
-      ...row,
-      amountPaid: round2(row.amountPaid + amount),
-    });
-    setPaymentAmount("");
-    setSavedMsg(
-      `Recorded a ${money(amount)} owner payment on ${row.paymentId}.`
-    );
-    setTimeout(() => setSavedMsg(null), 4000);
+    try {
+      const result = await payOwnerRemittanceAction({
+        payableId: row.id,
+        amount,
+      });
+      if ("error" in result) {
+        setFormError(result.error ?? "Could not pay owner remittance.");
+        return;
+      }
+      await saveOne(result.payable);
+      await refreshBanks();
+      await refreshBankTxns();
+      setPaymentAmount("");
+      const feeNote =
+        result.feeSwept && result.feeSwept > 0
+          ? ` Management fee ${money(result.feeSwept)} moved to CPMC corporate.`
+          : "";
+      setSavedMsg(
+        `Paid ${money(amount)} to ${row.ownerName} from ${row.property} operating bank.${feeNote} Property balance now ${money(result.bankBalance)}. Visible on the owner portal as a received distribution.`
+      );
+      setTimeout(() => setSavedMsg(null), 6000);
+    } catch (err) {
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : "Could not pay owner remittance from bank."
+      );
+    }
+  }
+
+  async function setStatementApproval(row: OwnerPayable, approved: boolean) {
+    setFormError(null);
+    try {
+      await saveOne({
+        ...normalizeOwnerPayable(row),
+        statementApproved: approved,
+      });
+      setSavedMsg(
+        approved
+          ? `Statement approved for ${row.paymentId} · ${row.ownerName}. Payment recording is unlocked.`
+          : `Statement approval cleared for ${row.paymentId}. Payment recording is blocked until approved again.`
+      );
+      setTimeout(() => setSavedMsg(null), 4000);
+    } catch (err) {
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : "Could not update statement approval."
+      );
+    }
   }
 
   return (
@@ -502,9 +685,10 @@ export function OwnerPayablesPanel() {
                 to date
               </p>
               <p className="mt-1 text-xs text-[var(--harbor-ink)]/50">
-                Monthly distributions equal rental income collected (from A/R),
-                less Harborline&apos;s contract management fee, reimbursable
-                property expenses, and reserves withheld.
+                Monthly distributions follow property bank cash flow: rent
+                collected into the operating account, less CPMC&apos;s
+                management fee, operating expenses paid from that account, and
+                reserves — capped to available bank cash.
               </p>
             </div>
 
@@ -562,7 +746,7 @@ export function OwnerPayablesPanel() {
                 {money(totals.awaitingApproval)}
               </p>
               <p className="text-xs text-[var(--harbor-ink)]/60">
-                Control: do not pay until approved
+                A/P reviews and approves each remittance statement before pay
               </p>
             </div>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
@@ -573,7 +757,7 @@ export function OwnerPayablesPanel() {
                 {money(totals.managementFeeIncome)}
               </p>
               <p className="text-xs text-emerald-900/70">
-                Harborline&apos;s 10% of rental income
+                CPMC&apos;s 10% of rental income
               </p>
             </div>
           </div>
@@ -687,13 +871,36 @@ export function OwnerPayablesPanel() {
                       </td>
                       <td className="text-sm">
                         {row.statementApproved ? (
-                          <span className="badge badge-success badge-sm">
-                            Yes
-                          </span>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="badge badge-success badge-sm">
+                              Approved
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs text-[var(--harbor-muted)]"
+                              onClick={() =>
+                                void setStatementApproval(row, false)
+                              }
+                            >
+                              Clear
+                            </button>
+                          </div>
                         ) : (
-                          <span className="badge badge-warning badge-sm">
-                            No
-                          </span>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="badge badge-warning badge-sm">
+                              Needs approval
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-neutral btn-xs gap-1"
+                              onClick={() =>
+                                void setStatementApproval(row, true)
+                              }
+                            >
+                              <Check className="h-3 w-3" />
+                              Approve
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -845,13 +1052,13 @@ export function OwnerPayablesPanel() {
                 Owner remittance waterfall
               </p>
               <p className="mt-1 text-xs opacity-60">
-                Harborline earns {formFee.percent}% of rental income
+                CPMC earns {formFee.percent}% of rental income
                 {formFee.source === "contract"
                   ? " (from the signed management contract)"
                   : " (portfolio default — no matching contract found)"}
                 . Collected rent prefills from Accounts Receivable for the
                 property and period. The owner receives the remaining amount
-                after reimbursable property expenses and reserves withheld.
+                after operating expenses for the property and reserves withheld.
               </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <label className="form-control w-full">
@@ -867,7 +1074,7 @@ export function OwnerPayablesPanel() {
                 </label>
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 px-4 py-3">
                   <span className="mb-1 text-sm opacity-70">
-                    Harborline management fee ({formFee.percent}%)
+                    CPMC management fee ({formFee.percent}%)
                   </span>
                   <p className="text-xl font-semibold tabular-nums text-emerald-800">
                     {money(formFee.amount)}
@@ -877,17 +1084,18 @@ export function OwnerPayablesPanel() {
                     edited here.
                   </span>
                 </div>
-                <label className="form-control w-full">
-                  <span className="mb-1 text-sm opacity-70">
-                    Reimbursable property expenses
+                <div className="rounded-lg border border-[var(--harbor-deep)]/15 bg-white px-4 py-3">
+                  <span className="mb-1 text-sm opacity-70">Expense</span>
+                  <p className="text-xl font-semibold tabular-nums">
+                    {money(
+                      parseNonNegativeAmount(form.reimbursableExpenses) ?? 0
+                    )}
+                  </p>
+                  <span className="text-xs opacity-55">
+                    Pulled from operating expenses paid for this property in the
+                    selected period (cash that leaves the property bank).
                   </span>
-                  <CurrencyInput
-                    value={form.reimbursableExpenses}
-                    onChange={(v) => updateForm("reimbursableExpenses", v)}
-                    placeholder="0.00"
-                    allowZero
-                  />
-                </label>
+                </div>
                 <label className="form-control w-full">
                   <span className="mb-1 text-sm opacity-70">
                     Reserves withheld
@@ -1141,14 +1349,14 @@ export function OwnerPayablesPanel() {
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="opacity-60">
-                      Harborline management fee ({viewing.managementFeePercent}%)
+                      CPMC management fee ({viewing.managementFeePercent}%)
                     </dt>
                     <dd className="tabular-nums text-red-700">
                       −{money(viewing.managementFeeAmount)}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="opacity-60">Reimbursable expenses</dt>
+                    <dt className="opacity-60">Expense</dt>
                     <dd className="tabular-nums text-red-700">
                       −{money(viewing.reimbursableExpenses)}
                     </dd>
@@ -1167,11 +1375,12 @@ export function OwnerPayablesPanel() {
                   </div>
                 </dl>
                 <p className="mt-2 text-xs opacity-55">
-                  Harborline&apos;s income is the {viewing.managementFeePercent}%
+                  CPMC&apos;s income is the {viewing.managementFeePercent}%
                   management fee from the signed contract (or portfolio
                   default). Expenses and reserves reduce the owner distribution
-                  but are not additional Harborline income. Unpaid monthly
-                  remittances refresh automatically when A/R collections change.
+                  but are not additional CPMC income. Unpaid monthly
+                  remittances refresh automatically when A/R collections or
+                  operating expenses change.
                 </p>
                 {viewing.paymentType === "monthly_distribution" &&
                 viewing.amountPaid === 0 ? (
@@ -1182,16 +1391,20 @@ export function OwnerPayablesPanel() {
                       const next = applyLiveRentToRemittance(
                         viewing,
                         rentalReceivables,
-                        managedProperties
+                        managedProperties,
+                        operatingExpenseInvoices,
+                        bankForProperty(viewing.property),
+                        bankTxns,
+                        propertyTenants
                       );
                       await saveOne(next);
                       setSavedMsg(
-                        "Remittance refreshed from A/R collections and management contract."
+                        "Remittance refreshed from rent, paid OpEx, and property bank cash."
                       );
                       setTimeout(() => setSavedMsg(null), 3500);
                     }}
                   >
-                    Refresh from A/R collections
+                    Refresh from bank &amp; ledgers
                   </button>
                 ) : null}
               </div>
@@ -1227,6 +1440,42 @@ export function OwnerPayablesPanel() {
                   label="Statement approved"
                   value={viewing.statementApproved ? "Yes" : "No"}
                 />
+                <div className="rounded-xl border border-[var(--harbor-border)] bg-[var(--harbor-sand)] px-4 py-3">
+                  <p className="text-sm font-semibold text-[var(--harbor-text)]">
+                    Statement approval
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--harbor-muted)]">
+                    Accounts Payable reviews the owner remittance statement,
+                    then approves it before recording payment.
+                  </p>
+                  {formError ? (
+                    <p className="mt-2 text-xs text-red-700">{formError}</p>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {!viewing.statementApproved ? (
+                      <button
+                        type="button"
+                        className="btn btn-neutral btn-sm gap-1"
+                        onClick={() =>
+                          void setStatementApproval(viewing, true)
+                        }
+                      >
+                        <Check className="h-4 w-4" />
+                        Approve statement
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() =>
+                          void setStatementApproval(viewing, false)
+                        }
+                      >
+                        Clear approval
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <DetailRow
                   label="Attachment"
                   value={viewing.fileName || "None attached"}
@@ -1251,7 +1500,8 @@ export function OwnerPayablesPanel() {
                   ) : null}
                   {!viewing.statementApproved ? (
                     <p className="mt-2 text-xs text-amber-800">
-                      Statement is not approved yet — payment recording is blocked.
+                      Statement is not approved yet — use Approve statement
+                      above, then record payment.
                     </p>
                   ) : null}
                   {viewing.onHold ? (
@@ -1269,6 +1519,7 @@ export function OwnerPayablesPanel() {
                       type="button"
                       className="btn btn-neutral btn-sm whitespace-nowrap"
                       onClick={() => void applyPayment(viewing)}
+                      disabled={!viewing.statementApproved || viewing.onHold}
                     >
                       Apply
                     </button>

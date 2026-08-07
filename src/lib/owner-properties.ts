@@ -42,7 +42,7 @@ function mapCategoryToPropertyType(category: string): PropertyType {
   return "other";
 }
 
-/** Properties linked to this owner by account id or email (case-insensitive). */
+/** Properties linked to this owner by account id, or by email after they signed. */
 export async function getPropertiesForOwner(
   owner: OwnerAccount
 ): Promise<ManagementContractDraft[]> {
@@ -53,11 +53,15 @@ export async function getPropertiesForOwner(
   );
   const email = owner.email.toLowerCase();
   return all.filter((p) => {
+    const signed = Boolean(p.ownerSignedAt);
     const byId =
-      Boolean(p.ownerAccountId) && p.ownerAccountId === owner.id;
+      Boolean(p.ownerAccountId) && p.ownerAccountId === owner.id && signed;
+    if (byId) return true;
     const byEmail =
-      Boolean(p.ownerEmail) && p.ownerEmail.trim().toLowerCase() === email;
-    return byId || byEmail;
+      Boolean(p.ownerEmail) &&
+      p.ownerEmail.trim().toLowerCase() === email &&
+      signed;
+    return byEmail;
   });
 }
 
@@ -333,6 +337,8 @@ export async function ensureDemoOwnerProperty(owner: OwnerAccount) {
     assignedManager: "Alex Rivera",
     camOrNnnStructure: "NNN",
     notes: "Demo property linked to Bob Owner seed account.",
+    ownerSignedAt: "2025-01-15T12:00:00.000Z",
+    ownerSignatureName: owner.fullName,
   });
 
   if (existing.length === 0) {
@@ -342,34 +348,69 @@ export async function ensureDemoOwnerProperty(owner: OwnerAccount) {
       demoId,
       demoDraft(emptyManagementContract()) as unknown as Record<string, unknown>
     );
-    return;
+  } else {
+    // Migrate legacy CPMC Commons demo row so AR seed property names match.
+    const legacy = existing.find(
+      (p) =>
+        p.id === demoId ||
+        p.propertyName.trim().toLowerCase() === "cpmc commons"
+    );
+    if (
+      legacy &&
+      legacy.propertyName.trim().toLowerCase() !== "riverbend commerce center"
+    ) {
+      const updated: ManagementContractDraft = {
+        ...legacy,
+        propertyName: "Riverbend Commerce Center",
+        streetAddress: legacy.streetAddress || "400 Riverbend Pkwy",
+        monthlyRentRoll: legacy.monthlyRentRoll || "19370",
+        feeStructure: legacy.feeStructure || "percent_collections",
+        feePercent: legacy.feePercent || "4",
+        ownerAccountId: owner.id,
+        ownerEmail: owner.email,
+        ownerSignedAt: legacy.ownerSignedAt || "2025-01-15T12:00:00.000Z",
+      };
+      await upsertSharedRecord(
+        client,
+        COLLECTIONS.managedProperties,
+        updated.id,
+        updated as unknown as Record<string, unknown>
+      );
+    }
   }
 
-  // Migrate legacy Harborline Commons demo row so AR seed property names match.
-  const legacy = existing.find(
-    (p) =>
-      p.id === demoId ||
-      p.propertyName.trim().toLowerCase() === "harborline commons"
+  const { onboardExistingTenantsFromApplication } = await import(
+    "@/lib/unit-rent-pipeline"
   );
-  if (
-    legacy &&
-    legacy.propertyName.trim().toLowerCase() !== "riverbend commerce center"
-  ) {
-    const updated: ManagementContractDraft = {
-      ...legacy,
-      propertyName: "Riverbend Commerce Center",
-      streetAddress: legacy.streetAddress || "400 Riverbend Pkwy",
-      monthlyRentRoll: legacy.monthlyRentRoll || "19370",
-      feeStructure: legacy.feeStructure || "percent_collections",
-      feePercent: legacy.feePercent || "4",
-      ownerAccountId: owner.id,
-      ownerEmail: owner.email,
-    };
-    await upsertSharedRecord(
-      client,
-      COLLECTIONS.managedProperties,
-      updated.id,
-      updated as unknown as Record<string, unknown>
-    );
-  }
+  const { emptyOwnerApplicationProperty } = await import(
+    "@/lib/owner-application-intake"
+  );
+  const prop = {
+    ...emptyOwnerApplicationProperty(),
+    propertyName: "Riverbend Commerce Center",
+    streetAddress: "400 Riverbend Pkwy",
+    city: "Oxford",
+    state: "MS",
+    zip: "38655",
+    category: "mixed-use",
+    unitsSuites: "24",
+    rentableSf: "48000",
+    squareFeet: "48000",
+    occupancyPercent: "92",
+    tenantCount: "18",
+    monthlyRentRoll: "19370",
+  };
+  await onboardExistingTenantsFromApplication({
+    application: {
+      id: "demo-bob-owner-app",
+      email: owner.email,
+      fullName: owner.fullName,
+      companyName: "Bob Owner Holdings LLC",
+      phone: "",
+      status: "approved",
+      createdAt: "2025-01-15T12:00:00.000Z",
+      properties: [prop],
+    } as import("@/lib/owner-auth").OwnerApplication,
+    propertyIds: [demoId],
+  });
 }

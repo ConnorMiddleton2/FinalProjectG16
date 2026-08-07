@@ -21,7 +21,7 @@ function Sub({ children }: { children: React.ReactNode }) {
 
 export default function TasksPage() {
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
+    <div className="min-h-screen bg-[var(--harbor-sand)]">
       <main className="mx-auto max-w-3xl px-6 py-10 space-y-6">
         <Link
           href="/"

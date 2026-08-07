@@ -148,7 +148,7 @@ export default async function OwnerPropertyDetailPage({
             <OwnerEmptyState
               icon={Users}
               title="No tenant roster yet"
-              description="Tenants linked to this property will appear here once Harborline adds them."
+              description="Tenants linked to this property will appear here once CPMC adds them."
             />
           ) : (
             <div className="owner-card overflow-x-auto">
@@ -195,7 +195,7 @@ export default async function OwnerPropertyDetailPage({
             <OwnerEmptyState
               icon={Wrench}
               title="No work orders matched"
-              description="Maintenance activity for this property will show here when Harborline logs work orders against it."
+              description="Maintenance activity for this property will show here when CPMC logs work orders against it."
             />
           ) : (
             <ul className="owner-stagger space-y-3">

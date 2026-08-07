@@ -14,10 +14,6 @@ import {
   resolveTenantScopeId,
   type PortalTenantSession,
 } from "@/lib/portal/auth";
-import {
-  getPortalDemoSessionFromCookie,
-  hasPortalDemoAccess,
-} from "@/lib/portal/portal-demo-auth-server";
 import { getTenantPortalSession } from "@/lib/tenant-portal-accounts";
 import { portalSessionFromTenantAccount } from "@/lib/portal/tenant-account-session";
 import type { UserRole } from "@/lib/types";
@@ -29,8 +25,7 @@ export async function getCurrentPortalTenant(): Promise<PortalTenantSession | nu
   const account = await getTenantPortalSession();
   if (account) return portalSessionFromTenantAccount(account);
 
-  const demo = await getPortalDemoSessionFromCookie();
-  if (demo) return demo;
+  // Portal demo cookie login is disabled — real tenant_accounts / Supabase only.
 
   try {
     const supabase = await createClient();
@@ -50,7 +45,7 @@ export async function getCurrentPortalTenant(): Promise<PortalTenantSession | nu
       return null;
     }
 
-    const email = user.email ?? "tenant@harborline.local";
+    const email = user.email ?? "tenant@cpmc.local";
     const displayName =
       (profile as { full_name?: string | null } | null)?.full_name?.trim() ||
       email.split("@")[0] ||
@@ -71,18 +66,13 @@ export async function getCurrentPortalTenant(): Promise<PortalTenantSession | nu
 
 /**
  * Layout/page guard for private `/portal` routes.
- * Accepts: tenant_accounts cookie, demo cookie, or Supabase tenant role.
+ * Accepts: tenant_accounts cookie or Supabase tenant role.
  */
 export async function requirePortalTenant(
   nextPath: string = PORTAL_HOME_PATH
 ): Promise<PortalTenantSession> {
   const account = await getTenantPortalSession();
   if (account) return portalSessionFromTenantAccount(account);
-
-  if (await hasPortalDemoAccess()) {
-    const demo = await getPortalDemoSessionFromCookie();
-    if (demo) return demo;
-  }
 
   try {
     const supabase = await createClient();
@@ -105,7 +95,7 @@ export async function requirePortalTenant(
       redirect(PORTAL_UNAUTHORIZED_PATH);
     }
 
-    const email = user.email ?? "tenant@harborline.local";
+    const email = user.email ?? "tenant@cpmc.local";
     const displayName =
       (profile as { full_name?: string | null } | null)?.full_name?.trim() ||
       email.split("@")[0] ||
@@ -122,10 +112,6 @@ export async function requirePortalTenant(
   } catch {
     const accountRetry = await getTenantPortalSession();
     if (accountRetry) return portalSessionFromTenantAccount(accountRetry);
-    if (await hasPortalDemoAccess()) {
-      const demo = await getPortalDemoSessionFromCookie();
-      if (demo) return demo;
-    }
     redirect(portalLoginRedirect(nextPath));
   }
 }

@@ -16,8 +16,8 @@ import type { TenantRecord } from "@/lib/tenants";
 
 /**
  * Idempotent app-load catch-up for /ops/tenant and /ops/management.
- * Creates missing weekly + day-90 notices, refreshes safe template content,
- * and maintains 90-day alerts.
+ * Creates missing weekly + day-60 notices, refreshes safe template content,
+ * maintains management alerts, and mirrors notices to the tenant portal inbox.
  */
 export function useCollectionsCatchUpSync(input: {
   tenants: TenantRecord[];
@@ -105,6 +105,7 @@ export function useCollectionsCatchUpSync(input: {
           tenantName: draft.tenantName,
           property: draft.property,
           unit: draft.unit,
+          alertType: draft.alertType,
           collectionsStatusLabel: EVICTION_REVIEW_STATUS_LABEL,
         });
       }
@@ -126,12 +127,14 @@ export function useCollectionsCatchUpSync(input: {
     syncing.current = true;
     void (async () => {
       try {
+        const savedNotices: CollectionsNotice[] = [];
         for (const notice of missingNotices) {
           const collision = notices.some(
             (n) => n.uniqueKey === notice.uniqueKey || n.id === notice.id
           );
           if (collision) continue;
           await saveNotice(notice);
+          savedNotices.push(notice);
         }
         for (const notice of templateUpdates) {
           await saveNotice(notice);
@@ -144,6 +147,12 @@ export function useCollectionsCatchUpSync(input: {
         }
         if (changedAlerts.length > 0) {
           await refreshAlerts();
+        }
+        if (savedNotices.length > 0) {
+          const { syncDelinquencyPortalMessagesAction } = await import(
+            "@/app/ops/tenant/collections-actions"
+          );
+          await syncDelinquencyPortalMessagesAction(savedNotices);
         }
       } finally {
         syncing.current = false;

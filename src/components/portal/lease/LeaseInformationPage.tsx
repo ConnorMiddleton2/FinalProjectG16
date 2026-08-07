@@ -27,7 +27,7 @@ import {
 } from "@/lib/portal/occupancy";
 
 export function LeaseInformationPage() {
-  const { state, reload, loadDemoData } = useLeaseInformation();
+  const { state, reload } = useLeaseInformation();
   const [showFullLease, setShowFullLease] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
@@ -85,23 +85,14 @@ export function LeaseInformationPage() {
                 {state.message}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn btn-neutral btn-sm gap-1"
-                onClick={() => void reload()}
-              >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                Try again
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={loadDemoData}
-              >
-                Use demo data
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm gap-1"
+              onClick={() => void reload()}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Try again
+            </button>
           </div>
         </div>
       </div>
@@ -130,13 +121,6 @@ export function LeaseInformationPage() {
             <Mail className="h-4 w-4" aria-hidden="true" />
             Contact Management
           </Link>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={loadDemoData}
-          >
-            Preview with demo data
-          </button>
         </div>
       </div>
     );
@@ -150,8 +134,7 @@ export function LeaseInformationPage() {
         className="rounded-xl border border-success/20 bg-success/5 px-4 py-3 text-sm text-[var(--harbor-ink)]/80"
         role="status"
       >
-        Lease information loaded
-        {state.source === "mock" ? " (demo data)" : ""}. Tenant-facing details
+        Lease information loaded. Tenant-facing details
         only — private management notes are not shown.
       </div>
 

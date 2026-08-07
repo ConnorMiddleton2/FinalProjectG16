@@ -52,12 +52,12 @@ export const COMPOSITION_METRICS: {
 ];
 
 export const PROPERTY_CHART_COLORS = [
-  "#1f7a8c",
-  "#134e5a",
-  "#c47b3a",
-  "#3d6b4f",
-  "#6b4f8a",
-  "#8c4a5a",
+  "#0D9488",
+  "#0F3D3E",
+  "#14B8A6",
+  "#475569",
+  "#0F766E",
+  "#64748B",
 ];
 
 export function metricValueForProperty(

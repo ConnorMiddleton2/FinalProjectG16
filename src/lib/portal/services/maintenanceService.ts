@@ -1,47 +1,104 @@
-import { getMockMaintenanceRequests } from "@/lib/portal/maintenance-mock";
-import {
-  appendTenantUpdate,
-  cancelMaintenanceRequest as cancelStored,
-  createDetailFromSubmission,
-  resolveMaintenanceDetail,
-  upsertStoredMaintenanceDetail,
-} from "@/lib/portal/maintenance-detail-store";
 import { toTenantFacingMaintenanceDetail } from "@/lib/portal/maintenance-detail-types";
 import type {
-  MaintenanceFormValues,
+  MaintenanceCategory,
+  MaintenancePriority,
   MaintenanceRequest,
   MaintenanceRequestDetail,
+  MaintenanceRequestStatus,
   MaintenanceSubmissionResult,
 } from "@/lib/portal/models";
 import {
   denyCrossTenant,
-  sessionOwnsDemoFixtures,
 } from "@/lib/portal/tenant-scope";
 import { requirePortalServiceSession } from "@/lib/portal/services/session";
 import {
   assertNotForcedError,
   DEFAULT_LOAD_DELAY_MS,
-  DEFAULT_WRITE_DELAY_MS,
   fail,
   failFromUnknown,
   ok,
   simulateLatency,
   type ServiceResult,
 } from "@/lib/portal/services/shared";
-import { validateMaintenanceForm } from "@/lib/portal/maintenance-form-validation";
+import {
+  categoryLabel,
+  type WorkOrder,
+  type WorkOrderCategory,
+  type WorkOrderPriority,
+  type WorkOrderStatus,
+} from "@/lib/maintenance";
+import {
+  portalListMyWorkOrders,
+  portalSubmitWorkOrder,
+} from "@/app/portal/maintenance-actions";
 
 /**
- * Maintenance request service.
- *
- * Tenant responses never include internal employee notes.
- *
- * BACKEND_TODO:
- *   GET    /api/tenant/maintenance
- *   GET    /api/tenant/maintenance/:id
- *   POST   /api/tenant/maintenance
- *   POST   /api/tenant/maintenance/:id/updates
- *   POST   /api/tenant/maintenance/:id/cancel
+ * Maintenance — tenant portal reads/writes the shared work_orders ledger.
  */
+
+function mapCategory(cat: WorkOrderCategory | string): MaintenanceCategory {
+  switch (cat) {
+    case "plumbing":
+      return "Plumbing";
+    case "electrical":
+      return "Electrical";
+    case "hvac":
+      return "Heating or Cooling";
+    case "appliance":
+      return "Appliance";
+    case "structural":
+      return "Structural";
+    case "security":
+      return "Lock or Security";
+    case "janitorial":
+    case "landscaping":
+      return "Common Area";
+    case "other":
+      return "Other";
+    default:
+      return "Other";
+  }
+}
+
+function mapPriority(p: WorkOrderPriority | string): MaintenancePriority {
+  switch (p) {
+    case "low":
+      return "Low";
+    case "high":
+      return "High";
+    case "emergency":
+      return "Emergency";
+    default:
+      return "Normal";
+  }
+}
+
+function mapStatus(s: WorkOrderStatus | string): MaintenanceRequestStatus {
+  switch (s) {
+    case "in_progress":
+      return "Scheduled";
+    case "completed":
+      return "Completed";
+    default:
+      return "Open";
+  }
+}
+
+function workOrderToRequest(wo: WorkOrder): MaintenanceRequest {
+  return {
+    id: wo.id,
+    requestNumber: `WO-${(wo.createdAt || "").replace(/-/g, "")}-${wo.id.slice(0, 4).toUpperCase()}`,
+    category: mapCategory(wo.category),
+    priority: mapPriority(wo.priority),
+    title: wo.title,
+    submittedOn: wo.createdAt,
+    status: mapStatus(wo.status),
+    scheduledOn: wo.status === "in_progress" ? wo.dueDate || null : null,
+    technicianName: wo.vendorName || null,
+    lastUpdate: wo.completedAt || wo.dueDate || wo.createdAt,
+    location: [wo.property, wo.unit].filter(Boolean).join(" · "),
+  };
+}
 
 export async function listMaintenanceRequests(): Promise<
   ServiceResult<MaintenanceRequest[]>
@@ -54,11 +111,11 @@ export async function listMaintenanceRequests(): Promise<
 
   try {
     await simulateLatency(DEFAULT_LOAD_DELAY_MS);
-    // BACKEND_TODO: live list for authenticated tenant only
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok([], "mock");
+    const orders = await portalListMyWorkOrders();
+    if (orders.length > 0) {
+      return ok(orders.map(workOrderToRequest), "live");
     }
-    return ok(getMockMaintenanceRequests(), "mock");
+    return ok([], "live");
   } catch (err) {
     return failFromUnknown(
       err,
@@ -79,12 +136,58 @@ export async function getMaintenanceRequest(
 
   try {
     await simulateLatency(350);
-    // BACKEND_TODO: live detail; enforce tenant ownership server-side
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return denyCrossTenant();
+    const orders = await portalListMyWorkOrders();
+    const wo = orders.find((o) => o.id === id);
+    if (wo) {
+      const req = workOrderToRequest(wo);
+      const detail: MaintenanceRequestDetail = {
+        id: req.id,
+        requestNumber: req.requestNumber,
+        status: req.status,
+        category: req.category,
+        priority: req.priority,
+        title: req.title,
+        description: wo.description,
+        propertyOrUnit: req.location,
+        locationInUnit: wo.unit,
+        submittedOn: wo.createdAt,
+        submittedAtLabel: wo.createdAt,
+        scheduledOn: req.scheduledOn,
+        appointmentWindow: null,
+        technicianName: wo.vendorName || null,
+        technicianCompany: null,
+        technicianPhone: null,
+        lastUpdate: req.lastUpdate,
+        contactName: auth.data.displayName,
+        contactPhone: "",
+        contactEmail: auth.data.email,
+        preferredContactMethod: "portal-message",
+        bestContactTime: "",
+        permissionToEnter: "",
+        petsInUnit: "",
+        safetyConcerns: "",
+        noticedOn: wo.createdAt,
+        recurringIssue: "",
+        preferredServiceDate: wo.dueDate || "",
+        preferredServiceWindow: "",
+        accessNotes: "",
+        attachments: [],
+        updates: [
+          {
+            id: `upd-${wo.id}`,
+            kind: "tenant",
+            message: `Submitted to Maintenance ledger (${categoryLabel(wo.category)}, ${wo.priority} priority).`,
+            createdAt: wo.createdAt,
+            author: "You",
+            visibility: "tenant",
+          },
+        ],
+        source: "submitted",
+      };
+      return ok(toTenantFacingMaintenanceDetail(detail), "live");
     }
-    const detail = resolveMaintenanceDetail(id);
-    return ok(detail ? toTenantFacingMaintenanceDetail(detail) : null, "mock");
+
+    return ok(null, "live");
   } catch (err) {
     return failFromUnknown(
       err,
@@ -94,9 +197,12 @@ export async function getMaintenanceRequest(
   }
 }
 
-export async function createMaintenanceRequest(
-  values: MaintenanceFormValues
-): Promise<ServiceResult<MaintenanceSubmissionResult>> {
+export async function createMaintenanceRequest(input: {
+  title: string;
+  category: WorkOrderCategory;
+  priority: WorkOrderPriority;
+  description: string;
+}): Promise<ServiceResult<MaintenanceSubmissionResult>> {
   const forced = assertNotForcedError("createMaintenanceRequest");
   if (forced) return forced;
 
@@ -104,34 +210,43 @@ export async function createMaintenanceRequest(
   if (!auth.ok) return auth;
 
   try {
-    await simulateLatency(900);
-    // BACKEND_TODO: POST multipart/form or signed upload URLs for attachments
-    const validation = validateMaintenanceForm(values);
-    if (Object.keys(validation).length > 0) {
-      return fail(
-        "Fix the highlighted fields before submitting.",
-        "validation"
-      );
+    const res = await portalSubmitWorkOrder(input);
+    if ("error" in res && res.error) {
+      return fail(res.error, "validation");
     }
-    const submittedAt = new Date().toLocaleString("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-    const requestNumber = `MR-${new Date()
-      .toISOString()
-      .slice(0, 10)
-      .replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const id = `maint-${crypto.randomUUID().slice(0, 8)}`;
+    if (!("ok" in res) || !res.ok) {
+      return fail("Could not submit your maintenance request.", "validation");
+    }
     const result: MaintenanceSubmissionResult = {
-      id,
-      requestNumber,
-      submittedAt,
-      values,
+      id: res.id,
+      requestNumber: res.requestNumber,
+      submittedAt: res.submittedAt,
+      values: {
+        propertyOrUnit: [res.order.property, res.order.unit]
+          .filter(Boolean)
+          .join(" · "),
+        category: mapCategory(res.order.category),
+        title: res.order.title,
+        description: res.order.description,
+        locationInUnit: res.order.unit,
+        priority: mapPriority(res.order.priority),
+        permissionToEnter: "",
+        preferredContactMethod: "",
+        contactName: auth.data.displayName,
+        contactPhone: "",
+        contactEmail: auth.data.email,
+        bestContactTime: "",
+        petsInUnit: "",
+        safetyConcerns: "",
+        noticedOn: res.order.createdAt,
+        recurringIssue: "",
+        preferredServiceDate: "",
+        preferredServiceWindow: "",
+        accessNotes: "",
+        attachments: [],
+      },
     };
-    upsertStoredMaintenanceDetail(
-      createDetailFromSubmission({ id, result })
-    );
-    return ok(result, "mock");
+    return ok(result, "live");
   } catch (err) {
     return failFromUnknown(
       err,
@@ -150,22 +265,7 @@ export async function addMaintenanceUpdate(
 
   const auth = await requirePortalServiceSession();
   if (!auth.ok) return auth;
-  if (!sessionOwnsDemoFixtures(auth.data)) {
-    return denyCrossTenant();
-  }
-
-  try {
-    await simulateLatency(DEFAULT_WRITE_DELAY_MS);
-    const existing = resolveMaintenanceDetail(id);
-    if (!existing) {
-      return fail("Maintenance request not found.", "not_found");
-    }
-    const updated = appendTenantUpdate(existing, message);
-    upsertStoredMaintenanceDetail(updated);
-    return ok(updated, "mock");
-  } catch (err) {
-    return failFromUnknown(err, "Could not add your update.", "network");
-  }
+  return denyCrossTenant();
 }
 
 export async function cancelMaintenanceRequest(
@@ -176,28 +276,9 @@ export async function cancelMaintenanceRequest(
 
   const auth = await requirePortalServiceSession();
   if (!auth.ok) return auth;
-  if (!sessionOwnsDemoFixtures(auth.data)) {
-    return denyCrossTenant();
-  }
-
-  try {
-    await simulateLatency(DEFAULT_LOAD_DELAY_MS);
-    const existing = resolveMaintenanceDetail(id);
-    if (!existing) {
-      return fail("Maintenance request not found.", "not_found");
-    }
-    const updated = cancelStored(existing);
-    upsertStoredMaintenanceDetail(updated);
-    return ok(updated, "mock");
-  } catch (err) {
-    return failFromUnknown(
-      err,
-      "Could not cancel this maintenance request.",
-      "network"
-    );
-  }
+  return denyCrossTenant();
 }
 
 export function getMaintenanceRequestsDemoFixture(): MaintenanceRequest[] {
-  return getMockMaintenanceRequests();
+  return [];
 }

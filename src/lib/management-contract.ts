@@ -25,6 +25,8 @@ export type PropertyTenant = {
   monthlyRent: string;
   sqft: string;
   status: "active" | "notice" | "vacant";
+  /** Occupied tenant enrolled in ACH autopay. */
+  achAutopay?: boolean;
   /** Floor plan label from FMR schedule (Studio, 1 bedroom, Office suite…). */
   floorPlan?: string;
   /** Fair-market rent from comps at publish time. */
@@ -74,7 +76,7 @@ export type ManagementContractDraft = {
   renewalOptions: string;
   terminationNoticeDays: string;
   exclusiveManagement: boolean;
-  /** Dollar amount above which Harborline must seek owner spend approval. Empty = use app default. */
+  /** Dollar amount above which CPMC must seek owner spend approval. Empty = use app default. */
   ownerApprovalThreshold: string;
 
   // Fee structure
@@ -139,6 +141,7 @@ export function emptyPropertyTenant(
     monthlyRent: "",
     sqft: "",
     status: "vacant",
+    achAutopay: false,
     floorPlan: "",
     fairMarketRent: "",
     askingRent: "",
@@ -216,7 +219,7 @@ export const emptyManagementContract = (): Omit<
 export function feeStructureLabel(value: FeeStructure) {
   switch (value) {
     case "percent_collections":
-      return "% of collections";
+      return "% of collections (fee before Expected Monthly Profit remittance)";
     case "percent_gpr":
       return "% of GPR";
     case "flat_monthly":

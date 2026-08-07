@@ -13,6 +13,8 @@ import {
   X,
 } from "lucide-react";
 import { ownerLogout } from "@/app/owners/actions";
+import { BrandLogo } from "@/components/BrandLogo";
+import { COMPANY_SHORT } from "@/lib/brand";
 
 const NAV = [
   { href: "/owners/dashboard", label: "Portfolio", match: "exact" as const },
@@ -56,13 +58,16 @@ export function OwnerPortalHeader({
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
         <Link
           href="/owners/dashboard"
-          className="min-w-0 transition hover:opacity-90"
+          className="flex min-w-0 items-center gap-2.5 transition hover:opacity-90"
           onClick={() => setOpen(false)}
         >
-          <p className="font-display text-xl leading-tight sm:text-2xl">
-            Harborline
-          </p>
-          <p className="truncate text-xs opacity-70">{subtitle}</p>
+          <BrandLogo size="sm" onDark />
+          <span className="min-w-0">
+            <p className="font-display text-xl leading-tight sm:text-2xl">
+              {COMPANY_SHORT}
+            </p>
+            <p className="truncate text-xs opacity-70">{subtitle}</p>
+          </span>
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex" aria-label="Owner">

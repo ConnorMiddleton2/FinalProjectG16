@@ -1,4 +1,4 @@
-# Final Project G16 — Harborline Property Management
+# Final Project G16 — CPMC Property Management Company
 
 ACCY 628 contract-to-cash system for a **Commercial Property-Management Company**.
 

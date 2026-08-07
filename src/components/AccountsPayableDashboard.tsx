@@ -297,11 +297,35 @@ export function OperatingExpensesPayable() {
     };
 
     try {
+      if (amountPaid > 0 && next.property.trim()) {
+        const { debitPropertyBankFromAp } = await import(
+          "@/app/ops/banks/ledger-bridge-actions"
+        );
+        const bank = await debitPropertyBankFromAp({
+          propertyName: next.property,
+          vendorName,
+          category: form.category || "operating",
+          amount: amountPaid,
+          relatedId: next.id,
+        });
+        if (bank && "error" in bank) {
+          setFormError(
+            bank.error +
+              ("shortfall" in bank && bank.shortfall
+                ? ` Shortfall ${money(bank.shortfall)}.`
+                : "")
+          );
+          return;
+        }
+      }
+
       await saveOne(next);
       setShowAddForm(false);
       setForm(emptyPayableForm());
       setSavedMsg(
-        `Invoice ${invoiceNumber} from ${vendorName} added to accounts payable.`
+        amountPaid > 0 && next.property.trim()
+          ? `Invoice ${invoiceNumber} added — ${money(amountPaid)} withdrawn from ${next.property} bank.`
+          : `Invoice ${invoiceNumber} from ${vendorName} added to accounts payable.`
       );
       setTimeout(() => setSavedMsg(null), 4000);
     } catch (err) {
@@ -324,13 +348,42 @@ export function OperatingExpensesPayable() {
       );
       return;
     }
+    if (!invoice.property.trim()) {
+      setFormError(
+        "This invoice has no property. Assign a property so the payment can debit the correct bank account and budget."
+      );
+      return;
+    }
 
     setFormError(null);
-    await saveOne({
-      ...invoice,
-      amountPaid: round2(invoice.amountPaid + amount),
-    });
     try {
+      if (
+        (await import("@/lib/management-fee-settlements")).isManagementFeePayable(
+          invoice
+        )
+      ) {
+        const { collectManagementFeeFromPayableAction } = await import(
+          "@/app/ops/ar/actions"
+        );
+        const bank = await collectManagementFeeFromPayableAction({
+          payableId: invoice.id,
+        });
+        if (bank && "error" in bank) {
+          setFormError(bank.error ?? "Could not collect management fee.");
+          return;
+        }
+        await saveOne({
+          ...invoice,
+          amountPaid: round2(invoice.amount),
+        });
+        setPaymentAmount("");
+        setSavedMsg(
+          `Collected management fee ${money(amount)} — transferred from ${invoice.property} operating bank to CPMC Corporate.`
+        );
+        setTimeout(() => setSavedMsg(null), 5000);
+        return;
+      }
+
       const { debitPropertyBankFromAp } = await import(
         "@/app/ops/banks/ledger-bridge-actions"
       );
@@ -347,21 +400,31 @@ export function OperatingExpensesPayable() {
             : "property_expense",
       });
       if (bank && "error" in bank) {
-        setSavedMsg(
-          `Recorded ${money(amount)} on ${invoice.invoiceNumber}, but bank debit failed: ${bank.error}`
+        setFormError(
+          bank.error +
+            ("shortfall" in bank && bank.shortfall
+              ? ` Shortfall ${money(bank.shortfall)}.`
+              : "")
         );
-        setTimeout(() => setSavedMsg(null), 5000);
-        setPaymentAmount("");
         return;
       }
-    } catch {
-      /* best-effort */
+
+      await saveOne({
+        ...invoice,
+        amountPaid: round2(invoice.amountPaid + amount),
+      });
+      setPaymentAmount("");
+      setSavedMsg(
+        `Paid ${money(amount)} on ${invoice.invoiceNumber} — debited ${invoice.property} operating bank and applied to that property’s budget.`
+      );
+      setTimeout(() => setSavedMsg(null), 5000);
+    } catch (err) {
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : "Could not complete payment against bank / budget."
+      );
     }
-    setPaymentAmount("");
-    setSavedMsg(
-      `Recorded a ${money(amount)} payment on invoice ${invoice.invoiceNumber} (debited property bank when matched).`
-    );
-    setTimeout(() => setSavedMsg(null), 4000);
   }
 
   return (

@@ -1,5 +1,5 @@
 /**
- * Seeds the Harborline shared_records portfolio (4 owners / 7 properties).
+ * Seeds the CPMC shared_records portfolio (4 owners / 7 properties).
  * Usage:
  *   node scripts/seed-portfolio.mjs <SUPABASE_URL> <ANON_KEY>
  */
@@ -42,7 +42,7 @@ function nameAt(i) {
 }
 
 function emailAt(slug, i) {
-  return `tenant.${slug}.${i + 1}@harborline.example`.toLowerCase();
+  return `tenant.${slug}.${i + 1}@cpmc.example`.toLowerCase();
 }
 
 /** Deterministic 0–1 from index (stable across runs). */
@@ -85,12 +85,19 @@ function floorPlansFor(property) {
       { label: "Corner suite", sqft: 3600, marketRent: 4200, weight: 1 },
     ];
   }
-  // Senior living (Horizon) — independent living all-in monthly
-  if (property.ownerId === "owner-horizon") {
+  // Senior living (legacy Horizon) — independent living all-in monthly
+  if (property.type === "senior" || property.ownerId === "owner-horizon") {
     return [
       { label: "Studio", sqft: 450, marketRent: 2800, weight: 2 },
       { label: "1 bedroom", sqft: 650, marketRent: 3400, weight: 4 },
       { label: "2 bedroom", sqft: 900, marketRent: 4100, weight: 3 },
+    ];
+  }
+  if (property.type === "industrial") {
+    return [
+      { label: "Retail bay", sqft: 950, marketRent: 3100, weight: 3 },
+      { label: "Office suite", sqft: 1100, marketRent: 3400, weight: 2 },
+      { label: "Flex bay", sqft: 1400, marketRent: 3800, weight: 1 },
     ];
   }
   // Conventional multifamily
@@ -238,13 +245,13 @@ const OWNERS = [
     mailing: "233 S Wacker Dr, Floor 28, Chicago, IL 60606",
   },
   {
-    id: "owner-horizon",
-    legal: "Horizon Senior Living Group",
-    contact: "Marcus Webb",
-    email: "marcus.webb@horizonsenior.example",
-    phone: "(480) 555-0166",
+    id: "00000000-0000-4000-8000-0000000000b0",
+    legal: "Bob Owner Holdings LLC",
+    contact: "Bob Owner",
+    email: "bobowner@building.com",
+    phone: "(662) 555-0100",
     entity: "LLC",
-    mailing: "8800 E Raintree Dr, Scottsdale, AZ 85260",
+    mailing: "400 Riverbend Pkwy, Oxford, MS 38655",
   },
 ];
 
@@ -265,21 +272,6 @@ const PROPERTIES = [
     unitLabel: (i) => `${Math.floor(i / 25) + 1}${String((i % 25) + 100).slice(1)}`,
   },
   {
-    id: "prop-oakridge",
-    ownerId: "owner-summit",
-    name: "Oakridge Flats",
-    type: "multifamily",
-    units: 80,
-    occupancy: 0.88,
-    revenue: 136400,
-    expenses: 58200,
-    feePercent: 5.0,
-    address: { street: "410 Oakridge Ave", city: "Franklin", state: "TN", zip: "37064", county: "Williamson" },
-    floors: "3",
-    buildings: "2",
-    unitLabel: (i) => `A${i + 101}`,
-  },
-  {
     id: "prop-meridian-tower",
     ownerId: "owner-meridian",
     name: "Meridian Tower",
@@ -295,49 +287,19 @@ const PROPERTIES = [
     unitLabel: (i) => `Floor ${i + 1}`,
   },
   {
-    id: "prop-riverside-office",
-    ownerId: "owner-meridian",
-    name: "Riverside Office Park",
-    type: "office",
-    units: 80,
-    occupancy: 0.8,
-    revenue: 94600,
-    expenses: 51800,
-    feePercent: 4.25,
-    address: { street: "220 Riverside Dr", city: "Evanston", state: "IL", zip: "60201", county: "Cook" },
-    floors: "4",
-    buildings: "3",
-    unitLabel: (i) => `Suite ${200 + i}`,
-  },
-  {
-    id: "prop-willow-creek",
-    ownerId: "owner-horizon",
-    name: "Willow Creek Senior Residences",
-    type: "multifamily",
-    units: 100,
-    occupancy: 0.85,
-    revenue: 187500,
-    expenses: 132400,
-    feePercent: 5.5,
-    address: { street: "1700 Willow Creek Rd", city: "Scottsdale", state: "AZ", zip: "85255", county: "Maricopa" },
-    floors: "2",
-    buildings: "4",
-    unitLabel: (i) => `WC-${i + 1}`,
-  },
-  {
-    id: "prop-lakeside",
-    ownerId: "owner-horizon",
-    name: "Lakeside Senior Community",
-    type: "multifamily",
-    units: 200,
-    occupancy: 0.78,
-    revenue: 362000,
-    expenses: 251800,
-    feePercent: 5.0,
-    address: { street: "88 Lakeside Loop", city: "Tempe", state: "AZ", zip: "85281", county: "Maricopa" },
-    floors: "3",
-    buildings: "5",
-    unitLabel: (i) => `LS-${i + 1}`,
+    id: "00000000-0000-4000-8000-0000000000b1",
+    ownerId: "00000000-0000-4000-8000-0000000000b0",
+    name: "Riverbend Commerce Center",
+    type: "industrial",
+    units: 24,
+    occupancy: 0.88,
+    revenue: 86000,
+    expenses: 38600,
+    feePercent: 4.0,
+    address: { street: "400 Riverbend Pkwy", city: "Oxford", state: "MS", zip: "38655", county: "Lafayette" },
+    floors: "1",
+    buildings: "2",
+    unitLabel: (i) => `Bay ${i + 1}`,
   },
 ];
 
@@ -353,7 +315,7 @@ const EXPENSE_SPLIT = [
 ];
 
 async function main() {
-  console.log("Seeding Harborline portfolio…");
+  console.log("Seeding CPMC portfolio…");
 
   // Owner accounts
   for (const o of OWNERS) {
@@ -452,7 +414,7 @@ async function main() {
           squareFeet: String(rentable),
         };
       }),
-      message: `Requesting Harborline management for ${props.map((p) => p.name).join(" and ")}.`,
+      message: `Requesting CPMC management for ${props.map((p) => p.name).join(" and ")}.`,
       status: "approved",
       createdAt: now,
       mgmtStatus: "account_provisioned",
@@ -465,7 +427,7 @@ async function main() {
       contractPropertyIds: props.map((p) => p.id),
       ownerSignedAt: now,
       ownerSignatureName: o.contact,
-      reviewedBy: "Harborline Management",
+      reviewedBy: "CPMC Property Management Company",
       reviewedAt: now,
       reviewNotes: "Diligence complete; contract signed; account provisioned.",
       credentialsIssuedAt: now,
@@ -477,7 +439,7 @@ async function main() {
       ownerName: o.contact,
       ownerEmail: o.email,
       propertySummary: props.map((p) => p.name).join(", "),
-      body: `Harborline Management Agreement with ${o.legal} covering ${props.map((p) => p.name).join(", ")}. Fee per property schedule attached.`,
+      body: `CPMC Property Management Company Agreement with ${o.legal} covering ${props.map((p) => p.name).join(", ")}. Fee per property schedule attached.`,
       status: "signed_by_owner",
       relatedApplicationId: `app-${o.id}`,
       createdAt: now,
@@ -486,7 +448,7 @@ async function main() {
       ownerSignedAt: now,
       ownerSignatureName: o.contact,
       managerSignedAt: now,
-      managerSignatureName: "Harborline Management",
+      managerSignatureName: "CPMC Property Management Company",
     });
   }
 
@@ -554,7 +516,7 @@ async function main() {
       feeFlatAmount: "",
       leasingCommissionPercent: p.type === "office" ? "4" : "50",
       constructionMgmtFeePercent: "5",
-      otherFeeNotes: `Harborline fee ${p.feePercent}% of collections`,
+      otherFeeNotes: `CPMC fee ${p.feePercent}% of collections`,
       occupancyPercent: String(Math.round(p.occupancy * 100)),
       tenantCount: String(occupied),
       monthlyRentRoll: String(p.revenue),
@@ -568,7 +530,7 @@ async function main() {
       camOrNnnStructure: p.type === "office" ? "NNN" : "Gross",
       insuranceRequirements: "GL $2M / property replacement cost",
       majorLeaseExpirations: `${year + 1}-06-30`,
-      assignedManager: "Harborline Operations",
+      assignedManager: "CPMC Operations",
       preferredVendors: "Delta Mechanical; ClearPath Janitorial",
       knownIssues: "",
       specialTerms: `Management fee ${p.feePercent}% of gross collections.`,
@@ -611,6 +573,7 @@ async function main() {
         sqft: String(plan.sqft),
         floorPlan: plan.label,
         status: bill.status,
+        achAutopay: tenantIdx % 4 !== 3,
       });
       tenants.push({
         id: `ten-${p.id}-${i + 1}`,
@@ -624,6 +587,7 @@ async function main() {
         ageYears: yearsBetween(startForTenure),
         dateLeased: startForTenure,
         leaseEnd: lease.end,
+        achAutopay: tenantIdx % 4 !== 3,
       });
       const tenantEmail = emailAt(p.id.replace("prop-", ""), i);
       tenantContracts.push({
@@ -730,7 +694,7 @@ async function main() {
                     ? "NightWatch Security"
                     : cat === "maintenance" || cat === "repairs"
                       ? "Delta Mechanical"
-                      : "Harborline Preferred Vendors",
+                      : "CPMC Preferred Vendors",
         vendorId: "",
         category: cat,
         property: p.name,

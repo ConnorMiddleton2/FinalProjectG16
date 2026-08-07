@@ -1,112 +1,77 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import {
-  attachmentMetaFromFile,
-  EMPTY_MAINTENANCE_FORM,
-  isAllowedAttachment,
-  MAX_ATTACHMENTS,
-  validateMaintenanceForm,
-} from "@/lib/portal/maintenance-form-validation";
-import type { MaintenanceAttachmentMeta } from "@/lib/portal/maintenance-types";
 import type {
-  MaintenanceFormErrors,
-  MaintenanceFormValues,
-  MaintenanceSubmissionResult,
-} from "@/lib/portal/maintenance-types";
+  WorkOrderCategory,
+  WorkOrderPriority,
+} from "@/lib/maintenance";
 import { createMaintenanceRequest } from "@/lib/portal/services/maintenanceService";
 
-export function useMaintenanceForm(defaults?: Partial<MaintenanceFormValues>) {
-  const [values, setValues] = useState<MaintenanceFormValues>(() => ({
-    ...EMPTY_MAINTENANCE_FORM,
+export type PortalWorkOrderFormValues = {
+  title: string;
+  category: WorkOrderCategory;
+  priority: WorkOrderPriority;
+  description: string;
+};
+
+const EMPTY: PortalWorkOrderFormValues = {
+  title: "",
+  category: "general",
+  priority: "normal",
+  description: "",
+};
+
+/**
+ * Legacy hook kept for any remaining callers.
+ * Prefer MaintenanceRequestForm which posts directly to the work-order ledger.
+ */
+export function useMaintenanceForm(
+  defaults?: Partial<PortalWorkOrderFormValues>
+) {
+  const [values, setValues] = useState<PortalWorkOrderFormValues>(() => ({
+    ...EMPTY,
     ...defaults,
   }));
-  const [errors, setErrors] = useState<MaintenanceFormErrors>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [result, setResult] = useState<MaintenanceSubmissionResult | null>(
-    null
-  );
+  const [result, setResult] = useState<{
+    id: string;
+    requestNumber: string;
+    submittedAt: string;
+  } | null>(null);
 
   const updateField = useCallback(
-    <K extends keyof MaintenanceFormValues>(
+    <K extends keyof PortalWorkOrderFormValues>(
       key: K,
-      value: MaintenanceFormValues[K]
+      value: PortalWorkOrderFormValues[K]
     ) => {
       setValues((prev) => ({ ...prev, [key]: value }));
-      setErrors((prev) => {
-        if (!prev[key] && !prev.form) return prev;
-        const next = { ...prev };
-        delete next[key];
-        delete next.form;
-        return next;
-      });
+      setErrors({});
       setSubmitError(null);
     },
     []
   );
 
-  const addAttachments = useCallback((fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return;
-    setSubmitError(null);
-
-    const incoming = Array.from(fileList);
-    const nextErrors: MaintenanceFormErrors = {};
-    const accepted: MaintenanceAttachmentMeta[] = [];
-
-    for (const file of incoming) {
-      const problem = isAllowedAttachment(file);
-      if (problem) {
-        nextErrors.attachments = problem;
-        continue;
-      }
-      accepted.push(attachmentMetaFromFile(file));
-    }
-
-    setValues((prev) => {
-      const merged = [...prev.attachments, ...accepted].slice(
-        0,
-        MAX_ATTACHMENTS
-      );
-      if (prev.attachments.length + accepted.length > MAX_ATTACHMENTS) {
-        nextErrors.attachments = `You can upload up to ${MAX_ATTACHMENTS} files.`;
-      }
-      return { ...prev, attachments: merged };
-    });
-    setErrors((prev) => ({ ...prev, ...nextErrors }));
-  }, []);
-
-  const removeAttachment = useCallback((id: string) => {
-    setValues((prev) => ({
-      ...prev,
-      attachments: prev.attachments.filter((file) => file.id !== id),
-    }));
-    setErrors((prev) => {
-      if (!prev.attachments) return prev;
-      const next = { ...prev };
-      delete next.attachments;
-      return next;
-    });
-  }, []);
-
   const submit = useCallback(async () => {
     if (submitting) return false;
-    const nextErrors = validateMaintenanceForm(values);
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
-      setSubmitError("Fix the highlighted fields before submitting.");
+    if (!values.title.trim() || !values.description.trim()) {
+      setSubmitError("Title and description are required.");
       return false;
     }
-
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const result = await createMaintenanceRequest(values);
-      if (!result.ok) {
-        setSubmitError(result.error.message);
+      const res = await createMaintenanceRequest(values);
+      if (!res.ok) {
+        setSubmitError(res.error.message);
         return false;
       }
-      setResult(result.data);
+      setResult({
+        id: res.data.id,
+        requestNumber: res.data.requestNumber,
+        submittedAt: res.data.submittedAt,
+      });
       return true;
     } catch (err) {
       setSubmitError(
@@ -121,7 +86,7 @@ export function useMaintenanceForm(defaults?: Partial<MaintenanceFormValues>) {
   }, [values, submitting]);
 
   const reset = useCallback(() => {
-    setValues(EMPTY_MAINTENANCE_FORM);
+    setValues(EMPTY);
     setErrors({});
     setSubmitError(null);
     setResult(null);
@@ -135,8 +100,8 @@ export function useMaintenanceForm(defaults?: Partial<MaintenanceFormValues>) {
     submitError,
     result,
     updateField,
-    addAttachments,
-    removeAttachment,
+    addAttachments: () => undefined,
+    removeAttachment: () => undefined,
     submit,
     reset,
   };

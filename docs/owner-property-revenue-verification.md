@@ -23,7 +23,7 @@ Contract fee: **4% of collections** (`percent_collections`).
 | Line | Amount |
 |------|--------|
 | Property rent collected | **$7,200** |
-| Harborline management fee (expense) | **$288** (= 7,200 × 4%) |
+| CPMC management fee (expense) | **$288** (= 7,200 × 4%) |
 | Net after management fee | **$6,912** |
 
 Per-property table should show one row (Riverbend) matching those totals. Portfolio total row = same (single property).
@@ -34,11 +34,11 @@ Trend bars: older months without exceptions typically show full Riverbend collec
 
 1. Per-property rent sums to portfolio rent.
 2. Per-property fee sums to portfolio fee.
-3. Net = rent − fee (not Harborline “management fee income” as revenue).
+3. Net = rent − fee (not CPMC “management fee income” as revenue).
 4. Another owner’s login must not show Bob/Riverbend figures.
 5. If AR store was empty, first load seeds `rental_receivables` via `ensureRentalReceivablesSeeded`.
 
 ## Notes
 
-- Legacy Bob property named “Harborline Commons” is migrated to **Riverbend Commerce Center** on dashboard load so it matches AR property names.
+- Legacy Bob property named “CPMC Commons” is migrated to **Riverbend Commerce Center** on dashboard load so it matches AR property names.
 - If a property has no AR match, the UI may fall back to rent-roll estimate and label that row.

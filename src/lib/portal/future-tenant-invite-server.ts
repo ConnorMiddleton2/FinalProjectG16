@@ -24,7 +24,7 @@ const STATIC_INVITES: InviteRow[] = [
   {
     code: "DEMO204",
     unit: "204",
-    propertyLabel: "Harborline Demo Residences · Unit 204",
+    propertyLabel: "CPMC Demo Residences · Unit 204",
     demoFixture: true,
     expiresAt: "2027-12-31T23:59:59.000Z",
     usedByUserId: null,
@@ -145,7 +145,7 @@ export async function claimFutureTenantInvitation(input: {
   if (new Date(invite.expiresAt).getTime() < Date.now()) {
     return {
       ok: false,
-      message: "This invitation code has expired. Contact Harborline leasing.",
+      message: "This invitation code has expired. Contact CPMC leasing.",
     };
   }
 

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { OpsBrandHomeLink } from "@/components/OpsBrandHomeLink";
 import { ArrowLeft, ClipboardList, LogOut } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
 import {
@@ -21,13 +21,10 @@ export default async function PendingApplicationsPage() {
   ]);
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
+    <div className="min-h-screen bg-[var(--harbor-sand)]">
       <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Pending owner applications</p>
-          </div>
+          <OpsBrandHomeLink subtitle="Pending owner applications" />
           <form action={teamLogout}>
             <button
               type="submit"
@@ -54,10 +51,9 @@ export default async function PendingApplicationsPage() {
             Owner applications
           </h1>
           <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/65">
-            Review pending requests, request more details, decline, or send a
-            management contract for owner signature. Owners sign and pick up
-            their temporary password on Check Application Status — no email
-            required.
+            Review application details here. Sending contracts, requesting more
+            information, and declining applications are only available in
+            Management → Owner Accounts &amp; Applications.
           </p>
         </div>
 

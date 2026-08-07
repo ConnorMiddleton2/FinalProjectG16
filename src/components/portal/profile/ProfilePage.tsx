@@ -48,7 +48,6 @@ export function ProfilePage() {
     saveError,
     successMessage,
     reload,
-    loadDemoData,
     startEdit,
     cancelEdit,
     updateDraft,
@@ -88,23 +87,14 @@ export function ProfilePage() {
                 {state.message}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn btn-neutral btn-sm min-h-11 gap-1"
-                onClick={reload}
-              >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                Try again
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm min-h-11"
-                onClick={loadDemoData}
-              >
-                Use demo data
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm min-h-11 gap-1"
+              onClick={reload}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Try again
+            </button>
           </div>
         </div>
       </div>
@@ -135,13 +125,6 @@ export function ProfilePage() {
           >
             Contact management
           </Link>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm min-h-11"
-            onClick={loadDemoData}
-          >
-            Preview with demo data
-          </button>
         </div>
       </div>
     );
@@ -156,8 +139,7 @@ export function ProfilePage() {
         className="rounded-xl border border-success/20 bg-success/5 px-4 py-3 text-sm text-[var(--harbor-ink)]/80"
         role="status"
       >
-        Profile loaded
-        {state.source === "mock" ? " (demo data)" : ""}.
+        Profile loaded.
       </div>
 
       {successMessage ? (
@@ -339,7 +321,7 @@ function IdentitySection({ profile }: { profile: TenantProfile }) {
           </h3>
           <p className="mt-1 text-sm text-[var(--harbor-muted)]">
             Legal name, tenant ID, property, unit, and lease status are
-            read-only. Sensitive identity changes require Harborline’s
+            read-only. Sensitive identity changes require CPMC’s
             verification process — contact management to request an update.
           </p>
         </div>
@@ -924,7 +906,7 @@ function CommunicationSection({
         Communication preferences
       </h3>
       <p className="mt-1 text-sm text-[var(--harbor-muted)]">
-        Choose how Harborline may contact you. At least one primary channel
+        Choose how CPMC may contact you. At least one primary channel
         must stay enabled.
       </p>
       {errors.form ? (

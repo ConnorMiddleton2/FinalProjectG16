@@ -1,7 +1,7 @@
 import type { TenantProfile } from "@/lib/portal/profile-types";
 import { portalStorageKey } from "@/lib/portal/storage-key";
 
-const STORAGE_BASE = "harborline.portal.tenantProfile.v1";
+const STORAGE_BASE = "cpmc.portal.tenantProfile.v1";
 
 function canUseStorage() {
   return (

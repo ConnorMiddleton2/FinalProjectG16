@@ -11,13 +11,14 @@ import {
   PORTAL_DEMO_COOKIE,
   isPortalDemoCookieValue,
 } from "@/lib/portal/portal-demo-auth";
+import { TENANT_PORTAL_COOKIE } from "@/lib/tenant-portal-accounts";
 
 /** Legacy + current demo cookie names — clear on /login so the form always shows. */
 const PORTAL_DEMO_COOKIES_TO_CLEAR = [
   PORTAL_DEMO_COOKIE,
   PORTAL_DEMO_CLIENT_COOKIE,
-  "harborline_portal_tenant",
-  "harborline_portal_tenant_ui",
+  "cpmc_portal_tenant",
+  "cpmc_portal_tenant_ui",
 ] as const;
 
 function clearPortalDemoCookiesOnResponse(response: NextResponse) {
@@ -30,10 +31,20 @@ function clearPortalDemoCookiesOnResponse(response: NextResponse) {
   return response;
 }
 
-const TEAM_COOKIE = "harborline_team";
+/** Owner and tenant sessions must not overlap. */
+function clearTenantPortalCookiesOnResponse(response: NextResponse) {
+  response.cookies.set(TENANT_PORTAL_COOKIE, "", { path: "/", maxAge: 0 });
+  clearPortalDemoCookiesOnResponse(response);
+  return response;
+}
+
+const TEAM_COOKIE = "cpmc_team";
+const LEGACY_TEAM_COOKIE = "harborline_team";
 
 function hasTeamSessionCookie(request: NextRequest) {
-  const value = request.cookies.get(TEAM_COOKIE)?.value;
+  const value =
+    request.cookies.get(TEAM_COOKIE)?.value ||
+    request.cookies.get(LEGACY_TEAM_COOKIE)?.value;
   if (!value) return false;
   // Legacy shared login used "1"; admin uses "admin"; employees use record ids.
   return value === "1" || value === "admin" || value.length > 0;
@@ -46,6 +57,10 @@ export async function updateSession(request: NextRequest) {
   const hasTeamCookie = hasTeamSessionCookie(request);
   const hasPortalDemo = isPortalDemoCookieValue(
     request.cookies.get(PORTAL_DEMO_COOKIE)?.value
+  );
+  /** Prospect / applicant accounts created via Start application. */
+  const hasTenantPortalAccount = Boolean(
+    request.cookies.get(TENANT_PORTAL_COOKIE)?.value
   );
   const isLoginOrSignup =
     path.startsWith("/login") ||
@@ -64,7 +79,8 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/signup") ||
     path.startsWith("/auth/callback");
 
-  const hasOwnerCookie = Boolean(request.cookies.get("harborline_owner")?.value);
+  const hasOwnerCookie = Boolean(request.cookies.get("cpmc_owner")?.value);
+  const onOwnerPortal = path.startsWith("/owners");
 
   if (path.startsWith("/ops") && !hasTeamCookie) {
     const redirectUrl = request.nextUrl.clone();
@@ -79,7 +95,11 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (!url || !key) {
-    if (isPortalPrivatePath(path) && !hasPortalDemo) {
+    if (
+      isPortalPrivatePath(path) &&
+      !hasPortalDemo &&
+      !hasTenantPortalAccount
+    ) {
       const redirectUrl = request.nextUrl.clone();
       const target = portalLoginRedirect(path || PORTAL_HOME_PATH);
       return NextResponse.redirect(new URL(target, request.url));
@@ -87,6 +107,9 @@ export async function updateSession(request: NextRequest) {
     const response = NextResponse.next({ request });
     if (isLoginOrSignup) {
       clearPortalDemoCookiesOnResponse(response);
+    }
+    if (onOwnerPortal) {
+      clearTenantPortalCookiesOnResponse(response);
     }
     return response;
   }
@@ -123,8 +146,14 @@ export async function updateSession(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // Private current-tenant portal: Supabase tenant user OR demo cookie.
-    if (isPortalPrivatePath(path) && !user && !hasPortalDemo) {
+    // Private portal: Supabase tenant, demo cookie, or tenant_accounts session.
+    // Owner cookie alone must never keep /portal open.
+    if (
+      isPortalPrivatePath(path) &&
+      !user &&
+      !hasPortalDemo &&
+      !hasTenantPortalAccount
+    ) {
       const target = portalLoginRedirect(path || PORTAL_HOME_PATH);
       return NextResponse.redirect(new URL(target, request.url));
     }
@@ -174,6 +203,9 @@ export async function updateSession(request: NextRequest) {
     if (isLoginOrSignup) {
       clearPortalDemoCookiesOnResponse(supabaseResponse);
     }
+    if (onOwnerPortal) {
+      clearTenantPortalCookiesOnResponse(supabaseResponse);
+    }
 
     return supabaseResponse;
   } catch (error) {
@@ -181,6 +213,9 @@ export async function updateSession(request: NextRequest) {
     const response = NextResponse.next({ request });
     if (isLoginOrSignup) {
       clearPortalDemoCookiesOnResponse(response);
+    }
+    if (onOwnerPortal) {
+      clearTenantPortalCookiesOnResponse(response);
     }
     return response;
   }

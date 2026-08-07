@@ -7,10 +7,11 @@ export default async function Page() {
   return (
     <MgShell
       title="Analytics"
-      subtitle="Business KPIs, property performance, and accountant financial statement packages."
+      subtitle="Pick a property to zoom in, review easy-to-read charts, then generate financial statements when you need them."
       backHref="/ops/management"
       backLabel="Back to Management"
       activeNavHref="/ops/management/analytics"
+      wide
     >
       <CombinedAnalyticsDashboard />
     </MgShell>

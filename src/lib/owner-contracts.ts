@@ -96,7 +96,7 @@ export function contractStatusBadgeClass(status: ContractStatus): string {
   }
 }
 
-/** Per-contract threshold if set; otherwise Harborline default policy. */
+/** Per-contract threshold if set; otherwise CPMC default policy. */
 export function resolveOwnerApprovalThreshold(
   contract: ManagementContractDraft
 ): { amount: number; source: "contract" | "policy" } {
@@ -139,7 +139,7 @@ export function buildAgreementSections(
     {
       title: "1. Parties",
       paragraphs: [
-        `This Property Management Agreement (the "Agreement") is between Harborline Management ("Manager") and ${
+        `This Property Management Agreement (the "Agreement") is between CPMC Property Management Company ("Manager") and ${
           contract.ownerLegalName || "the Owner"
         }${contract.ownerEntityType ? ` (${contract.ownerEntityType})` : ""} ("Owner").`,
         `Owner primary contact: ${contract.ownerContactName || "—"}${
@@ -182,9 +182,10 @@ export function buildAgreementSections(
       ],
     },
     {
-      title: "4. Management fees",
+      title: "4. Management fees & owner remittances",
       paragraphs: [
         `Management fee structure: ${feeStructureLabel(contract.feeStructure)} (${fee}).`,
+        "Expected monthly profit to Owner is remitted after expected ordinary operating expenses, the management fee, and a conservative residual reserve — not as gross rent.",
         contract.leasingCommissionPercent
           ? `Leasing commission: ${contract.leasingCommissionPercent}%.`
           : "",
@@ -202,7 +203,7 @@ export function buildAgreementSections(
         `Manager shall obtain Owner approval before committing to expenditures at or above $${threshold.amount.toLocaleString()} ${
           threshold.source === "contract"
             ? "(as specified in this Agreement)"
-            : "(Harborline default approval policy)"
+            : "(CPMC default approval policy)"
         }, except for emergencies protecting life, safety, or the Property.`,
       ],
     },
@@ -219,7 +220,7 @@ export function buildAgreementSections(
       paragraphs: [
         contract.assignedManager
           ? `Assigned property manager: ${contract.assignedManager}.`
-          : "Harborline will assign a property manager for day-to-day operations.",
+          : "CPMC will assign a property manager for day-to-day operations.",
         contract.preferredVendors
           ? `Preferred vendors: ${contract.preferredVendors}.`
           : "",

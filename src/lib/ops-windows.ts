@@ -29,7 +29,7 @@ export const OPS_WINDOWS: OpsWindow[] = [
   {
     href: "/ops",
     label: "Operations home",
-    hint: "Welcome and employee clock in",
+    hint: "Welcome to operations",
     icon: LayoutGrid,
     isHome: true,
   },

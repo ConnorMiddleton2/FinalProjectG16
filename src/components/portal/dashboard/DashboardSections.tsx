@@ -34,8 +34,8 @@ function SectionShell({
   className = "",
 }: {
   title: string;
-  href: string;
-  linkLabel: string;
+  href?: string;
+  linkLabel?: string;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -52,12 +52,14 @@ function SectionShell({
         >
           {title}
         </h2>
-        <Link
-          href={href}
-          className="shrink-0 text-sm font-medium text-[var(--harbor-mid)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--harbor-mid)]"
-        >
-          {linkLabel}
-        </Link>
+        {href && linkLabel ? (
+          <Link
+            href={href}
+            className="shrink-0 text-sm font-medium text-[var(--harbor-mid)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--harbor-mid)]"
+          >
+            {linkLabel}
+          </Link>
+        ) : null}
       </div>
       <div className="mt-4">{children}</div>
     </section>
@@ -80,8 +82,8 @@ function UpcomingPaymentSection({
   return (
     <SectionShell
       title="Upcoming payment"
-      href="/portal/payments/make"
-      linkLabel="Pay now"
+      href="/portal/payments"
+      linkLabel="View payments"
     >
       {!payment ? (
         <EmptyNote>No upcoming payment scheduled.</EmptyNote>
@@ -103,12 +105,6 @@ function UpcomingPaymentSection({
           <p className="text-sm text-[var(--harbor-ink)]/70">
             {payment.label} due <strong>{payment.dueDate}</strong>
           </p>
-          <Link
-            href="/portal/payments/make"
-            className="btn btn-neutral btn-sm"
-          >
-            Pay rent
-          </Link>
         </div>
       )}
     </SectionShell>
@@ -123,8 +119,8 @@ function RecentPaymentsSection({
   return (
     <SectionShell
       title="Recent payment activity"
-      href="/portal/payments/history"
-      linkLabel="View history"
+      href="/portal/payments"
+      linkLabel="Payment history"
     >
       {payments.length === 0 ? (
         <EmptyNote>No payment history yet.</EmptyNote>

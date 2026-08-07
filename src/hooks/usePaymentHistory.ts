@@ -122,13 +122,6 @@ export function usePaymentHistory() {
     }
   }, [applyRecords]);
 
-  const loadDemoData = useCallback(() => {
-    void (async () => {
-      const result = await getPaymentHistory();
-      if (result.ok) applyRecords(result.data, "mock");
-    })();
-  }, [applyRecords]);
-
   useEffect(() => {
     void load();
   }, [load]);
@@ -219,7 +212,6 @@ export function usePaymentHistory() {
     hasMore,
     successMessage,
     reload: load,
-    loadDemoData,
     updateFilters,
     resetFilters,
     loadMore,

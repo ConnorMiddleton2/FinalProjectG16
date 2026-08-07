@@ -14,7 +14,6 @@ import {
 import {
   emptyTenantMessage,
   getTenant,
-  getTenantDemoFixture,
   updateTenant,
 } from "@/lib/portal/services/tenantService";
 
@@ -67,10 +66,6 @@ export function useTenantProfile() {
             : "Could not load your profile.",
       });
     }
-  }, [applyProfile]);
-
-  const loadDemoData = useCallback(() => {
-    applyProfile(getTenantDemoFixture(), "mock");
   }, [applyProfile]);
 
   useEffect(() => {
@@ -182,7 +177,6 @@ export function useTenantProfile() {
     saveError,
     successMessage,
     reload: () => void load(),
-    loadDemoData,
     startEdit,
     cancelEdit,
     updateDraft,

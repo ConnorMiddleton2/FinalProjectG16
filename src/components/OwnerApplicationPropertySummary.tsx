@@ -16,7 +16,7 @@ export function OwnerApplicationPropertySummary({
       ? `${property.occupancyPercent}% occ`
       : null,
     property.monthlyRentRoll
-      ? `$${Number(property.monthlyRentRoll).toLocaleString()} / mo rent`
+      ? `$${Number(property.monthlyRentRoll).toLocaleString()} / mo expected collections`
       : null,
     property.tenantCount ? `${property.tenantCount} tenants` : null,
     propertySfLabel(property) || null,
@@ -61,7 +61,7 @@ export function OwnerApplicationPropertySummary({
       ) : null}
       {property.reasonForChange ? (
         <p className="text-xs italic opacity-70">
-          Why Harborline: {property.reasonForChange}
+          Why CPMC: {property.reasonForChange}
         </p>
       ) : null}
       {property.servicesRequested?.length ? (

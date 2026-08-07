@@ -12,9 +12,7 @@ import type {
   PortalNotification,
   PortalNotificationWithRead,
 } from "@/lib/portal/notifications-types";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import {
-  getNotificationsDemoFixture,
   getUnreadNotificationCount,
   listNotifications,
   markAllNotificationsAsRead,
@@ -93,16 +91,6 @@ export function useTenantNotifications() {
       });
     }
   }, [applyData]);
-
-  const loadDemoData = useCallback(async () => {
-    const session = await getPortalTenantSessionClient();
-    if (!session || !sessionOwnsDemoFixtures(session)) {
-      void load();
-      return;
-    }
-    tenantScopeRef.current = session.tenantScopeId;
-    applyData(getNotificationsDemoFixture(), "mock");
-  }, [applyData, load]);
 
   useEffect(() => {
     void load();
@@ -187,7 +175,6 @@ export function useTenantNotifications() {
     unreadCount,
     actionMessage,
     reload: () => void load(),
-    loadDemoData: () => void loadDemoData(),
     markRead,
     markUnread,
     markAllRead,
@@ -220,12 +207,12 @@ export function useNotificationUnreadBadge() {
     }
     window.addEventListener("storage", onStorage);
     window.addEventListener("focus", refresh);
-    window.addEventListener("harborline:notifications-changed", onLocalChange);
+    window.addEventListener("cpmc:notifications-changed", onLocalChange);
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", refresh);
       window.removeEventListener(
-        "harborline:notifications-changed",
+        "cpmc:notifications-changed",
         onLocalChange
       );
     };

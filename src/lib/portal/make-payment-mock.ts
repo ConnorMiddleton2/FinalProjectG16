@@ -4,7 +4,10 @@ import type {
 } from "@/lib/portal/make-payment-types";
 import type { SavedPaymentMethodSummary } from "@/lib/portal/payments-types";
 
-/** Isolated mock rent-payment context — no live payment provider. */
+/**
+ * Mock rent-payment context — tenant is NOT on ACH, so they pay by debit
+ * in the portal or deliver a check to management.
+ */
 export function getMockMakePaymentContext(): MakePaymentContext {
   return {
     propertyLabel: "Pier 12 · Suite 210",
@@ -15,33 +18,20 @@ export function getMockMakePaymentContext(): MakePaymentContext {
     currencySymbol: "$",
     allowCustomAmount: true,
     maxPayable: 4850,
+    achEnrolled: false,
     methods: [
       {
-        id: "pm-ach",
-        brand: "ACH",
-        last4: "9910",
-        kind: "ACH",
+        id: "pm-debit",
+        brand: "Debit",
+        last4: "4242",
+        kind: "Debit card",
         isDefault: true,
       },
       {
         id: "pm-check",
-        brand: "Deliver",
-        last4: "CHCK",
+        brand: "Check",
+        last4: "****",
         kind: "Check",
-        isDefault: false,
-      },
-      {
-        id: "pm-monthly",
-        brand: "Monthly",
-        last4: "AUTO",
-        kind: "Monthly",
-        isDefault: false,
-      },
-      {
-        id: "pm-1",
-        brand: "Visa",
-        last4: "4242",
-        kind: "Card",
         isDefault: false,
       },
     ],
@@ -56,6 +46,12 @@ export function formatUsd(amount: number, symbol = "$") {
 }
 
 export function maskMethodSummary(method: SavedPaymentMethodSummary) {
+  if (method.kind === "Check") {
+    return "Check delivered to management";
+  }
+  if (method.kind === "ACH") {
+    return `ACH •••• ${method.last4}`;
+  }
   return `${method.brand} ${method.kind.toLowerCase()} •••• ${method.last4}`;
 }
 
@@ -79,12 +75,12 @@ export function buildMockConfirmation(input: {
     }),
     amount: input.amount,
     methodSummary: maskMethodSummary(input.method),
-    updatedBalance: Math.max(0, Number((input.previousBalance - input.amount).toFixed(2))),
+    updatedBalance: Math.max(0, input.previousBalance - input.amount),
     propertyLabel: input.propertyLabel,
   };
 }
 
-/** Simulated mock processor delay (no real charges). */
-export async function mockProcessPayment(ms = 1200) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+/** Simulated processing delay for demo payment submissions. */
+export async function mockProcessPayment(delayMs = 700): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }

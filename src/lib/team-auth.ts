@@ -21,7 +21,7 @@ import {
 import { verifyPassword } from "@/lib/owner-password";
 import { DEMO_EMPLOYEE } from "@/lib/team-credentials";
 
-export const TEAM_COOKIE = "harborline_team";
+export const TEAM_COOKIE = "cpmc_team";
 export const TEAM_COOKIE_ADMIN = "admin";
 export { DEMO_EMPLOYEE };
 
@@ -126,7 +126,8 @@ export async function findEmployeeByEmail(
 
 export async function getTeamSession(): Promise<TeamSession | null> {
   const jar = await cookies();
-  const value = jar.get(TEAM_COOKIE)?.value;
+  const value =
+    jar.get(TEAM_COOKIE)?.value || jar.get("harborline_team")?.value;
   if (!value) return null;
 
   if (value === TEAM_COOKIE_ADMIN || value === "1") {

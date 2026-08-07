@@ -1,6 +1,5 @@
-import { getMockLeaseInformation } from "@/lib/portal/lease-mock";
 import type { Lease } from "@/lib/portal/models";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
+import { buildLiveLeaseFromSession } from "@/lib/portal/live-lease-from-session";
 import { requirePortalServiceSession } from "@/lib/portal/services/session";
 import {
   assertNotForcedError,
@@ -12,10 +11,7 @@ import {
 } from "@/lib/portal/services/shared";
 
 /**
- * Tenant-facing lease information service.
- * Never returns private management notes.
- *
- * BACKEND_TODO: GET /api/tenant/lease constrained to session tenant.
+ * Tenant-facing lease information — prefers Management unit / tenant records.
  */
 export async function getLease(): Promise<ServiceResult<Lease | null>> {
   const forced = assertNotForcedError("getLease");
@@ -25,16 +21,15 @@ export async function getLease(): Promise<ServiceResult<Lease | null>> {
   if (!auth.ok) return auth;
 
   try {
-    await simulateLatency();
+    await simulateLatency(200);
 
-    const live = await tryLoadLiveLease();
-    if (live === "empty") return ok(null, "live");
-    if (live) return ok(live, "live");
+    const fromMgmt = await fetchManagementLease();
+    if (fromMgmt) return ok(fromMgmt, "live");
 
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok(null, "mock");
-    }
-    return ok(getMockLeaseInformation(), "mock");
+    const fromAccount = buildLiveLeaseFromSession(auth.data);
+    if (fromAccount) return ok(fromAccount, "live");
+
+    return ok(null, "live");
   } catch (err) {
     return failFromUnknown(
       err,
@@ -44,23 +39,28 @@ export async function getLease(): Promise<ServiceResult<Lease | null>> {
   }
 }
 
-export function getLeaseDemoFixture(): Lease {
-  return getMockLeaseInformation();
+export function getLeaseDemoFixture(): Lease | null {
+  return null;
 }
 
 export function emptyLeaseMessage(): string {
-  return "No active lease is linked to this portal account yet. When Harborline connects your lease, terms and unit details will appear here.";
-}
-
-async function tryLoadLiveLease(): Promise<Lease | "empty" | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key || url.includes("your-supabase") || key === "REPLACE_ME") {
-    return null;
-  }
-  return null;
+  return "No active lease is linked to this portal account yet. When CPMC connects your lease, terms and unit details will appear here.";
 }
 
 export function leaseUnavailable(): ServiceResult<Lease> {
   return fail(emptyLeaseMessage(), "not_found");
+}
+
+async function fetchManagementLease(): Promise<Lease | null> {
+  try {
+    const res = await fetch("/api/portal/management-snapshot", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { lease?: Lease | null };
+    return data.lease ?? null;
+  } catch {
+    return null;
+  }
 }

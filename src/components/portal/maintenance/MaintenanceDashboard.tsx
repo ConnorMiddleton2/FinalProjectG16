@@ -35,7 +35,6 @@ export function MaintenanceDashboard() {
     grouped,
     counts,
     reload,
-    loadDemoData,
     updateFilters,
     resetFilters,
   } = useMaintenanceRequests();
@@ -84,13 +83,6 @@ export function MaintenanceDashboard() {
                 <RefreshCw className="h-4 w-4" aria-hidden="true" />
                 Try again
               </button>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={loadDemoData}
-              >
-                Use demo data
-              </button>
             </div>
           </div>
         </div>
@@ -118,15 +110,8 @@ export function MaintenanceDashboard() {
             className="btn btn-neutral btn-sm gap-1"
           >
             <PlusCircle className="h-4 w-4" aria-hidden="true" />
-            Submit Maintenance Request
+            New work order
           </Link>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={loadDemoData}
-          >
-            Preview with demo data
-          </button>
         </div>
       </div>
     );
@@ -138,8 +123,7 @@ export function MaintenanceDashboard() {
         className="rounded-xl border border-success/20 bg-success/5 px-4 py-3 text-sm text-[var(--harbor-ink)]/80"
         role="status"
       >
-        Maintenance requests loaded
-        {state.source === "mock" ? " (demo data)" : ""}.
+        Maintenance requests loaded.
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -151,7 +135,7 @@ export function MaintenanceDashboard() {
           className="btn btn-neutral gap-2"
         >
           <PlusCircle className="h-4 w-4" aria-hidden="true" />
-          Submit Maintenance Request
+          New work order
         </Link>
       </div>
 

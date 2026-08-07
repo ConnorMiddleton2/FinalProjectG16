@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { OpsBrandHomeLink } from "@/components/OpsBrandHomeLink";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -15,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { BudgetFillBar } from "@/components/mgmt/BudgetFillBar";
+import { UnitAreaMultiSelect } from "@/components/UnitAreaMultiSelect";
 import { teamLogout } from "@/app/team/actions";
 import {
   COLLECTIONS,
@@ -71,7 +73,10 @@ import {
   type DepartmentBudget,
   type PropertyBudgetPack,
 } from "@/lib/management";
-import type { ManagementContractDraft } from "@/lib/management-contract";
+import type {
+  ManagementContractDraft,
+  SharedPropertyTenant,
+} from "@/lib/management-contract";
 
 type Panel = "new" | "ledger" | "vendors" | "budget" | "documents";
 
@@ -175,6 +180,9 @@ export function MaintenanceDashboard() {
   }
   const { items: managedProperties } =
     useSharedCollection<ManagementContractDraft>(COLLECTIONS.managedProperties);
+  const { items: propertyTenants } = useSharedCollection<SharedPropertyTenant>(
+    COLLECTIONS.propertyTenants
+  );
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [form, setForm] = useState(emptyWorkOrder);
   // Default to Other so the controlled <select> always matches an enabled option
@@ -544,12 +552,48 @@ export function MaintenanceDashboard() {
 
   function onPropertyChoiceChange(value: string) {
     setPropertyChoice(value);
-    if (value === PROPERTY_OTHER) {
-      updateForm("property", "");
-    } else {
-      updateForm("property", value);
-    }
+    setForm((prev) => ({
+      ...prev,
+      property: value === PROPERTY_OTHER ? "" : value,
+      unit: "",
+    }));
   }
+
+  const unitOptionsForProperty = useMemo(() => {
+    const name = form.property.trim().toLowerCase();
+    if (!name) return [] as string[];
+    return propertyTenants
+      .filter((t) => {
+        const pn = (t.propertyName || "").trim().toLowerCase();
+        return (
+          pn === name ||
+          pn.includes(name) ||
+          name.includes(pn) ||
+          propertyNamesMatch(t.propertyName, form.property)
+        );
+      })
+      .map((t) => t.unit)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [propertyTenants, form.property]);
+
+  const unitOptionsForEditing = useMemo(() => {
+    const name = (editingOrder?.property || "").trim().toLowerCase();
+    if (!name || !editingOrder) return [] as string[];
+    return propertyTenants
+      .filter((t) => {
+        const pn = (t.propertyName || "").trim().toLowerCase();
+        return (
+          pn === name ||
+          pn.includes(name) ||
+          name.includes(pn) ||
+          propertyNamesMatch(t.propertyName, editingOrder.property)
+        );
+      })
+      .map((t) => t.unit)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [propertyTenants, editingOrder]);
 
   async function handleCreateWorkOrder(e: FormEvent) {
     e.preventDefault();
@@ -1333,13 +1377,10 @@ export function MaintenanceDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
+    <div className="min-h-screen bg-[var(--harbor-sand)]">
       <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Maintenance</p>
-          </div>
+          <OpsBrandHomeLink subtitle="Maintenance" />
           <form action={teamLogout}>
             <button
               type="submit"
@@ -1530,15 +1571,18 @@ export function MaintenanceDashboard() {
                     </label>
                   )}
 
-                  <label className="form-control w-full">
-                    <span className="mb-1 text-sm opacity-70">Unit / area</span>
-                    <input
-                      className="input input-bordered w-full"
+                  <div className="form-control w-full sm:col-span-2">
+                    <span className="mb-1 text-sm opacity-70">
+                      Unit / area{" "}
+                      <span className="opacity-55">(select all that apply)</span>
+                    </span>
+                    <UnitAreaMultiSelect
+                      propertyName={form.property}
+                      propertyUnits={unitOptionsForProperty}
                       value={form.unit}
-                      onChange={(e) => updateForm("unit", e.target.value)}
-                      placeholder="Suite 210, Lobby, Restroom"
+                      onChange={(next) => updateForm("unit", next)}
                     />
-                  </label>
+                  </div>
 
                   <label className="form-control w-full">
                     <span className="mb-1 text-sm opacity-70">Submitted by</span>
@@ -1780,20 +1824,20 @@ export function MaintenanceDashboard() {
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/90 shadow-sm">
-              <table className="table">
+            <div className="overflow-x-auto rounded-2xl border border-[var(--harbor-border)] bg-[var(--harbor-card)] shadow-sm">
+              <table className="table table-sm">
                 <thead>
-                  <tr>
-                    <th>Work order</th>
-                    <th>Priority</th>
-                    <th>Status</th>
-                    <th>Source</th>
-                    <th>Labor</th>
-                    <th>Property</th>
-                    <th>Actual cost</th>
-                    <th>Date</th>
-                    <th>Update</th>
-                    <th>Edit</th>
+                  <tr className="text-[var(--harbor-muted)]">
+                    <th className="min-w-[14rem]">Work order</th>
+                    <th className="whitespace-nowrap">Priority</th>
+                    <th className="whitespace-nowrap">Status</th>
+                    <th className="whitespace-nowrap">Source</th>
+                    <th className="whitespace-nowrap">Labor</th>
+                    <th className="min-w-[8rem]">Property</th>
+                    <th className="whitespace-nowrap">Actual cost</th>
+                    <th className="whitespace-nowrap">Date</th>
+                    <th className="whitespace-nowrap">Update</th>
+                    <th className="whitespace-nowrap">Edit</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1815,23 +1859,25 @@ export function MaintenanceDashboard() {
                               : undefined
                           }
                         >
-                          <td>
-                            <p className="font-medium">{o.title}</p>
-                            <p className="text-xs opacity-60">
+                          <td className="align-middle">
+                            <p className="font-medium leading-snug text-[var(--harbor-text)]">
+                              {o.title}
+                            </p>
+                            <p className="text-xs text-[var(--harbor-muted)]">
                               {categoryLabel(o.category)}
                               {o.unit ? ` · ${o.unit}` : ""}
                             </p>
                           </td>
-                          <td>
+                          <td className="align-middle whitespace-nowrap">
                             <span
-                              className={`badge badge-sm ${priorityBadgeClass(priority)}`}
+                              className={`badge badge-sm h-7 whitespace-nowrap px-2.5 ${priorityBadgeClass(priority)}`}
                             >
                               {priorityLabel(priority)}
                             </span>
                           </td>
-                          <td>
+                          <td className="align-middle whitespace-nowrap">
                             <span
-                              className={`badge ${
+                              className={`badge badge-sm h-7 whitespace-nowrap px-2.5 ${
                                 o.status === "completed"
                                   ? "badge-success"
                                   : o.status === "in_progress"
@@ -1842,10 +1888,16 @@ export function MaintenanceDashboard() {
                               {statusLabel(o.status)}
                             </span>
                           </td>
-                          <td className="text-sm">{sourceLabel(o.source)}</td>
-                          <td className="text-sm">{laborLabel(o.labor)}</td>
-                          <td className="text-sm">{o.property}</td>
-                          <td className="text-sm tabular-nums">
+                          <td className="align-middle whitespace-nowrap text-sm text-[var(--harbor-muted)]">
+                            {sourceLabel(o.source)}
+                          </td>
+                          <td className="align-middle whitespace-nowrap text-sm text-[var(--harbor-muted)]">
+                            {laborLabel(o.labor)}
+                          </td>
+                          <td className="align-middle text-sm text-[var(--harbor-text)]">
+                            {o.property}
+                          </td>
+                          <td className="align-middle text-sm tabular-nums">
                             {o.actualCost ? (
                               <>
                                 <p className="font-medium">
@@ -1861,10 +1913,12 @@ export function MaintenanceDashboard() {
                               <span className="opacity-45">No invoice yet</span>
                             )}
                           </td>
-                          <td className="text-sm">{o.createdAt}</td>
-                          <td>
+                          <td className="align-middle whitespace-nowrap text-sm text-[var(--harbor-muted)]">
+                            {o.createdAt}
+                          </td>
+                          <td className="align-middle">
                             <select
-                              className="select select-bordered select-xs"
+                              className="select select-bordered select-sm h-9 min-w-[9.5rem] whitespace-nowrap"
                               value={o.status}
                               onChange={(e) =>
                                 updateOrderStatus(
@@ -1872,6 +1926,7 @@ export function MaintenanceDashboard() {
                                   e.target.value as WorkOrderStatus
                                 )
                               }
+                              aria-label={`Update status for ${o.title}`}
                             >
                               {WORK_ORDER_STATUSES.map((s) => (
                                 <option key={s.value} value={s.value}>
@@ -1880,10 +1935,10 @@ export function MaintenanceDashboard() {
                               ))}
                             </select>
                           </td>
-                          <td>
+                          <td className="align-middle whitespace-nowrap">
                             <button
                               type="button"
-                              className="btn btn-ghost btn-xs gap-1"
+                              className="btn btn-ghost btn-sm gap-1"
                               onClick={() => startEditOrder(o)}
                               aria-label={`Edit ${o.title}`}
                             >
@@ -1987,16 +2042,18 @@ export function MaintenanceDashboard() {
                     />
                   </label>
 
-                  <label className="form-control w-full">
-                    <span className="mb-1 text-sm opacity-70">Unit / area</span>
-                    <input
-                      className="input input-bordered w-full"
+                  <div className="form-control w-full sm:col-span-2">
+                    <span className="mb-1 text-sm opacity-70">
+                      Unit / area{" "}
+                      <span className="opacity-55">(select all that apply)</span>
+                    </span>
+                    <UnitAreaMultiSelect
+                      propertyName={editingOrder.property}
+                      propertyUnits={unitOptionsForEditing}
                       value={editingOrder.unit}
-                      onChange={(e) =>
-                        updateEditingOrder("unit", e.target.value)
-                      }
+                      onChange={(next) => updateEditingOrder("unit", next)}
                     />
-                  </label>
+                  </div>
 
                   <label className="form-control w-full">
                     <span className="mb-1 text-sm opacity-70">Status</span>

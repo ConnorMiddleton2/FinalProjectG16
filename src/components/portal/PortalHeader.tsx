@@ -3,22 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
-import {
-  Bell,
-  Building2,
-  ChevronDown,
-  LogOut,
-  Menu,
-  MessageCircle,
-  UserRound,
-  X,
-} from "lucide-react";
+import { ChevronDown, LogOut, Menu, UserRound, X } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
 import { portalDemoLogout } from "@/app/portal/demo-actions";
 import { createClient } from "@/lib/supabase/client";
-import { useNotificationUnreadBadge } from "@/hooks/useTenantNotifications";
-import { PORTAL_HELP_HREF, PORTAL_HELP_LABEL } from "@/lib/portal/nav";
 import { PORTAL_DEMO_SESSION_STORAGE_KEY } from "@/lib/portal/portal-demo-auth";
+import { BrandLogo } from "@/components/BrandLogo";
+import { COMPANY_SHORT } from "@/lib/brand";
+import { TENANT_PORTAL_LOGIN_PATH } from "@/lib/portal/auth";
 
 type Props = {
   email: string;
@@ -45,7 +37,6 @@ export function PortalHeader({
   const profileWrapRef = useRef<HTMLDivElement>(null);
   const profileButtonId = useId();
   const profileMenuId = useId();
-  const { unreadCount } = useNotificationUnreadBadge();
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -122,12 +113,10 @@ export function PortalHeader({
             href="/portal"
             className="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--harbor-glow)]"
           >
-            <span className="rounded-xl bg-[var(--harbor-sand)]/15 p-2 text-[var(--harbor-sand)]">
-              <Building2 className="h-5 w-5" aria-hidden="true" />
-            </span>
+            <BrandLogo size="sm" onDark />
             <span className="min-w-0">
               <span className="font-display block truncate text-xl leading-tight sm:text-2xl">
-                Harborline
+                {COMPANY_SHORT}
               </span>
               <span className="block truncate text-xs opacity-70">
                 Tenant portal
@@ -143,33 +132,6 @@ export function PortalHeader({
           >
             Website home
           </Link>
-          <Link
-            href={PORTAL_HELP_HREF}
-            className="btn btn-ghost min-h-11 hidden gap-1 text-[var(--harbor-sand)] portal-focus md:inline-flex"
-          >
-            <MessageCircle className="h-4 w-4" aria-hidden="true" />
-            {PORTAL_HELP_LABEL}
-          </Link>
-
-          <Link
-            href="/portal/notifications"
-            className="btn btn-ghost relative min-h-11 min-w-11 px-2 text-[var(--harbor-sand)] portal-focus"
-            aria-label={
-              unreadCount > 0
-                ? `Notifications, ${unreadCount} unread`
-                : "Notifications"
-            }
-          >
-            <Bell className="h-4 w-4" aria-hidden="true" />
-            {unreadCount > 0 ? (
-              <span
-                className="absolute right-1 top-1 rounded-full bg-[var(--harbor-glow)] px-1.5 text-[10px] font-semibold leading-4 text-[var(--harbor-ink)]"
-                aria-hidden="true"
-              >
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </span>
-            ) : null}
-          </Link>
 
           <div className="relative" ref={profileWrapRef}>
             <button
@@ -183,7 +145,10 @@ export function PortalHeader({
             >
               <UserRound className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="truncate">{displayName}</span>
-              <ChevronDown className="h-4 w-4 shrink-0 opacity-80" aria-hidden="true" />
+              <ChevronDown
+                className="h-4 w-4 shrink-0 opacity-80"
+                aria-hidden="true"
+              />
             </button>
 
             {profileOpen ? (
@@ -193,7 +158,10 @@ export function PortalHeader({
                 aria-labelledby={profileButtonId}
                 className="absolute right-0 z-40 mt-2 w-56 rounded-xl border border-[var(--harbor-deep)]/10 bg-white p-2 text-[var(--harbor-ink)] shadow-lg"
               >
-                <p className="truncate px-3 py-2 text-xs text-[var(--harbor-muted)]" role="none">
+                <p
+                  className="truncate px-3 py-2 text-xs text-[var(--harbor-muted)]"
+                  role="none"
+                >
                   {email}
                 </p>
                 <Link
@@ -214,7 +182,7 @@ export function PortalHeader({
                 </Link>
                 {!isSignedIn ? (
                   <Link
-                    href="/login"
+                    href={TENANT_PORTAL_LOGIN_PATH}
                     role="menuitem"
                     className="flex min-h-11 items-center rounded-lg px-3 text-sm hover:bg-[var(--harbor-mist)]/80 portal-focus"
                     onClick={() => setProfileOpen(false)}

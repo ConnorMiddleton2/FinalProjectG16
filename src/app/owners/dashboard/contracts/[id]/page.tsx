@@ -66,7 +66,7 @@ export default async function OwnerContractDetailPage({
 
         <div className="welcome-rise print:mb-6">
           <p className="hidden text-sm font-medium uppercase tracking-wide opacity-60 print:block">
-            Harborline Management — Property Management Agreement
+            CPMC Property Management Company — Property Management Agreement
           </p>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -167,7 +167,7 @@ export default async function OwnerContractDetailPage({
               Full agreement
             </h2>
             <p className="owner-muted mt-1 text-sm">
-              Generated from the management contract record Harborline staff
+              Generated from the management contract record CPMC staff
               maintain for this property. Not a separately uploaded legal PDF.
             </p>
           </div>
@@ -189,7 +189,7 @@ export default async function OwnerContractDetailPage({
           ))}
 
           <footer className="border-t border-[var(--harbor-deep)]/10 pt-4 text-xs opacity-50 print:border-black">
-            Owner: {contract.ownerLegalName || "—"} · Manager: Harborline
+            Owner: {contract.ownerLegalName || "—"} · Manager: CPMC
             Management · Property ID: {contract.id}
           </footer>
         </section>

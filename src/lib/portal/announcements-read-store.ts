@@ -1,6 +1,6 @@
 import { portalStorageKey } from "@/lib/portal/storage-key";
 
-const STORAGE_BASE = "harborline.portal.announcementRead.v1";
+const STORAGE_BASE = "cpmc.portal.announcementRead.v1";
 
 /** Default unread set for first visit — a few items start unread. */
 const DEFAULT_UNREAD_IDS = ["ann-1", "ann-4", "ann-8", "ann-5", "ann-13"];

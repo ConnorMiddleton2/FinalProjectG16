@@ -10,10 +10,14 @@ import {
   accumulatedDepreciation,
   annualDepreciationForYear,
   ASSET_CATEGORIES,
+  ASSET_OWNERSHIPS,
   assetCategoryLabel,
+  assetOwnershipLabel,
   DEPRECIATION_METHODS,
   depreciationMethodLabel,
+  emptyPropertyAsset,
   netBookValue,
+  normalizeAssetOwnership,
   seedPropertyAssets,
   type PropertyAsset,
 } from "@/lib/property-assets";
@@ -42,6 +46,7 @@ export function AssetsDashboard() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<PropertyAsset | null>(null);
+  const [isNew, setIsNew] = useState(false);
   const year = new Date().getFullYear();
 
   useEffect(() => {
@@ -92,16 +97,45 @@ export function AssetsDashboard() {
     };
   }, [filtered, year]);
 
+  function startAdd() {
+    const preferred =
+      properties.find((p) => p.id === propertyFilter) ?? properties[0];
+    if (!preferred) {
+      setMsg("Add a managed property before creating assets.");
+      setTimeout(() => setMsg(null), 3000);
+      return;
+    }
+    setIsNew(true);
+    setEditing(
+      emptyPropertyAsset({
+        propertyId: preferred.id,
+        propertyName: preferred.propertyName,
+      })
+    );
+  }
+
   async function handleSave() {
     if (!editing) return;
+    if (!editing.propertyId || !editing.name.trim()) {
+      setMsg("Property and asset name are required.");
+      setTimeout(() => setMsg(null), 3000);
+      return;
+    }
     setBusy(true);
     try {
-      const result = await savePropertyAssetAction(editing);
-      if ("ok" in result) {
+      const result = await savePropertyAssetAction({
+        ...editing,
+        ownership: normalizeAssetOwnership(editing.ownership),
+      });
+      if ("ok" in result && result.ok) {
         await saveOne(result.asset);
         setEditing(null);
-        setMsg("Asset saved.");
+        setIsNew(false);
+        setMsg(isNew ? "Asset added." : "Asset saved.");
         setTimeout(() => setMsg(null), 2500);
+      } else if ("error" in result) {
+        setMsg(result.error);
+        setTimeout(() => setMsg(null), 3500);
       }
     } finally {
       setBusy(false);
@@ -121,6 +155,13 @@ export function AssetsDashboard() {
         </div>
       ) : null}
 
+      <div className="rounded-xl border border-[var(--harbor-deep)]/15 bg-[var(--harbor-sand)]/40 px-4 py-3 text-sm text-[var(--harbor-ink)]/80">
+        Track equipment and PP&amp;E operationally per property. Assets default
+        to <span className="font-medium">property owner</span> ownership — they
+        are not placed on CPMC&apos;s books unless you mark them as
+        management-company owned.
+      </div>
+
       <div className="flex flex-wrap items-end justify-between gap-4">
         <label className="form-control max-w-sm">
           <span className="mb-1 text-sm opacity-70">Filter by property</span>
@@ -137,26 +178,36 @@ export function AssetsDashboard() {
             ))}
           </select>
         </label>
-        <button
-          type="button"
-          className="btn btn-outline btn-sm"
-          disabled={busy}
-          onClick={() =>
-            void (async () => {
-              setBusy(true);
-              try {
-                await ensurePropertyAssetsAction();
-                await refresh();
-                setMsg("Assets synced from managed properties.");
-                setTimeout(() => setMsg(null), 3000);
-              } finally {
-                setBusy(false);
-              }
-            })()
-          }
-        >
-          Sync assets from properties
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn btn-sm border-0 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]"
+            disabled={busy || properties.length === 0}
+            onClick={startAdd}
+          >
+            Add asset
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            disabled={busy}
+            onClick={() =>
+              void (async () => {
+                setBusy(true);
+                try {
+                  await ensurePropertyAssetsAction();
+                  await refresh();
+                  setMsg("Assets synced from managed properties.");
+                  setTimeout(() => setMsg(null), 3000);
+                } finally {
+                  setBusy(false);
+                }
+              })()
+            }
+          >
+            Sync assets from properties
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4">
@@ -170,7 +221,7 @@ export function AssetsDashboard() {
         <p className="text-sm opacity-60">Loading assets…</p>
       ) : filtered.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-[var(--harbor-deep)]/25 bg-white/50 px-4 py-10 text-center text-sm opacity-60">
-          No assets yet. Sync from managed properties to seed PP&amp;E packages.
+          No assets yet. Add an asset or sync from managed properties.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-[var(--harbor-deep)]/12 bg-white/90 shadow-sm">
@@ -180,6 +231,7 @@ export function AssetsDashboard() {
                 <th>Property</th>
                 <th>Asset</th>
                 <th>Category</th>
+                <th>Ownership</th>
                 <th>Placed in service</th>
                 <th>Method</th>
                 <th>Life</th>
@@ -190,43 +242,66 @@ export function AssetsDashboard() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((a) => (
-                <tr key={a.id}>
-                  <td className="max-w-[10rem] truncate">{a.propertyName}</td>
-                  <td>
-                    <p className="font-medium">{a.name}</p>
-                    <p className="text-xs opacity-55 line-clamp-1">
-                      {a.description}
-                    </p>
-                  </td>
-                  <td>{assetCategoryLabel(a.category)}</td>
-                  <td className="whitespace-nowrap">{a.placedInServiceDate}</td>
-                  <td className="text-xs">
-                    {depreciationMethodLabel(a.depreciationMethod)}
-                  </td>
-                  <td>
-                    {a.usefulLifeYears > 0 ? `${a.usefulLifeYears} yr` : "—"}
-                  </td>
-                  <td className="text-right tabular-nums">
-                    {money(a.costBasis)}
-                  </td>
-                  <td className="text-right tabular-nums">
-                    {money(netBookValue(a, year))}
-                  </td>
-                  <td className="text-right tabular-nums">
-                    {money(annualDepreciationForYear(a, year))}
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-xs"
-                      onClick={() => setEditing({ ...a })}
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((a) => {
+                const ownership = normalizeAssetOwnership(a.ownership);
+                return (
+                  <tr key={a.id}>
+                    <td className="max-w-[10rem] truncate">{a.propertyName}</td>
+                    <td>
+                      <p className="font-medium">{a.name}</p>
+                      <p className="text-xs opacity-55 line-clamp-1">
+                        {a.description}
+                      </p>
+                    </td>
+                    <td>{assetCategoryLabel(a.category)}</td>
+                    <td className="text-xs">
+                      {ownership === "management_company" ? (
+                        <span className="badge badge-warning badge-sm badge-outline">
+                          CPMC
+                        </span>
+                      ) : (
+                        <span className="badge badge-ghost badge-sm">
+                          Owner
+                        </span>
+                      )}
+                      <p className="mt-0.5 opacity-50">
+                        {assetOwnershipLabel(ownership).split(" (")[0]}
+                      </p>
+                    </td>
+                    <td className="whitespace-nowrap">{a.placedInServiceDate}</td>
+                    <td className="text-xs">
+                      {depreciationMethodLabel(a.depreciationMethod)}
+                    </td>
+                    <td>
+                      {a.usefulLifeYears > 0 ? `${a.usefulLifeYears} yr` : "—"}
+                    </td>
+                    <td className="text-right tabular-nums">
+                      {money(a.costBasis)}
+                    </td>
+                    <td className="text-right tabular-nums">
+                      {money(netBookValue(a, year))}
+                    </td>
+                    <td className="text-right tabular-nums">
+                      {money(annualDepreciationForYear(a, year))}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => {
+                          setIsNew(false);
+                          setEditing({
+                            ...a,
+                            ownership: normalizeAssetOwnership(a.ownership),
+                          });
+                        }}
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -235,9 +310,54 @@ export function AssetsDashboard() {
       {editing ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--harbor-ink)]/50 p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold">Edit asset</h2>
-            <p className="mt-1 text-sm opacity-60">{editing.propertyName}</p>
+            <h2 className="text-lg font-semibold">
+              {isNew ? "Add asset" : "Edit asset"}
+            </h2>
+            <p className="mt-1 text-sm opacity-60">
+              {isNew
+                ? "Defaults to property-owner ownership (operational tracking only)."
+                : editing.propertyName}
+            </p>
             <div className="mt-4 grid gap-3">
+              <Field label="Property">
+                <select
+                  className="select select-bordered w-full"
+                  value={editing.propertyId}
+                  onChange={(e) => {
+                    const p = properties.find((x) => x.id === e.target.value);
+                    if (!p) return;
+                    setEditing({
+                      ...editing,
+                      propertyId: p.id,
+                      propertyName: p.propertyName,
+                    });
+                  }}
+                >
+                  {properties.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.propertyName}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Ownership">
+                <select
+                  className="select select-bordered w-full"
+                  value={normalizeAssetOwnership(editing.ownership)}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      ownership: normalizeAssetOwnership(e.target.value),
+                    })
+                  }
+                >
+                  {ASSET_OWNERSHIPS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field label="Name">
                 <input
                   className="input input-bordered w-full"
@@ -356,7 +476,10 @@ export function AssetsDashboard() {
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
-                onClick={() => setEditing(null)}
+                onClick={() => {
+                  setEditing(null);
+                  setIsNew(false);
+                }}
               >
                 Cancel
               </button>
@@ -366,7 +489,7 @@ export function AssetsDashboard() {
                 disabled={busy}
                 onClick={() => void handleSave()}
               >
-                Save
+                {isNew ? "Add asset" : "Save"}
               </button>
             </div>
           </div>

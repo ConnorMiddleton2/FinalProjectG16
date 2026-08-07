@@ -11,10 +11,14 @@ import {
 import { useMakePaymentFlow } from "@/hooks/useMakePaymentFlow";
 import { CUSTOM_AMOUNT_INPUT_MAX } from "@/lib/portal/make-payment-validation";
 import { formatUsd } from "@/lib/portal/make-payment-mock";
+import type { MakePaymentContext } from "@/lib/portal/make-payment-types";
+import type { SavedPaymentMethodSummary } from "@/lib/portal/payments-types";
+import type { PaymentConfirmation } from "@/lib/portal/make-payment-types";
 
 export function MakePaymentFlow() {
   const flow = useMakePaymentFlow();
   const {
+    loadState,
     context,
     step,
     stepIndex,
@@ -28,6 +32,7 @@ export function MakePaymentFlow() {
     confirmError,
     processing,
     confirmation,
+    reload,
     goNextFromBalance,
     setAmountChoice,
     setCustomAmountInput,
@@ -43,8 +48,8 @@ export function MakePaymentFlow() {
   function downloadReceipt() {
     if (!confirmation) return;
     const body = [
-      "Harborline Property Management",
-      "Rent payment receipt (demo — not a bank record)",
+      "CPMC Property Management Company",
+      "Rent payment receipt",
       "----------------------------------------------",
       `Confirmation: ${confirmation.confirmationNumber}`,
       `Date: ${confirmation.paidAt}`,
@@ -53,16 +58,56 @@ export function MakePaymentFlow() {
       `Method: ${confirmation.methodSummary}`,
       `Updated balance: ${formatUsd(confirmation.updatedBalance)}`,
       "",
-      "Isolated mock flow — no live payment provider.",
-      "Complete card or bank details are never stored.",
+      "Balances come from Management rental receivables.",
+      "No live card/ACH processor — payments are recorded in the ledger.",
     ].join("\n");
     const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `harborline-receipt-${confirmation.confirmationNumber}.txt`;
+    a.download = `cpmc-receipt-${confirmation.confirmationNumber}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  if (loadState.status === "error") {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-red-200 bg-white/85 p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-[var(--harbor-ink)]">
+            Could not load balance
+          </h2>
+          <p className="mt-2 text-sm text-[var(--harbor-muted)]">
+            {loadState.message}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm min-h-11"
+              onClick={() => void reload()}
+            >
+              Try again
+            </button>
+            <Link href="/portal/payments" className="btn btn-ghost btn-sm min-h-11">
+              Back to payments
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadState.status === "loading" || !context) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-8 shadow-sm">
+          <div className="flex items-center gap-3 text-sm text-[var(--harbor-muted)]">
+            <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden="true" />
+            Loading balance from Management…
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -71,8 +116,9 @@ export function MakePaymentFlow() {
         className="rounded-xl border border-[var(--harbor-mid)]/20 bg-[var(--harbor-mist)]/50 px-4 py-3 text-sm text-[var(--harbor-muted)]"
         role="note"
       >
-        Isolated mock payment flow. This project has no live payment provider —
-        nothing is charged, and only masked method summaries are used.
+        {context.achEnrolled
+          ? "This lease is on ACH autopay. Confirming here only records an optional early or adjustment payment against open charges."
+          : "You are not on ACH. Pay with a debit card below, or write a check and give it to CPMC management (checks are not processed online)."}
       </div>
 
       <nav aria-label="Payment steps">
@@ -131,6 +177,7 @@ export function MakePaymentFlow() {
 
         {step === "select-method" ? (
           <StepSelectMethod
+            achEnrolled={context.achEnrolled}
             methods={context.methods}
             methodId={draft.methodId}
             error={methodError}
@@ -282,7 +329,7 @@ function StepSelectAmount({
   onBack,
   onContinue,
 }: {
-  context: ReturnType<typeof useMakePaymentFlow>["context"];
+  context: MakePaymentContext;
   amountChoice: ReturnType<typeof useMakePaymentFlow>["draft"]["amountChoice"];
   customAmountInput: string;
   error: string | null;
@@ -412,6 +459,7 @@ function AmountOption({
 }
 
 function StepSelectMethod({
+  achEnrolled,
   methods,
   methodId,
   error,
@@ -420,7 +468,8 @@ function StepSelectMethod({
   onBack,
   onContinue,
 }: {
-  methods: ReturnType<typeof useMakePaymentFlow>["context"]["methods"];
+  achEnrolled: boolean;
+  methods: SavedPaymentMethodSummary[];
   methodId: string | null;
   error: string | null;
   amount: number | null;
@@ -435,14 +484,16 @@ function StepSelectMethod({
           Select payment method
         </h2>
         <p className="mt-1 text-sm text-[var(--harbor-muted)]">
-          Paying {amount !== null ? formatUsd(amount) : "—"}. Only masked method
-          summaries are shown.
+          Paying {amount !== null ? formatUsd(amount) : "—"}.{" "}
+          {achEnrolled
+            ? "ACH is enrolled on this lease."
+            : "Without ACH, use debit card online or deliver a check to management."}
         </p>
       </header>
 
       {methods.length === 0 ? (
         <p className="rounded-xl border border-dashed border-[var(--harbor-deep)]/25 px-4 py-6 text-sm text-[var(--harbor-muted)]">
-          No saved payment methods. Add one from the payments overview first.
+          No payment methods available for this lease.
         </p>
       ) : (
         <fieldset
@@ -450,13 +501,14 @@ function StepSelectMethod({
           aria-invalid={Boolean(error)}
           aria-describedby={error ? "method-error" : undefined}
         >
-          <legend className="sr-only">Saved methods</legend>
+          <legend className="sr-only">Payment methods</legend>
           {methods.map((method) => {
             const selected = methodId === method.id;
+            const isCheck = method.kind === "Check";
             return (
               <label
                 key={method.id}
-                className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 ${
+                className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 ${
                   selected
                     ? "border-[var(--harbor-ink)] bg-[var(--harbor-sand)]/50"
                     : "border-[var(--harbor-deep)]/15"
@@ -465,19 +517,25 @@ function StepSelectMethod({
                 <input
                   type="radio"
                   name="payment-method"
-                  className="radio radio-sm portal-focus"
+                  className="radio radio-sm mt-1 portal-focus"
                   checked={selected}
                   onChange={() => onSelect(method.id)}
                 />
                 <span>
                   <span className="block text-sm font-semibold text-[var(--harbor-ink)]">
-                    {method.brand} {method.kind.toLowerCase()} •••• {method.last4}
+                    {isCheck
+                      ? "Check delivered to management"
+                      : method.kind === "ACH"
+                        ? `ACH •••• ${method.last4}`
+                        : `Debit card •••• ${method.last4}`}
                   </span>
-                  {method.isDefault ? (
-                    <span className="text-xs text-[var(--harbor-muted)]">
-                      Default
-                    </span>
-                  ) : null}
+                  <span className="mt-0.5 block text-xs text-[var(--harbor-muted)]">
+                    {isCheck
+                      ? "Write a check payable to CPMC and give it to management. This records your intent; management confirms receipt."
+                      : method.kind === "ACH"
+                        ? "Drafted from your enrolled bank account."
+                        : "Pay manually in the portal with a debit card."}
+                  </span>
                 </span>
               </label>
             );

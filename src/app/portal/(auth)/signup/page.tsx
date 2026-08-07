@@ -10,8 +10,8 @@ import { TenantPortalAuth } from "@/components/portal/auth/TenantPortalAuth";
 export default function PortalSignupPage() {
   return (
     <TenantAuthShell
-      title="Create future tenant account"
-      subtitle="Register with your invitation code, then continue to your application."
+      title="Create tenant account"
+      subtitle="Register to apply for a property or access your CPMC dashboard."
     >
       <Suspense
         fallback={

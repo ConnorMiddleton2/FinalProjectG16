@@ -1,5 +1,5 @@
 import { SEED_MONTHS } from "@/lib/accounts-receivable";
-import { monthCode, monthDay, shiftDays } from "@/lib/seed-dates";
+import { monthCode, monthDay, normalizePeriodKey, shiftDays } from "@/lib/seed-dates";
 
 export type PayableCategory =
   | "maintenance"
@@ -59,6 +59,38 @@ export function payableCategoryLabel(value: string) {
   );
 }
 
+/**
+ * Map an AP invoice category onto Management budget department + line key
+ * so paid invoices hit the correct property budget.
+ */
+export function payableCategoryToBudgetTarget(category: string): {
+  department: "maintenance" | "executive";
+  categoryKey: string;
+} {
+  switch (category) {
+    case "lawncare":
+      return { department: "maintenance", categoryKey: "landscaping" };
+    case "janitorial":
+      return { department: "maintenance", categoryKey: "janitorial" };
+    case "security":
+      return { department: "maintenance", categoryKey: "security" };
+    case "repairs":
+    case "maintenance":
+      return { department: "maintenance", categoryKey: "general" };
+    case "utilities":
+    case "gas":
+    case "insurance":
+    case "property_taxes":
+    case "supplies":
+    case "other":
+      return { department: "maintenance", categoryKey: "other" };
+    case "professional_fees":
+      return { department: "executive", categoryKey: "professional_services" };
+    default:
+      return { department: "maintenance", categoryKey: "other" };
+  }
+}
+
 export function money(n: number) {
   return n.toLocaleString("en-US", {
     style: "currency",
@@ -71,6 +103,43 @@ export function money(n: number) {
 /** Amount still owed on an invoice after payments applied. */
 export function balanceOf(invoice: PayableInvoice) {
   return Math.max(0, round2(invoice.amount - invoice.amountPaid));
+}
+
+/**
+ * Sum operating-expense cash for a property (location).
+ * Uses amountPaid (money that left / leaves the property bank), not billed.
+ * When `period` is provided ("2026-08" or "Aug 2026"), only invoices whose
+ * invoiceDate falls in that month are included. Management-fee settlements
+ * are excluded — those are CPMC's fee, already in the remittance waterfall.
+ */
+export function operatingExpensesForProperty(
+  invoices: Pick<
+    PayableInvoice,
+    "id" | "property" | "amount" | "amountPaid" | "invoiceDate" | "disputed"
+  >[],
+  property: string,
+  period?: string
+) {
+  const propertyKey = property.trim().toLowerCase();
+  if (!propertyKey) return 0;
+  const periodKey = period ? normalizePeriodKey(period) : null;
+
+  return round2(
+    invoices
+      .filter((inv) => {
+        if ((inv.property || "").trim().toLowerCase() !== propertyKey) {
+          return false;
+        }
+        if (inv.id.startsWith("mgmt-fee-ap:")) return false;
+        if (inv.disputed) return false;
+        if (periodKey) {
+          const invoiceMonth = (inv.invoiceDate || "").slice(0, 7);
+          if (normalizePeriodKey(invoiceMonth) !== periodKey) return false;
+        }
+        return true;
+      })
+      .reduce((sum, inv) => sum + (Number(inv.amountPaid) || 0), 0)
+  );
 }
 
 /**

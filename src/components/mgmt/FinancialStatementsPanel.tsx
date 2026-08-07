@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   COLLECTIONS,
   useSharedCollection,
@@ -56,15 +56,24 @@ function asOfMonth(mode: PeriodMode, month: number) {
   return Math.min(12, new Date().getMonth() + 1);
 }
 
-export function FinancialStatementsPanel() {
+export function FinancialStatementsPanel({
+  preferredPropertyId,
+}: {
+  /** When the analytics page property filter changes, pre-select that property here. */
+  preferredPropertyId?: string;
+} = {}) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [periodMode, setPeriodMode] = useState<PeriodMode>("full_year");
   const [month, setMonth] = useState(new Date().getMonth() + 1);
-  const [propertyId, setPropertyId] = useState("all");
+  const [propertyId, setPropertyId] = useState(preferredPropertyId ?? "all");
   const [kind, setKind] = useState<StatementKind>("package");
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (preferredPropertyId) setPropertyId(preferredPropertyId);
+  }, [preferredPropertyId]);
 
   const { items: properties } = useSharedCollection<ManagementContractDraft>(
     COLLECTIONS.managedProperties
@@ -193,7 +202,7 @@ export function FinancialStatementsPanel() {
 
       const scopeLabel =
         propertyId === "all"
-          ? "Harborline Managed Portfolio (consolidated)"
+          ? "CPMC Managed Portfolio (consolidated)"
           : scopedProps[0]?.propertyName || "Selected property";
 
       const lines: string[] = [];
@@ -312,7 +321,7 @@ export function FinancialStatementsPanel() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `Harborline-financials-${year}-${periodMode}-${propertyId}.txt`;
+    a.download = `CPMC-financials-${year}-${periodMode}-${propertyId}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -338,17 +347,18 @@ export function FinancialStatementsPanel() {
           Generate financial statements
         </h2>
         <p className="mt-1 text-sm opacity-65">
-          Build an accountant package from portfolio metrics, AR/AP, bank cash,
-          and Assets depreciation. Choose year, period, property, and statement
-          type.
+          Choose the year, period, property, and statement type, then generate a
+          package you can download or print for your accountant.
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <label className="form-control">
-          <span className="mb-1 text-sm opacity-70">Fiscal year</span>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-[var(--harbor-ink)]/65">
+            Fiscal year
+          </span>
           <select
-            className="select select-bordered bg-white"
+            className="select select-bordered w-full bg-white"
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
           >
@@ -358,12 +368,14 @@ export function FinancialStatementsPanel() {
               </option>
             ))}
           </select>
-        </label>
+        </div>
 
-        <label className="form-control">
-          <span className="mb-1 text-sm opacity-70">Period</span>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-[var(--harbor-ink)]/65">
+            Period
+          </span>
           <select
-            className="select select-bordered bg-white"
+            className="select select-bordered w-full bg-white"
             value={periodMode}
             onChange={(e) => setPeriodMode(e.target.value as PeriodMode)}
           >
@@ -371,13 +383,15 @@ export function FinancialStatementsPanel() {
             <option value="ytd">Year to date</option>
             <option value="month">Single month</option>
           </select>
-        </label>
+        </div>
 
         {periodMode === "month" ? (
-          <label className="form-control">
-            <span className="mb-1 text-sm opacity-70">Month</span>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-[var(--harbor-ink)]/65">
+              Month
+            </span>
             <select
-              className="select select-bordered bg-white"
+              className="select select-bordered w-full bg-white"
               value={month}
               onChange={(e) => setMonth(Number(e.target.value))}
             >
@@ -387,13 +401,15 @@ export function FinancialStatementsPanel() {
                 </option>
               ))}
             </select>
-          </label>
+          </div>
         ) : null}
 
-        <label className="form-control">
-          <span className="mb-1 text-sm opacity-70">Property</span>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-[var(--harbor-ink)]/65">
+            Property
+          </span>
           <select
-            className="select select-bordered bg-white"
+            className="select select-bordered w-full bg-white"
             value={propertyId}
             onChange={(e) => setPropertyId(e.target.value)}
           >
@@ -404,12 +420,14 @@ export function FinancialStatementsPanel() {
               </option>
             ))}
           </select>
-        </label>
+        </div>
 
-        <label className="form-control sm:col-span-2 lg:col-span-1">
-          <span className="mb-1 text-sm opacity-70">Statement</span>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-[var(--harbor-ink)]/65">
+            Statement type
+          </span>
           <select
-            className="select select-bordered bg-white"
+            className="select select-bordered w-full bg-white"
             value={kind}
             onChange={(e) => setKind(e.target.value as StatementKind)}
           >
@@ -418,7 +436,7 @@ export function FinancialStatementsPanel() {
             <option value="balance">Balance sheet</option>
             <option value="depreciation">Depreciation schedule</option>
           </select>
-        </label>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">

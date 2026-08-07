@@ -1,13 +1,9 @@
-import { getMockPortalNotifications } from "@/lib/portal/notifications-mock";
 import {
-  countUnreadNotifications,
-  isNotificationRead,
   markAllNotificationsRead,
   markNotificationRead,
   markNotificationUnread,
 } from "@/lib/portal/notifications-read-store";
 import type { Notification, PortalNotificationWithRead } from "@/lib/portal/models";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import { requirePortalServiceSession } from "@/lib/portal/services/session";
 import {
   assertNotForcedError,
@@ -39,17 +35,7 @@ export async function listNotifications(): Promise<
   try {
     await simulateLatency(350);
     // BACKEND_TODO: live in-app notifications for auth.uid() only
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok([], "mock");
-    }
-    const scopeId = auth.data.tenantScopeId;
-    const items = getMockPortalNotifications()
-      .map((item) => ({
-        ...item,
-        read: isNotificationRead(item.id, scopeId),
-      }))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    return ok(items, "mock");
+    return ok([], "live");
   } catch (err) {
     return failFromUnknown(
       err,
@@ -65,14 +51,7 @@ export async function getUnreadNotificationCount(): Promise<
   const auth = await requirePortalServiceSession();
   if (!auth.ok) return auth;
   try {
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok(0, "mock");
-    }
-    const ids = getMockPortalNotifications().map((n) => n.id);
-    return ok(
-      countUnreadNotifications(ids, auth.data.tenantScopeId),
-      "mock"
-    );
+    return ok(0, "live");
   } catch (err) {
     return failFromUnknown(err, "Could not load unread count.");
   }
@@ -106,5 +85,5 @@ export async function markAllNotificationsAsRead(
 }
 
 export function getNotificationsDemoFixture(): Notification[] {
-  return getMockPortalNotifications();
+  return [];
 }

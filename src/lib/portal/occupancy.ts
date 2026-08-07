@@ -1,5 +1,5 @@
 /**
- * Shared personal vs commercial occupancy for current- and future-tenant portals.
+ * Shared personal vs commercial occupancy for the tenant portal.
  * Aligns with owner/management `PropertyType` where a finer asset class is needed.
  */
 

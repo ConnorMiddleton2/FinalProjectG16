@@ -28,7 +28,7 @@ export function OwnerApprovalDecisionForm({
           name="comment"
           className="owner-input min-h-20 py-3"
           rows={2}
-          placeholder="Optional note for Harborline"
+          placeholder="Optional note for CPMC"
         />
       </label>
       <div className="flex flex-wrap gap-2">

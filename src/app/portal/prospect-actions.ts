@@ -9,6 +9,8 @@ import {
   verifyTenantPortalLogin,
   clearTenantPortalSession,
   findTenantAccount,
+  getTenantPortalSession,
+  type TenantAccount,
 } from "@/lib/tenant-portal-accounts";
 import { createClient } from "@/lib/supabase/server";
 import { COLLECTIONS, upsertSharedRecord } from "@/lib/shared-store";
@@ -21,87 +23,76 @@ export type ProspectApplyState = {
   applicationId?: string;
 };
 
-export async function prospectStartApplication(
-  _prev: ProspectApplyState,
-  formData: FormData
-): Promise<ProspectApplyState> {
-  const fullName = String(formData.get("fullName") || "").trim();
-  const email = String(formData.get("email") || "").trim().toLowerCase();
-  const password = String(formData.get("password") || "").trim();
-  const phone = String(formData.get("phone") || "").trim();
-  const dateOfBirth = String(formData.get("dateOfBirth") || "").trim();
-  const lookingFor = String(formData.get("lookingFor") || "").trim();
-  const propertyInterest = String(formData.get("propertyInterest") || "").trim();
-  const propertyId = String(formData.get("propertyId") || "").trim();
-  const notes = String(formData.get("notes") || "").trim();
-  const employment = String(formData.get("employment") || "").trim();
-  const idDocument = String(formData.get("idDocument") || "").trim();
-  const guarantorName = String(formData.get("guarantorName") || "").trim();
-  const guarantorPhone = String(formData.get("guarantorPhone") || "").trim();
+function readApplyFields(formData: FormData) {
+  return {
+    fullName: String(formData.get("fullName") || "").trim(),
+    email: String(formData.get("email") || "").trim().toLowerCase(),
+    password: String(formData.get("password") || "").trim(),
+    phone: String(formData.get("phone") || "").trim(),
+    dateOfBirth: String(formData.get("dateOfBirth") || "").trim(),
+    lookingFor: String(formData.get("lookingFor") || "").trim(),
+    propertyInterest: String(formData.get("propertyInterest") || "").trim(),
+    propertyId: String(formData.get("propertyId") || "").trim(),
+    notes: String(formData.get("notes") || "").trim(),
+    moveInTiming: String(formData.get("moveInTiming") || "").trim(),
+    householdSize: String(formData.get("householdSize") || "").trim(),
+    employment: String(formData.get("employment") || "").trim(),
+    idDocument: String(formData.get("idDocument") || "").trim(),
+    guarantorName: String(formData.get("guarantorName") || "").trim(),
+    guarantorPhone: String(formData.get("guarantorPhone") || "").trim(),
+  };
+}
 
-  if (!fullName || !email || !password) {
-    return { error: "Name, email, and password are required." };
-  }
+function validateAgeDocs(fields: ReturnType<typeof readApplyFields>) {
+  const needsGuarantor = requiresGuarantor(fields.dateOfBirth);
+  const age = ageFromDob(fields.dateOfBirth);
 
-  const needsGuarantor = requiresGuarantor(dateOfBirth);
-  const age = ageFromDob(dateOfBirth);
-
-  if (age != null && age >= 21 && !idDocument.trim()) {
+  if (age != null && age >= 21 && !fields.idDocument.trim()) {
     return {
       error: "Applicants 21+ must provide a valid ID document reference.",
-    };
+    } as const;
   }
-  if (age != null && age >= 21 && !employment.trim()) {
+  if (age != null && age >= 21 && !fields.employment.trim()) {
     return {
       error: "Applicants 21+ must provide proof of employment details.",
-    };
+    } as const;
   }
-  if (needsGuarantor && (!guarantorName || !guarantorPhone)) {
+  if (needsGuarantor && (!fields.guarantorName || !fields.guarantorPhone)) {
     return {
       error: "Applicants under 21 must include a guarantor name and phone.",
-    };
+    } as const;
   }
+  return {
+    needsGuarantor,
+    age,
+  } as const;
+}
 
-  let account = await findTenantAccount(email);
-  if (!account) {
-    const created = await registerTenantAccount({
-      email,
-      password,
-      fullName,
-      phone,
-      dateOfBirth,
-      lookingFor,
-    });
-    if ("error" in created) return { error: created.error };
-    account = created.account;
-  } else {
-    const verified = await verifyTenantPortalLogin(email, password);
-    if (!verified) {
-      return {
-        error:
-          "That email already has an account. Use the correct password, or sign in first.",
-      };
-    }
-    account = verified;
-  }
-
+/** Always creates a NEW application row (multiple apps per account/property allowed). */
+async function createTenantApplicationForAccount(
+  account: TenantAccount,
+  fields: ReturnType<typeof readApplyFields>,
+  needsGuarantor: boolean
+) {
   const applicationId = crypto.randomUUID();
   const now = new Date().toISOString();
   const application = {
     id: applicationId,
-    property: propertyInterest || lookingFor || "General inquiry",
-    propertyId,
-    name: fullName,
-    email,
-    phone,
+    property: fields.propertyInterest || fields.lookingFor || "General inquiry",
+    propertyId: fields.propertyId,
+    name: fields.fullName || account.fullName,
+    email: fields.email || account.email,
+    phone: fields.phone || account.phone,
     notes: [
-      notes,
-      lookingFor ? `Looking for: ${lookingFor}` : "",
-      dateOfBirth ? `DOB: ${dateOfBirth}` : "",
-      employment ? `Employment: ${employment}` : "",
-      idDocument ? `ID: ${idDocument}` : "",
+      fields.notes,
+      fields.lookingFor ? `Looking for: ${fields.lookingFor}` : "",
+      fields.moveInTiming ? `Move-in timing: ${fields.moveInTiming}` : "",
+      fields.householdSize ? `Household / company: ${fields.householdSize}` : "",
+      fields.dateOfBirth ? `DOB: ${fields.dateOfBirth}` : "",
+      fields.employment ? `Employment: ${fields.employment}` : "",
+      fields.idDocument ? `ID: ${fields.idDocument}` : "",
       needsGuarantor
-        ? `Guarantor: ${guarantorName} · ${guarantorPhone}`
+        ? `Guarantor: ${fields.guarantorName} · ${fields.guarantorPhone}`
         : "",
     ]
       .filter(Boolean)
@@ -110,13 +101,13 @@ export async function prospectStartApplication(
     createdAt: now.slice(0, 10),
     smStatus: "reviewing",
     tenantAccountId: account.id,
-    dateOfBirth,
-    lookingFor,
+    dateOfBirth: fields.dateOfBirth || account.dateOfBirth,
+    lookingFor: fields.lookingFor || account.lookingFor,
     requiresGuarantor: needsGuarantor,
-    guarantorName,
-    guarantorPhone,
-    employmentProof: employment,
-    idDocumentRef: idDocument,
+    guarantorName: fields.guarantorName,
+    guarantorPhone: fields.guarantorPhone,
+    employmentProof: fields.employment,
+    idDocumentRef: fields.idDocument,
     documentsComplete: false,
     leasePacketStatus: "not_sent",
   };
@@ -129,23 +120,119 @@ export async function prospectStartApplication(
     application as unknown as Record<string, unknown>
   );
 
-  const updated = {
+  const updated: TenantAccount = {
     ...account,
-    fullName,
-    phone,
-    dateOfBirth,
-    lookingFor,
-    status: "pending_application" as const,
+    fullName: fields.fullName || account.fullName,
+    phone: fields.phone || account.phone,
+    dateOfBirth: fields.dateOfBirth || account.dateOfBirth,
+    lookingFor: fields.lookingFor || account.lookingFor,
+    status:
+      account.status === "active" ? account.status : "pending_application",
     applicationIds: [...new Set([...account.applicationIds, applicationId])],
-    preferredPropertyIds: propertyId
-      ? [...new Set([...account.preferredPropertyIds, propertyId])]
+    preferredPropertyIds: fields.propertyId
+      ? [...new Set([...account.preferredPropertyIds, fields.propertyId])]
       : account.preferredPropertyIds,
     updatedAt: now,
   };
   await saveTenantAccount(updated);
   await setTenantPortalSession(updated);
 
-  redirect(`${PORTAL_HOME_PATH}?welcome=application`);
+  return { applicationId, account: updated };
+}
+
+export async function prospectStartApplication(
+  _prev: ProspectApplyState,
+  formData: FormData
+): Promise<ProspectApplyState> {
+  const fields = readApplyFields(formData);
+
+  if (!fields.fullName || !fields.email || !fields.password) {
+    return { error: "Name, email, and password are required." };
+  }
+
+  const ageCheck = validateAgeDocs(fields);
+  if ("error" in ageCheck) return { error: ageCheck.error };
+  const { needsGuarantor } = ageCheck;
+
+  let account = await findTenantAccount(fields.email);
+  if (!account) {
+    const created = await registerTenantAccount({
+      email: fields.email,
+      password: fields.password,
+      fullName: fields.fullName,
+      phone: fields.phone,
+      dateOfBirth: fields.dateOfBirth,
+      lookingFor: fields.lookingFor,
+    });
+    if ("error" in created) return { error: created.error };
+    account = created.account;
+  } else {
+    const verified = await verifyTenantPortalLogin(
+      fields.email,
+      fields.password
+    );
+    if (!verified) {
+      return {
+        error:
+          "That email already has an account. Use the correct password, or sign in and start another application from your portal.",
+      };
+    }
+    account = verified;
+  }
+
+  const created = await createTenantApplicationForAccount(
+    account,
+    fields,
+    needsGuarantor
+  );
+  return { ok: true, applicationId: created.applicationId };
+}
+
+/**
+ * Signed-in applicant starts another application (same or different property).
+ * Does not require re-entering password; always creates a new application row.
+ */
+export async function prospectStartAdditionalApplication(
+  _prev: ProspectApplyState,
+  formData: FormData
+): Promise<ProspectApplyState> {
+  const session = await getTenantPortalSession();
+  if (!session) {
+    return {
+      error: "Sign in to your tenant account to start another application.",
+    };
+  }
+
+  const fields = readApplyFields(formData);
+  const fullName = fields.fullName || session.fullName;
+  const email = session.email;
+  const phone = fields.phone || session.phone;
+  const dateOfBirth = fields.dateOfBirth || session.dateOfBirth;
+
+  if (!fullName) {
+    return { error: "Full name is required." };
+  }
+  if (!fields.lookingFor && !fields.propertyInterest) {
+    return { error: "Tell us what you are looking for, or pick a property." };
+  }
+
+  const merged = {
+    ...fields,
+    fullName,
+    email,
+    phone,
+    dateOfBirth,
+    password: "",
+  };
+  const ageCheck = validateAgeDocs(merged);
+  if ("error" in ageCheck) return { error: ageCheck.error };
+
+  const created = await createTenantApplicationForAccount(
+    session,
+    merged,
+    ageCheck.needsGuarantor
+  );
+  return { ok: true, applicationId: created.applicationId };
 }
 
 export async function tenantPortalLoginAction(
@@ -164,5 +251,11 @@ export async function tenantPortalLoginAction(
 
 export async function tenantPortalLogoutAction() {
   await clearTenantPortalSession();
+  const { clearOwnerSession } = await import("@/lib/owner-auth");
+  await clearOwnerSession();
+  const { clearPortalDemoCookies } = await import(
+    "@/lib/portal/portal-demo-auth-server"
+  );
+  await clearPortalDemoCookies();
   redirect("/portal/start");
 }

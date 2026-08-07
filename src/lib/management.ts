@@ -10,6 +10,7 @@ import {
   type MaintenanceDocument,
 } from "@/lib/maintenance";
 import type { PayableCategory, PayableInvoice } from "@/lib/accounts-payable";
+import { payableCategoryToBudgetTarget } from "@/lib/accounts-payable";
 import { addDaysIso, round2, todayIso } from "@/lib/money";
 
 export type OwnerContract = {
@@ -28,8 +29,8 @@ export type OwnerContract = {
   emailedTo?: string;
   ownerSignedAt?: string;
   ownerSignatureName?: string;
-  harborlineSignedAt?: string;
-  harborlineSignedBy?: string;
+  cpmcSignedAt?: string;
+  cpmcSignedBy?: string;
   relatedApplicationId?: string;
 };
 
@@ -44,7 +45,7 @@ export type CapExVendorInvoice = {
 };
 
 export type CapExPaymentMethod =
-  | "pay_harborline_direct"
+  | "pay_cpmc_direct"
   | "credit_owner_account"
   | "owner_pays_vendor"
   | "financing_discussion";
@@ -90,14 +91,14 @@ export const CAPEX_PAYMENT_METHODS: {
   blurb: string;
 }[] = [
   {
-    value: "pay_harborline_direct",
-    label: "Pay Harborline directly",
-    blurb: "Owner remits funds to Harborline; we pay the vendor.",
+    value: "pay_cpmc_direct",
+    label: "Pay CPMC directly",
+    blurb: "Owner remits funds to CPMC; we pay the vendor.",
   },
   {
     value: "credit_owner_account",
     label: "Credit my owner account",
-    blurb: "Deduct / credit against reserves or amounts held by Harborline.",
+    blurb: "Deduct / credit against reserves or amounts held by CPMC.",
   },
   {
     value: "owner_pays_vendor",
@@ -107,7 +108,7 @@ export const CAPEX_PAYMENT_METHODS: {
   {
     value: "financing_discussion",
     label: "Discuss financing",
-    blurb: "Need Harborline to propose financing or phased payment options.",
+    blurb: "Need CPMC to propose financing or phased payment options.",
   },
 ];
 
@@ -643,6 +644,15 @@ export function spendForBudgetCategory(input: {
     documentDate: string;
     approvalStatus?: string;
   }>;
+  /** AP vendor invoices — paid amounts hit property budgets. */
+  payableInvoices?: Array<{
+    amount: number;
+    amountPaid: number;
+    category: string;
+    property: string;
+    invoiceDate: string;
+    disputed?: boolean;
+  }>;
 }): CategorySpend {
   let approved = 0;
   let pending = 0;
@@ -698,6 +708,24 @@ export function spendForBudgetCategory(input: {
       if (status === "approved") approved += amt;
       else if (status === "pending") pending += amt;
     }
+    // Paid AP invoices coded to this maintenance budget line
+    for (const inv of input.payableInvoices ?? []) {
+      if (inv.disputed) continue;
+      const paid = Number(inv.amountPaid) || 0;
+      if (paid <= 0) continue;
+      if (!inPeriod(inv.invoiceDate)) continue;
+      if (input.propertyName) {
+        const prop = (inv.property || "").toLowerCase();
+        const want = input.propertyName.toLowerCase();
+        if (prop && want && !prop.includes(want) && !want.includes(prop)) {
+          continue;
+        }
+      }
+      const target = payableCategoryToBudgetTarget(inv.category || "other");
+      if (target.department !== "maintenance") continue;
+      if (normalizeMaintCategoryKey(target.categoryKey) !== key) continue;
+      approved += paid;
+    }
     for (const e of input.deptExpenses) {
       if (e.department !== "maintenance") continue;
       if (!inPeriod(e.submittedAt)) continue;
@@ -723,6 +751,26 @@ export function spendForBudgetCategory(input: {
 
   if (input.department !== "executive") {
     return { approved: 0, pending: 0 };
+  }
+
+  for (const inv of input.payableInvoices ?? []) {
+    if (inv.disputed) continue;
+    const paid = Number(inv.amountPaid) || 0;
+    if (paid <= 0) continue;
+    if (!inPeriod(inv.invoiceDate)) continue;
+    if (input.propertyName) {
+      const prop = (inv.property || "").toLowerCase();
+      const want = input.propertyName.toLowerCase();
+      if (prop && want && !prop.includes(want) && !want.includes(prop)) {
+        continue;
+      }
+    }
+    const target = payableCategoryToBudgetTarget(inv.category || "other");
+    if (target.department !== "executive") continue;
+    if (target.categoryKey !== key && !(key === "other" && target.categoryKey === "other")) {
+      continue;
+    }
+    if (target.categoryKey === key) approved += paid;
   }
 
   for (const e of input.deptExpenses) {
@@ -1044,7 +1092,7 @@ Address for notices: ${app.email}${app.phone ? ` | ${app.phone}` : ""}
 
 and
 
-MANAGER: Harborline Property Management ("Manager")
+MANAGER: CPMC Property Management Company ("Manager")
 
 RECITALS
 
@@ -1070,16 +1118,18 @@ ARTICLE 3 — TERM
 3.1 The initial term shall be ${term} year(s) commencing on the Effective Date.
 3.2 Thereafter the Agreement renews for successive one-year periods unless either party provides written notice of non-renewal at least ninety (90) days before the then-current term ends.
 
-ARTICLE 4 — MANAGEMENT FEE & PAYMENT TERMS
-4.1 Manager's fee shall equal ${fee} percent (${fee}%) of Gross Collections (rents and recoverable charges actually received).
-4.2 Payment terms: ${app.paymentTerms?.trim() || "Fees payable monthly in arrears within fifteen (15) days after month-end, deducted from operating accounts or invoiced to Owner."}
-4.3 Negotiated commercial terms incorporated herein:
+ARTICLE 4 — MANAGEMENT FEE & OWNER REMITTANCES
+4.1 Manager's fee shall equal ${fee} percent (${fee}%) of Gross Collections (tenant rents and recoverable charges actually received for the Premises).
+4.2 Expected monthly profit to Owner. After Gross Collections are received, Manager shall deduct (a) expected ordinary operating expenses for the Premises, (b) the management fee under Section 4.1, and (c) a conservative residual reserve held for accrued liabilities and working capital. The remaining amount is the Expected Monthly Profit remitted to Owner.
+4.3 Expected Monthly Profit is what Owner receives each period — not gross rent. Remittances are paid from property operating accounts after the deductions in Section 4.2, on the schedule in Section 4.4.
+4.4 Payment terms: ${app.paymentTerms?.trim() || "Expected Monthly Profit payable monthly in arrears within fifteen (15) days after month-end, after operating expenses, management fee, and conservative residual are applied."}
+4.5 Negotiated commercial terms incorporated herein:
 ${app.negotiationTerms?.trim() || "None beyond standard form."}
-4.4 Owner-stated preferences from meetings:
+4.6 Owner-stated preferences from meetings:
 ${app.ownerDesiredTerms?.trim() || "None recorded."}
 
 ARTICLE 5 — AUTHORITY OF MANAGER
-5.1 Manager may market vacancies, negotiate leases within Owner guidelines, collect rents, pay ordinary operating expenses, and engage vendors within approved budgets.
+5.1 Manager may market vacancies, negotiate leases within Owner guidelines, collect tenant rents and charges, pay ordinary operating expenses, apply the management fee and conservative residual, remit Expected Monthly Profit to Owner, and engage vendors within approved budgets.
 5.2 Capital expenditures and extraordinary repairs require Owner approval except for emergency expenditures necessary to protect life or property, which Manager shall report promptly.
 
 ARTICLE 6 — OWNER OBLIGATIONS
@@ -1096,7 +1146,7 @@ ${app.marketResearch?.trim() || "[Attached or to follow]"}
 ${app.meetingMinutesNotes?.trim() || "[None]"}
 
 ARTICLE 8 — ACCOUNTING & REPORTING
-8.1 Manager shall deliver monthly operating statements, rent roll, and material variance commentary within fifteen (15) business days after each month-end.
+8.1 Manager shall deliver monthly operating statements, including Gross Collections, operating expenses, management fee, conservative residual, Expected Monthly Profit remitted to Owner, and material variance commentary within fifteen (15) business days after each month-end.
 
 ARTICLE 9 — TERMINATION
 9.1 Either party may terminate for material breach not cured within thirty (30) days after written notice.
@@ -1112,7 +1162,7 @@ IN WITNESS WHEREOF, the parties have executed this Agreement as of the Effective
 
 OWNER:                                     MANAGER:
 _______________________________            _______________________________
-${app.fullName}                            Harborline Property Management
+${app.fullName}                            CPMC Property Management Company
 Date: _____________                        Date: _____________
 
 SCHEDULE A — PREMISES
@@ -1124,11 +1174,11 @@ ${props || "[Attach legal descriptions / addresses]"}
 export function meetingRequestMessage(app: OwnerApplication) {
   return `Hi ${app.fullName},
 
-Thank you for applying to have Harborline manage your property. We'd like to schedule a meeting (and, if helpful, an on-site inspection) to walk the asset, review goals, and discuss fee structure and term.
+Thank you for applying to have CPMC manage your property. We'd like to schedule a meeting (and, if helpful, an on-site inspection) to walk the asset, review goals, and discuss fee structure and term.
 
 Please reply with a few times that work over the next two weeks, or confirm a call.
 
-— Harborline Management`;
+— CPMC Property Management Company`;
 }
 
 export type UnifiedExpense = {

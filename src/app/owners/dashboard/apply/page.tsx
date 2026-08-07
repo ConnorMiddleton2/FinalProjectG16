@@ -45,7 +45,7 @@ export default async function OwnerApplyPage() {
           </h1>
           <p className="owner-muted mt-2 text-sm leading-relaxed sm:text-base">
             Provide the asset metrics, financials, tenancy, systems, and service
-            needs Harborline requires to underwrite and onboard a commercial
+            needs CPMC requires to underwrite and onboard a commercial
             property. Short-term / individual vacation rentals are not accepted.
           </p>
         </div>

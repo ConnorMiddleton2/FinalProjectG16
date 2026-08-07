@@ -2,10 +2,20 @@ export type TenantCategory =
   | "active"
   | "pending"
   | "past_due"
-  | "vacating";
+  | "vacating"
+  | "terminated";
 
 /** Payment standing — optional on older records; derived from pendingDue when missing. */
 export type PaymentStatus = "current" | "late" | "partial";
+
+export type {
+  TenantPaymentMethod,
+} from "@/lib/payment-methods";
+
+import {
+  isTenantPaymentMethod,
+  type TenantPaymentMethod,
+} from "@/lib/payment-methods";
 
 export type TenantRecord = {
   id: string;
@@ -29,6 +39,26 @@ export type TenantRecord = {
   leaseEnd?: string;
   /** Explicit payment status — optional; falls back from pendingDue. */
   paymentStatus?: PaymentStatus;
+  /**
+   * Preferred rent payment method (ACH, check, debit card).
+   * Synced with the tenant portal payment-method picker.
+   */
+  paymentMethod?: TenantPaymentMethod;
+  /**
+   * @deprecated Prefer paymentMethod. Kept in sync: true when paymentMethod === "ach".
+   */
+  achAutopay?: boolean;
+  /**
+   * Set when an overdue case cures via payment — tenant stays on the roster
+   * but is flagged for the delinquency infraction.
+   */
+  collectionsInfraction?: {
+    flaggedAt: string;
+    reason: string;
+    daysPastDueAtCure: number;
+    amountAtCure: number;
+    noticeCount: number;
+  };
 };
 
 export const TENANT_CATEGORIES: { value: TenantCategory; label: string }[] = [
@@ -36,6 +66,7 @@ export const TENANT_CATEGORIES: { value: TenantCategory; label: string }[] = [
   { value: "pending", label: "Pending" },
   { value: "past_due", label: "Past due" },
   { value: "vacating", label: "Vacating" },
+  { value: "terminated", label: "Terminated / evicted" },
 ];
 
 export const PAYMENT_STATUSES: { value: PaymentStatus; label: string }[] = [
@@ -109,7 +140,7 @@ function parseDay(iso: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** Categories that mean the tenancy has ended (none in current enum; checked for safety). */
+/** Categories that mean the tenancy has ended. */
 function categoryMeansFormer(category: string): boolean {
   return (
     category === "former" ||
@@ -188,7 +219,9 @@ export function leaseStatusOverviewLabel(
   t: TenantRecord,
   now = new Date()
 ): string {
-  if (isFormerOrExpired(t, now)) return "Former";
+  if (isFormerOrExpired(t, now)) {
+    return t.category === "terminated" ? "Evicted" : "Former";
+  }
   if (t.category === "past_due") return "Past due";
   if (t.category === "pending") return "Pending";
   if (isExpiringOccupant(t, 90, now)) return "Expiring";
@@ -248,7 +281,33 @@ export function emptyTenant(): Omit<TenantRecord, "id"> {
     dateLeased: new Date().toISOString().slice(0, 10),
     leaseEnd: "",
     paymentStatus: "current",
+    paymentMethod: "ach",
+    achAutopay: true,
   };
+}
+
+/** Resolve payment method from new field or legacy achAutopay. */
+export function getPaymentMethod(t: TenantRecord): TenantPaymentMethod {
+  if (isTenantPaymentMethod(t.paymentMethod)) return t.paymentMethod;
+  if (t.achAutopay === true) return "ach";
+  return "check";
+}
+
+/** Apply payment method and keep achAutopay derived for older consumers. */
+export function withPaymentMethod(
+  t: TenantRecord,
+  method: TenantPaymentMethod
+): TenantRecord {
+  return {
+    ...t,
+    paymentMethod: method,
+    achAutopay: method === "ach",
+  };
+}
+
+/** Whether the tenant has ACH as their payment method. */
+export function hasAchAutopay(t: TenantRecord): boolean {
+  return getPaymentMethod(t) === "ach";
 }
 
 export function seedTenants(): TenantRecord[] {

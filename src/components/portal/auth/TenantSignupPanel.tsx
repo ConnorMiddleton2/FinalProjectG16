@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useId, useMemo, useState } from "react";
+import { FormEvent, useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -11,10 +11,6 @@ import {
   PORTAL_APPLY_PATH,
 } from "@/lib/portal/auth";
 import { createClient } from "@/lib/supabase/client";
-import {
-  isTenantAuthDemoMode,
-  TENANT_AUTH_DEMO_SAMPLE,
-} from "@/lib/portal/tenant-auth-demo";
 import { validateTenantInvitation } from "@/lib/portal/tenant-invite";
 import {
   evaluatePasswordStrength,
@@ -26,29 +22,16 @@ import {
   type TenantSignupValues,
 } from "@/lib/portal/tenant-auth-validation";
 
-function emptySignup(demoMode: boolean): TenantSignupValues {
-  if (!demoMode) {
-    return {
-      firstName: "",
-      lastName: "",
-      email: "",
-      phone: "",
-      unit: "",
-      invitationCode: "",
-      password: "",
-      confirmPassword: "",
-      agreeToTerms: false,
-    };
-  }
+function emptySignup(): TenantSignupValues {
   return {
-    firstName: TENANT_AUTH_DEMO_SAMPLE.firstName,
-    lastName: TENANT_AUTH_DEMO_SAMPLE.lastName,
-    email: TENANT_AUTH_DEMO_SAMPLE.email,
-    phone: TENANT_AUTH_DEMO_SAMPLE.phone,
-    unit: TENANT_AUTH_DEMO_SAMPLE.unit,
-    invitationCode: TENANT_AUTH_DEMO_SAMPLE.invitationCode,
-    password: TENANT_AUTH_DEMO_SAMPLE.password,
-    confirmPassword: TENANT_AUTH_DEMO_SAMPLE.password,
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    unit: "",
+    invitationCode: "",
+    password: "",
+    confirmPassword: "",
     agreeToTerms: false,
   };
 }
@@ -57,21 +40,14 @@ export function TenantSignupPanel() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const formId = useId();
-  const demoMode = isTenantAuthDemoMode();
 
-  const [values, setValues] = useState<TenantSignupValues>(() =>
-    emptySignup(false)
-  );
+  const [values, setValues] = useState<TenantSignupValues>(emptySignup);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setValues(emptySignup(demoMode));
-  }, [demoMode]);
 
   const strength = useMemo(
     () => evaluatePasswordStrength(values.password),
@@ -161,7 +137,7 @@ export function TenantSignupPanel() {
 
       try {
         window.sessionStorage.setItem(
-          "harborline.portal.futureInviteSeed.v1",
+          "cpmc.portal.futureInviteSeed.v1",
           JSON.stringify({
             propertyLabel: claim.invite.propertyLabel,
             unit: claim.invite.unit,
@@ -227,20 +203,9 @@ export function TenantSignupPanel() {
         Tenant signup
       </h2>
       <p className="mt-1 text-sm text-[var(--harbor-muted)]">
-        Create an account with a valid invitation code from Harborline. You will
-        only access records for your own unit.
+        Create an account to apply or open your dashboard. Use an invitation
+        code when CPMC has issued one for your unit.
       </p>
-
-      {demoMode ? (
-        <p
-          className="mt-3 rounded-xl border border-[var(--harbor-mid)]/25 bg-[var(--harbor-mist)]/60 px-3 py-2 text-xs text-[var(--harbor-ink)]/80"
-          role="note"
-        >
-          Demo sample fields are prefilled (including invitation code{" "}
-          {TENANT_AUTH_DEMO_SAMPLE.invitationCode}). Submitting still goes
-          through Supabase auth — nothing is auto-created without your click.
-        </p>
-      ) : null}
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <Field
@@ -355,7 +320,7 @@ export function TenantSignupPanel() {
               }
             />
             <span>
-              I agree to the Harborline{" "}
+              I agree to the CPMC{" "}
               <span className="font-medium">terms of use</span> and{" "}
               <span className="font-medium">privacy policy</span>.
             </span>

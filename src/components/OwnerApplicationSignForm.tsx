@@ -60,7 +60,7 @@ export function OwnerApplicationSignForm({
         disabled={pending}
         aria-busy={pending}
       >
-        {pending ? "Signing…" : "Sign & return to Harborline"}
+        {pending ? "Signing…" : "Sign & return to dashboard"}
       </button>
       {state.error ? (
         <OwnerAlert variant="error">{state.error}</OwnerAlert>

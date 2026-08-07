@@ -1,7 +1,9 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import {
   lookupOwnerApplications,
+  setOwnerSession,
   signOwnerApplicationContract,
   type ApplicationStatusSummary,
 } from "@/lib/owner-auth";
@@ -56,8 +58,9 @@ export async function signApplicationContractAction(
   _prev: SignContractState,
   formData: FormData
 ): Promise<SignContractState> {
+  const email = String(formData.get("email") ?? "");
   const result = await signOwnerApplicationContract({
-    email: String(formData.get("email") ?? ""),
+    email,
     applicationId: String(formData.get("applicationId") ?? ""),
     signatureName: String(formData.get("signatureName") ?? ""),
     acknowledged: formData.get("acknowledged") === "on",
@@ -67,21 +70,19 @@ export async function signApplicationContractAction(
     return { error: result.error };
   }
 
-  return {
-    success:
-      "Agreement signed. Your temporary password is below — use it to sign in, then change it on your dashboard.",
-    application: result.application,
-  };
+  await setOwnerSession(email.trim().toLowerCase());
+  redirect("/owners/dashboard?agreement=signed");
 }
 
-/** Sign a Harborline-generated agreement from Management (owner_contracts). */
+/** Sign a CPMC-generated agreement from Management (owner_contracts). */
 export async function signApplicationContract(
   _prev: SignContractState,
   formData: FormData
 ): Promise<SignContractState> {
+  const email = String(formData.get("email") ?? "");
   const result = await signOwnerProposedContract({
     contractId: String(formData.get("contractId") ?? ""),
-    email: String(formData.get("email") ?? ""),
+    email,
     applicationId: String(formData.get("applicationId") ?? ""),
     signatureName: String(formData.get("signatureName") ?? ""),
   });
@@ -90,8 +91,10 @@ export async function signApplicationContract(
     return { error: result.error };
   }
 
-  return {
-    success:
-      "Contract signed and returned to Harborline. They will finish provisioning your account.",
-  };
+  await setOwnerSession(email.trim().toLowerCase());
+  const params = new URLSearchParams({ agreement: "signed" });
+  if (result.temporaryPassword) {
+    params.set("tempPassword", result.temporaryPassword);
+  }
+  redirect(`/owners/dashboard?${params.toString()}`);
 }

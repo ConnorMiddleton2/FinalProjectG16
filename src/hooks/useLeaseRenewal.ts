@@ -8,7 +8,6 @@ import type {
   RenewalWizardStep,
 } from "@/lib/portal/renewal-types";
 import {
-  advanceRenewalDemoStatus,
   clearRenewalRequest,
   getRenewalBundle,
   submitRenewalRequest,
@@ -177,7 +176,7 @@ export function useLeaseRenewal() {
       });
       setStep("confirmation");
       setSuccessMessage(
-        "Request submitted. Harborline will review it — this does not finalize your renewal."
+        "Request submitted. CPMC will review it — this does not finalize your renewal."
       );
       window.setTimeout(() => setSuccessMessage(null), 5000);
       return true;
@@ -192,21 +191,6 @@ export function useLeaseRenewal() {
       setSubmitting(false);
     }
   }, [draft.message, selectedTerm, state, submitting]);
-
-  /** Demo helper: advance mock status for tracking UI (not a live workflow). */
-  const advanceDemoStatus = useCallback(() => {
-    if (state.status !== "success" || !state.request) return;
-    void (async () => {
-      const result = await advanceRenewalDemoStatus(state.request!);
-      if (!result.ok || state.status !== "success") return;
-      setState({
-        status: "success",
-        context: state.context,
-        request: result.data,
-        source: result.source,
-      });
-    })();
-  }, [state]);
 
   const startOver = useCallback(() => {
     void clearRenewalRequest();
@@ -245,7 +229,6 @@ export function useLeaseRenewal() {
     goNextFromMessage,
     goBack,
     submitRequest,
-    advanceDemoStatus,
     startOver,
   };
 }

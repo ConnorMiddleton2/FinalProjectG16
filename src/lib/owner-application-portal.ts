@@ -9,6 +9,7 @@ import {
   type OwnerApplication,
 } from "@/lib/owner-auth";
 import type { OwnerContract } from "@/lib/management";
+import { completeOwnerApplicationAfterSignature } from "@/app/ops/management/owner-applications/actions";
 
 /** Full application only when the email matches the record (public status flow). */
 export async function getOwnerApplicationDetailForEmail(input: {
@@ -67,7 +68,10 @@ export async function signOwnerProposedContract(input: {
   if (!contract) {
     return { error: "Contract not found." as const };
   }
-  if (contract.status !== "pending_owner_signature") {
+  if (
+    contract.status !== "pending_owner_signature" &&
+    contract.status !== "signed_by_owner"
+  ) {
     return { error: "This contract is not awaiting your signature." as const };
   }
   if (
@@ -77,32 +81,40 @@ export async function signOwnerProposedContract(input: {
     return { error: "Contract does not match this application." as const };
   }
 
-  const updatedContract: OwnerContract = {
-    ...contract,
-    status: "signed_by_owner",
-    ownerSignedAt: new Date().toISOString(),
-    ownerSignatureName: signatureName,
-  };
-
-  const updatedApp: OwnerApplication = {
-    ...detail.application,
-    mgmtStatus: "owner_signed",
-    accountMessage: `Contract signed and returned to Harborline on ${new Date().toLocaleString()}. Awaiting account provisioning.`,
-  };
-
+  // Mark signed first so complete flow can find the contract
   const client = await createClient();
   await upsertSharedRecord(
     client,
     COLLECTIONS.ownerContracts,
-    updatedContract.id,
-    updatedContract as unknown as Record<string, unknown>
-  );
-  await upsertSharedRecord(
-    client,
-    COLLECTIONS.ownerApplications,
-    updatedApp.id,
-    updatedApp as unknown as Record<string, unknown>
+    contract.id,
+    {
+      ...contract,
+      status: "signed_by_owner",
+      ownerSignedAt: new Date().toISOString(),
+      ownerSignatureName: signatureName,
+    } as unknown as Record<string, unknown>
   );
 
-  return { ok: true as const, contract: updatedContract };
+  const completed = await completeOwnerApplicationAfterSignature({
+    applicationId: input.applicationId,
+    contractId: input.contractId,
+    signatureName,
+    email,
+  });
+  if ("error" in completed) {
+    return completed;
+  }
+
+  return {
+    ok: true as const,
+    contract: {
+      ...contract,
+      status: "fully_executed" as const,
+      ownerSignedAt: completed.application.ownerSignedAt,
+      ownerSignatureName: signatureName,
+    },
+    application: completed.application,
+    temporaryPassword: completed.temporaryPassword,
+    propertyCount: completed.propertyCount,
+  };
 }

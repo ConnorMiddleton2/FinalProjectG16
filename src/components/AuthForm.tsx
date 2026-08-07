@@ -1,20 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { portalDemoLogin } from "@/app/portal/demo-actions";
 import { createClient } from "@/lib/supabase/client";
 import {
   isPortalPrivatePath,
   PORTAL_HOME_PATH,
 } from "@/lib/portal/auth";
-import {
-  isPortalDemoCredentials,
-  PORTAL_DEMO_PASSWORD,
-  PORTAL_DEMO_SESSION_STORAGE_KEY,
-  PORTAL_DEMO_TENANT,
-} from "@/lib/portal/portal-demo-auth";
 import { ALL_ROLES, ROLE_META, type UserRole } from "@/lib/types";
 
 type Mode = "login" | "signup";
@@ -30,26 +23,13 @@ function emailNotConfirmedMessage(raw: string) {
 export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState(
-    mode === "login" ? PORTAL_DEMO_TENANT.email : ""
-  );
-  const [password, setPassword] = useState(
-    mode === "login" ? PORTAL_DEMO_PASSWORD : ""
-  );
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<UserRole>("manager");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (mode !== "login") return;
-    try {
-      window.sessionStorage.removeItem(PORTAL_DEMO_SESSION_STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-  }, [mode]);
 
   async function resolvePostLoginPath(): Promise<string> {
     const next = searchParams.get("next");
@@ -86,62 +66,32 @@ export function AuthForm({ mode }: { mode: Mode }) {
       const portalDestination =
         next && isPortalPrivatePath(next) ? next : PORTAL_HOME_PATH;
 
-      // Prefill demo credentials always work via portal demo cookie (no Supabase user needed).
-      if (isPortalDemoCredentials(email, password)) {
-        try {
-          window.sessionStorage.setItem(
-            PORTAL_DEMO_SESSION_STORAGE_KEY,
-            JSON.stringify(PORTAL_DEMO_TENANT)
-          );
-        } catch {
-          /* private mode */
-        }
-        try {
-          await portalDemoLogin(portalDestination);
-        } catch (err) {
-          const digest =
-            err && typeof err === "object" && "digest" in err
-              ? String((err as { digest?: string }).digest)
-              : "";
-          if (digest.startsWith("NEXT_REDIRECT")) {
-            return;
-          }
-          setLoading(false);
-          setError(
-            err instanceof Error ? err.message : "Demo tenant login failed."
-          );
-        }
-        return;
-      }
-
       // Prospect / tenant portal accounts (created via Start application)
-      if (next && isPortalPrivatePath(next)) {
-        try {
-          const { tenantPortalLoginAction } = await import(
-            "@/app/portal/prospect-actions"
-          );
-          const portalLogin = await tenantPortalLoginAction(
-            {},
-            (() => {
-              const fd = new FormData();
-              fd.set("email", email);
-              fd.set("password", password);
-              return fd;
-            })()
-          );
-          if (!portalLogin?.error) {
-            router.push(portalDestination);
-            router.refresh();
-            return;
-          }
-        } catch (err) {
-          const digest =
-            err && typeof err === "object" && "digest" in err
-              ? String((err as { digest?: string }).digest)
-              : "";
-          if (digest.startsWith("NEXT_REDIRECT")) {
-            return;
-          }
+      try {
+        const { tenantPortalLoginAction } = await import(
+          "@/app/portal/prospect-actions"
+        );
+        const portalLogin = await tenantPortalLoginAction(
+          {},
+          (() => {
+            const fd = new FormData();
+            fd.set("email", email);
+            fd.set("password", password);
+            return fd;
+          })()
+        );
+        if (!portalLogin?.error) {
+          router.push(portalDestination);
+          router.refresh();
+          return;
+        }
+      } catch (err) {
+        const digest =
+          err && typeof err === "object" && "digest" in err
+            ? String((err as { digest?: string }).digest)
+            : "";
+        if (digest.startsWith("NEXT_REDIRECT")) {
+          return;
         }
       }
 

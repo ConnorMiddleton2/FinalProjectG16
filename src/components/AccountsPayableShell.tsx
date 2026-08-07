@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { OpsBrandHomeLink } from "@/components/OpsBrandHomeLink";
 import { useState } from "react";
-import { ArrowLeft, Building2, Inbox, LogOut, Wrench } from "lucide-react";
+import { ArrowLeft, Building2, LogOut, Wrench } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
 import { OperatingExpensesPayable } from "@/components/AccountsPayableDashboard";
-import { ApApprovalQueue } from "@/components/ApApprovalQueue";
 import { MonthlyMarginPanel } from "@/components/MonthlyMarginPanel";
 import { OwnerPayablesPanel } from "@/components/OwnerPayablesPanel";
 
-type ApTab = "expenses" | "owners" | "queue";
+type ApTab = "expenses" | "owners";
 
 const TABS: {
   id: ApTab;
@@ -20,7 +20,8 @@ const TABS: {
   {
     id: "expenses",
     label: "Operating expenses",
-    description: "Vendor invoices for maintenance, utilities, and other ops costs (includes Management-approved queue items)",
+    description:
+      "Vendor invoices for maintenance, utilities, and other ops costs (including Management-approved expenses)",
     icon: Wrench,
   },
   {
@@ -29,25 +30,16 @@ const TABS: {
     description: "Rental distributions after the contract management fee",
     icon: Building2,
   },
-  {
-    id: "queue",
-    label: "Approved payment queue",
-    description: "Expenses Management approved and released for payment",
-    icon: Inbox,
-  },
 ];
 
 export function AccountsPayableDashboard() {
   const [tab, setTab] = useState<ApTab>("expenses");
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
+    <div className="min-h-screen bg-[var(--harbor-sand)]">
       <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Accounts payable</p>
-          </div>
+          <OpsBrandHomeLink subtitle="Accounts payable" />
           <form action={teamLogout}>
             <button
               type="submit"
@@ -74,10 +66,9 @@ export function AccountsPayableDashboard() {
             Accounts payable
           </h1>
           <p className="mt-2 max-w-2xl text-[var(--harbor-ink)]/65">
-            Separate operating-expense vendor bills from amounts Harborline owes
-            property owners after its contract management fee, and work the queue of
-            expenses Management has released for payment. Switch tabs below; the
-            header stays the same for every view.
+            Separate operating-expense vendor bills from amounts CPMC owes
+            property owners after its contract management fee. Switch tabs below;
+            the header stays the same for every view.
           </p>
         </div>
 
@@ -86,7 +77,7 @@ export function AccountsPayableDashboard() {
         <div
           role="tablist"
           aria-label="Accounts payable sections"
-          className="grid gap-3 sm:grid-cols-3"
+          className="grid gap-3 sm:grid-cols-2"
         >
           {TABS.map(({ id, label, description, icon: Icon }) => {
             const active = tab === id;
@@ -120,7 +111,6 @@ export function AccountsPayableDashboard() {
         <div role="tabpanel">
           {tab === "expenses" ? <OperatingExpensesPayable /> : null}
           {tab === "owners" ? <OwnerPayablesPanel /> : null}
-          {tab === "queue" ? <ApApprovalQueue /> : null}
         </div>
       </main>
     </div>

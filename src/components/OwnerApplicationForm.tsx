@@ -180,7 +180,8 @@ export function OwnerApplicationForm({
             Demo shortcut
           </p>
           <p className="owner-muted text-xs">
-            Fills entity, documents, notes, and two sample commercial properties.
+            Fills entity, documents, notes, and 1–3 random commercial properties
+            (new sample data each click).
           </p>
         </div>
         <button
@@ -195,7 +196,7 @@ export function OwnerApplicationForm({
 
       <Section
         title="1. Ownership entity & contacts"
-        blurb="Legal ownership details Harborline needs for contracting, tax reporting, and day-to-day communication."
+        blurb="Legal ownership details CPMC needs for contracting, tax reporting, and day-to-day communication."
       >
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Full legal name (signatory)">
@@ -331,7 +332,7 @@ export function OwnerApplicationForm({
               3. Commercial properties
             </h2>
             <p className="owner-muted text-xs">
-              Harborline manages commercial assets only (office, retail,
+              CPMC manages commercial assets only (office, retail,
               industrial, mixed-use, multifamily). Short-term / individual
               vacation rentals are not accepted.
             </p>
@@ -421,7 +422,7 @@ export function OwnerApplicationForm({
                 <div className="space-y-4 border-t border-[var(--harbor-deep)]/10 px-4 py-4">
                   <Section
                     title="Asset identity"
-                    blurb="Where is the property and how should Harborline refer to it?"
+                    blurb="Where is the property and how should CPMC refer to it?"
                   >
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Field label="Property name" className="sm:col-span-2">
@@ -666,7 +667,7 @@ export function OwnerApplicationForm({
 
                   <Section
                     title="Tenancy, leasing & current management"
-                    blurb="Lease rollover risk and why you are seeking Harborline."
+                    blurb="Lease rollover risk and why you are seeking CPMC."
                     defaultOpen={false}
                   >
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -882,7 +883,7 @@ export function OwnerApplicationForm({
 
                   <Section
                     title="Goals & services requested"
-                    blurb="What success looks like and which Harborline functions you want engaged."
+                    blurb="What success looks like and which CPMC functions you want engaged."
                   >
                     <div className="space-y-3">
                       <Field label="Owner goals for this asset">
@@ -936,7 +937,7 @@ export function OwnerApplicationForm({
                           placeholder="Lobby refresh Q4; roof overlay budgeted next FY."
                         />
                       </Field>
-                      <Field label="Special instructions for Harborline">
+                      <Field label="Special instructions for CPMC">
                         <textarea
                           className="owner-input min-h-16 py-3"
                           value={property.specialInstructions}
@@ -960,7 +961,7 @@ export function OwnerApplicationForm({
       </div>
 
       <Section
-        title="4. Additional notes for Harborline"
+        title="4. Additional notes for CPMC"
         blurb="Anything else management should know before diligence starts."
         defaultOpen={false}
       >

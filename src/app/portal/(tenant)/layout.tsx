@@ -1,10 +1,11 @@
 import { requirePortalTenant } from "@/lib/portal/auth-server";
 import { headers } from "next/headers";
 import { PortalShell } from "@/components/portal/PortalShell";
+import { PortalSessionProvider } from "@/components/portal/PortalSessionContext";
 
 /**
- * Private current-tenant portal routes.
- * Requires authenticated Supabase user with profiles.role === "tenant".
+ * Private tenant portal routes.
+ * Accepts tenant_accounts cookie (prospects), demo cookie, or Supabase tenant role.
  */
 export default async function PortalTenantLayout({
   children,
@@ -22,12 +23,14 @@ export default async function PortalTenantLayout({
   );
 
   return (
-    <PortalShell
-      email={session.email}
-      displayName={session.displayName}
-      isSignedIn
-    >
-      {children}
-    </PortalShell>
+    <PortalSessionProvider session={session}>
+      <PortalShell
+        email={session.email}
+        displayName={session.displayName}
+        isSignedIn
+      >
+        {children}
+      </PortalShell>
+    </PortalSessionProvider>
   );
 }

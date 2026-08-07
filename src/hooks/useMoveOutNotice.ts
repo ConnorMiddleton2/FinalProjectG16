@@ -14,7 +14,6 @@ import {
   validateMoveOutForm,
 } from "@/lib/portal/move-out-validation";
 import {
-  advanceMoveOutDemoStatus,
   clearMoveOutNotice,
   getMoveOutBundle,
   submitMoveOutNotice,
@@ -174,20 +173,6 @@ export function useMoveOutNotice() {
     }
   }, [state, values, submitting]);
 
-  const advanceDemoStatus = useCallback(() => {
-    if (state.status !== "success" || !state.notice) return;
-    void (async () => {
-      const result = await advanceMoveOutDemoStatus(state.notice!);
-      if (!result.ok || state.status !== "success") return;
-      setState({
-        status: "success",
-        context: state.context,
-        notice: result.data,
-        source: result.source,
-      });
-    })();
-  }, [state]);
-
   const startOver = useCallback(() => {
     void clearMoveOutNotice();
     if (state.status === "success") {
@@ -223,7 +208,6 @@ export function useMoveOutNotice() {
     goNextFromDetails,
     goBack,
     submitNotice,
-    advanceDemoStatus,
     startOver,
   };
 }

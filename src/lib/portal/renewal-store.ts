@@ -1,7 +1,7 @@
 import type { RenewalRequestRecord } from "@/lib/portal/renewal-types";
 import { portalStorageKey } from "@/lib/portal/storage-key";
 
-const STORAGE_BASE = "harborline.portal.renewalRequest.v1";
+const STORAGE_BASE = "cpmc.portal.renewalRequest.v1";
 
 function canUseStorage() {
   return (

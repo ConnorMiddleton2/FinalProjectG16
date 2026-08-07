@@ -65,11 +65,13 @@ const LAST = [
 
 const PROPERTIES = [
   { id: "prop-grandview", name: "Grandview Apartments", type: "multifamily", units: 300 },
-  { id: "prop-oakridge", name: "Oakridge Flats", type: "multifamily", units: 80 },
   { id: "prop-meridian-tower", name: "Meridian Tower", type: "office", units: 12 },
-  { id: "prop-riverside-office", name: "Riverside Office Park", type: "office", units: 80 },
-  { id: "prop-willow-creek", name: "Willow Creek Senior Residences", type: "multifamily", units: 100 },
-  { id: "prop-lakeside", name: "Lakeside Senior Community", type: "multifamily", units: 200 },
+  {
+    id: "00000000-0000-4000-8000-0000000000b1",
+    name: "Riverbend Commerce Center",
+    type: "industrial",
+    units: 24,
+  },
 ];
 
 function round2(n) {
@@ -81,7 +83,7 @@ function nameAt(i) {
 }
 
 function emailSlug(first, last, n) {
-  return `${first}.${last}.${n}@harborline.demo`.toLowerCase().replace(/\s+/g, "");
+  return `${first}.${last}.${n}@cpmc.demo`.toLowerCase().replace(/\s+/g, "");
 }
 
 function moduleAccess(department, category) {
@@ -245,7 +247,7 @@ function buildEmployees() {
     jobTitle: "Team member",
     status: "active",
     propertyId: "",
-    propertyName: "Harborline Corporate",
+    propertyName: "CPMC Corporate",
     moduleAccess: moduleAccess("management", "corporate"),
     passwordHash: CADE_PASSWORD_HASH,
     temporaryPassword: "Baxter10!",
@@ -257,7 +259,7 @@ function buildEmployees() {
     federalWithholding: "Married filing jointly — W-4 on file",
     stateWithholding: "CA — standard",
     deductionsNotes: "Health insurance, 401(k) 4%",
-    directDepositBank: "Harborline Credit Union",
+    directDepositBank: "CPMC Credit Union",
     directDepositAccountLast4: "4821",
     directDepositRoutingLast4: "1220",
     payrollNotes: "Corporate ops login.",
@@ -290,7 +292,7 @@ function buildEmployees() {
       jobTitle: title,
       status: "active",
       propertyId: "",
-      propertyName: "Harborline Corporate",
+      propertyName: "CPMC Corporate",
       moduleAccess: moduleAccess(dept, "corporate"),
       passwordHash: "",
       temporaryPassword: "",
@@ -302,7 +304,7 @@ function buildEmployees() {
       federalWithholding: "W-4 on file",
       stateWithholding: "State standard",
       deductionsNotes: "Medical, dental, 401(k)",
-      directDepositBank: "Harborline Credit Union",
+      directDepositBank: "CPMC Credit Union",
       directDepositAccountLast4: String(1000 + (seq % 9000)).slice(-4),
       directDepositRoutingLast4: "1220",
       payrollNotes: `Corporate ${title}`,

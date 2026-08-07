@@ -1,83 +1,101 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  COLLECTIONS,
-  useSharedCollection,
-} from "@/hooks/useSharedCollection";
-import {
-  CONSERVATIVE_MARGIN_RATE,
-  seedBankAccounts,
-  seedBankTransactions,
-  seedOwnerCashCalls,
-  type BankAccount,
-  type BankTransaction,
-  type OwnerCashCall,
-} from "@/lib/bank-accounts-shared";
+import { useCallback, useEffect, useState } from "react";
+import { CONSERVATIVE_MARGIN_RATE } from "@/lib/bank-accounts-shared";
 import { money } from "@/lib/money";
 import {
   fundCashCallAction,
+  loadAccountLedgerAction,
+  loadBanksCashOverviewAction,
   provisionBankAccountsAction,
   queueResidualAction,
   remitOwnerAction,
   requestCashCallAction,
   runMonthlyFeeSweepAction,
+  syncBanksFromLedgersAction,
+  type BankCashOverviewRow,
 } from "@/app/ops/banks/actions";
+import {
+  COLLECTIONS,
+  useSharedCollection,
+} from "@/hooks/useSharedCollection";
+import {
+  seedOwnerCashCalls,
+  type OwnerCashCall,
+} from "@/lib/bank-accounts-shared";
+
+type LedgerRow = {
+  id: string;
+  kind: string;
+  direction: "credit" | "debit";
+  amount: number;
+  memo: string;
+  counterparty: string;
+  createdAt: string;
+};
 
 export function BanksDashboard() {
-  const {
-    items: accounts,
-    loading,
-    error,
-    refresh,
-  } = useSharedCollection<BankAccount>(
-    COLLECTIONS.bankAccounts,
-    seedBankAccounts
-  );
-  const { items: txns } = useSharedCollection<BankTransaction>(
-    COLLECTIONS.bankTransactions,
-    seedBankTransactions
-  );
   const { items: cashCalls, refresh: refreshCalls } =
     useSharedCollection<OwnerCashCall>(
       COLLECTIONS.ownerCashCalls,
       seedOwnerCashCalls
     );
 
+  const [rows, setRows] = useState<BankCashOverviewRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [ledger, setLedger] = useState<LedgerRow[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cashAmount, setCashAmount] = useState("");
   const [cashReason, setCashReason] = useState("");
 
+  const loadOverview = useCallback(async () => {
+    setError(null);
+    try {
+      const result = await loadBanksCashOverviewAction();
+      setRows(result.rows);
+      setSelectedId((prev) => {
+        if (prev && result.rows.some((r) => r.id === prev)) return prev;
+        return result.rows[0]?.id ?? null;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load banks.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadLedger = useCallback(async (accountId: string) => {
+    setLedgerLoading(true);
+    try {
+      const result = await loadAccountLedgerAction(accountId);
+      setLedger(result.txns);
+    } catch {
+      setLedger([]);
+    } finally {
+      setLedgerLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void (async () => {
       await provisionBankAccountsAction();
-      await refresh();
+      await loadOverview();
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadOverview]);
 
-  const sorted = useMemo(
-    () =>
-      [...accounts].sort((a, b) => {
-        if (a.kind !== b.kind) return a.kind === "corporate" ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      }),
-    [accounts]
-  );
+  useEffect(() => {
+    if (!selectedId) {
+      setLedger([]);
+      return;
+    }
+    void loadLedger(selectedId);
+  }, [selectedId, loadLedger]);
 
-  const selected =
-    accounts.find((a) => a.id === selectedId) ?? sorted[0] ?? null;
-
-  const selectedTxns = useMemo(
-    () =>
-      txns
-        .filter((t) => t.accountId === selected?.id)
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .slice(0, 40),
-    [txns, selected?.id]
-  );
+  const selected = rows.find((r) => r.id === selectedId) ?? rows[0] ?? null;
 
   function flash(text: string) {
     setMsg(text);
@@ -96,14 +114,17 @@ export function BanksDashboard() {
         return;
       }
       flash(label);
-      await refresh();
+      await loadOverview();
       await refreshCalls();
+      if (selectedId) await loadLedger(selectedId);
     } finally {
       setBusy(false);
     }
   }
 
-  const totalCash = accounts.reduce((s, a) => s + (a.balance || 0), 0);
+  const totalCash = rows.reduce((s, a) => s + (a.balance || 0), 0);
+  const totalRent = rows.reduce((s, a) => s + (a.rentIn || 0), 0);
+  const totalExpenses = rows.reduce((s, a) => s + (a.expensesOut || 0), 0);
 
   return (
     <div className="space-y-4">
@@ -117,71 +138,117 @@ export function BanksDashboard() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm opacity-65">
-            Conservative margin held before owner remits:{" "}
-            {(CONSERVATIVE_MARGIN_RATE * 100).toFixed(0)}% of rent roll + unpaid
-            AP.
+            Each property bank shows rent cash in, paid expenses out, and the
+            resulting cash balance. Management fees sweep property → CPMC
+            Corporate. Owner remittances leave the property account. Margin held
+            before owner remits: {(CONSERVATIVE_MARGIN_RATE * 100).toFixed(0)}%
+            of rent roll + unpaid AP.
           </p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">
-            Portfolio cash {money(totalCash)}
-          </p>
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+            <p>
+              <span className="opacity-60">Rent in </span>
+              <span className="font-semibold tabular-nums text-emerald-800">
+                {money(totalRent)}
+              </span>
+            </p>
+            <p>
+              <span className="opacity-60">Expenses out </span>
+              <span className="font-semibold tabular-nums text-red-800">
+                {money(totalExpenses)}
+              </span>
+            </p>
+            <p>
+              <span className="opacity-60">Portfolio cash </span>
+              <span className="text-xl font-semibold tabular-nums">
+                {money(totalCash)}
+              </span>
+            </p>
+          </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-outline btn-sm"
-          disabled={busy}
-          onClick={() =>
-            void run("Accounts provisioned.", () =>
-              provisionBankAccountsAction()
-            )
-          }
-        >
-          Sync accounts from properties
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            disabled={busy}
+            onClick={() =>
+              void run("Accounts provisioned.", () =>
+                provisionBankAccountsAction()
+              )
+            }
+          >
+            Sync accounts from properties
+          </button>
+          <button
+            type="button"
+            className="btn btn-neutral btn-sm"
+            disabled={busy || loading}
+            onClick={() =>
+              void run(
+                "Cash rebuilt from rents and paid expenses.",
+                async () => {
+                  const result = await syncBanksFromLedgersAction();
+                  if (result && "error" in result && result.error) {
+                    return { error: String(result.error) };
+                  }
+                  return { ok: true };
+                }
+              )
+            }
+          >
+            Rebuild rent &amp; expense cash
+          </button>
+        </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <div className="overflow-x-auto rounded-2xl border border-[var(--harbor-deep)]/12 bg-white/90 shadow-sm">
           <table className="table">
             <thead>
               <tr>
                 <th>Account</th>
-                <th>Kind</th>
-                <th>Balance</th>
-                <th>Reserved</th>
-                <th>Pending owner</th>
+                <th className="text-right">Rent in</th>
+                <th className="text-right">Expenses &amp; payroll</th>
+                <th className="text-right">Cash balance</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="opacity-60">
-                    Loading bank accounts…
+                  <td colSpan={4} className="opacity-60">
+                    Loading bank cash…
                   </td>
                 </tr>
-              ) : sorted.length === 0 ? (
+              ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="opacity-60">
-                    No accounts yet — sync from properties.
+                  <td colSpan={4} className="opacity-60">
+                    No accounts yet — sync from properties, then rebuild cash.
                   </td>
                 </tr>
               ) : (
-                sorted.map((a) => (
+                rows.map((a) => (
                   <tr
                     key={a.id}
-                    className={`cursor-pointer ${selected?.id === a.id ? "bg-[var(--harbor-deep)]/8" : ""}`}
+                    className={`cursor-pointer ${
+                      selected?.id === a.id ? "bg-[var(--harbor-deep)]/8" : ""
+                    }`}
                     onClick={() => setSelectedId(a.id)}
                   >
                     <td>
                       <p className="font-medium">{a.name}</p>
                       <p className="text-xs opacity-55">
-                        {a.ownerName || a.ownerEmail || "—"}
+                        {a.kind === "corporate"
+                          ? "CPMC"
+                          : a.ownerName || a.ownerEmail || "—"}
                       </p>
                     </td>
-                    <td className="text-sm capitalize">{a.kind}</td>
-                    <td className="tabular-nums">{money(a.balance)}</td>
-                    <td className="tabular-nums">{money(a.reservedBalance)}</td>
-                    <td className="tabular-nums">
-                      {money(a.pendingOwnerRemit)}
+                    <td className="text-right tabular-nums text-emerald-800">
+                      {a.kind === "property" ? money(a.rentIn) : "—"}
+                    </td>
+                    <td className="text-right tabular-nums text-red-800">
+                      {a.kind === "property" ? money(a.expensesOut) : "—"}
+                    </td>
+                    <td className="text-right font-medium tabular-nums">
+                      {money(a.balance)}
                     </td>
                   </tr>
                 ))
@@ -195,9 +262,28 @@ export function BanksDashboard() {
             <div>
               <p className="text-lg font-semibold">{selected.name}</p>
               <p className="text-sm opacity-65">
-                {selected.propertyName || "Corporate"} · Balance{" "}
-                {money(selected.balance)}
+                {selected.propertyName || "Corporate"}
               </p>
+              <dl className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
+                <div className="rounded-xl border border-emerald-700/15 bg-emerald-50/60 px-2 py-3">
+                  <dt className="text-xs opacity-60">Rent in</dt>
+                  <dd className="mt-1 font-semibold tabular-nums text-emerald-800">
+                    {money(selected.rentIn)}
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-red-700/15 bg-red-50/60 px-2 py-3">
+                  <dt className="text-xs opacity-60">Expenses out</dt>
+                  <dd className="mt-1 font-semibold tabular-nums text-red-800">
+                    {money(selected.expensesOut)}
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-[var(--harbor-deep)]/15 bg-white px-2 py-3">
+                  <dt className="text-xs opacity-60">Cash</dt>
+                  <dd className="mt-1 font-semibold tabular-nums">
+                    {money(selected.balance)}
+                  </dd>
+                </div>
+              </dl>
             </div>
 
             {selected.kind === "property" ? (
@@ -287,30 +373,44 @@ export function BanksDashboard() {
             ) : null}
 
             <div>
-              <p className="mb-2 text-sm font-semibold">Recent ledger</p>
-              {selectedTxns.length === 0 ? (
-                <p className="text-sm opacity-60">No transactions yet.</p>
+              <p className="mb-2 text-sm font-semibold">Cash activity</p>
+              {ledgerLoading ? (
+                <p className="text-sm opacity-60">Loading activity…</p>
+              ) : ledger.length === 0 ? (
+                <p className="text-sm opacity-60">
+                  No rent or expense activity yet. Click{" "}
+                  <span className="font-medium">Rebuild rent &amp; expense cash</span>
+                  .
+                </p>
               ) : (
-                <div className="max-h-72 overflow-y-auto rounded-xl border border-base-300">
+                <div className="max-h-80 overflow-y-auto rounded-xl border border-base-300">
                   <table className="table table-sm">
                     <thead>
                       <tr>
                         <th>When</th>
-                        <th>Kind</th>
+                        <th>Type</th>
                         <th>Memo</th>
-                        <th>Amount</th>
+                        <th className="text-right">Amount</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedTxns.map((t) => (
+                      {ledger.map((t) => (
                         <tr key={t.id}>
                           <td className="whitespace-nowrap text-xs">
-                            {t.createdAt.slice(0, 16).replace("T", " ")}
+                            {(t.createdAt || "").slice(0, 16).replace("T", " ")}
                           </td>
-                          <td className="text-xs">{t.kind}</td>
+                          <td className="text-xs capitalize">
+                            {t.kind === "tenant_rent"
+                              ? "Rent in"
+                              : t.kind === "property_expense"
+                                ? "Expense"
+                                : t.kind === "payroll"
+                                  ? "Payroll"
+                                  : t.kind.replaceAll("_", " ")}
+                          </td>
                           <td className="text-xs">{t.memo}</td>
                           <td
-                            className={`tabular-nums text-xs ${
+                            className={`text-right tabular-nums text-xs ${
                               t.direction === "credit"
                                 ? "text-emerald-700"
                                 : "text-red-700"
@@ -348,8 +448,9 @@ export function BanksDashboard() {
                             className="btn btn-xs btn-neutral"
                             disabled={busy}
                             onClick={() =>
-                              void run("Cash call funded into property bank.", () =>
-                                fundCashCallAction({ cashCallId: c.id })
+                              void run(
+                                "Cash call funded into property bank.",
+                                () => fundCashCallAction({ cashCallId: c.id })
                               )
                             }
                           >

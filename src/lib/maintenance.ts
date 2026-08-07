@@ -264,10 +264,10 @@ export function generateMaintenanceInvoiceNumber(id: string) {
   return `MNT-${short}`;
 }
 
-export const WORK_ORDER_STORAGE_KEY = "harborline_work_orders";
-export const VENDOR_STORAGE_KEY = "harborline_vendors";
-export const BUDGET_STORAGE_KEY = "harborline_maintenance_budget";
-export const DOCUMENT_STORAGE_KEY = "harborline_maintenance_documents";
+export const WORK_ORDER_STORAGE_KEY = "cpmc_work_orders";
+export const VENDOR_STORAGE_KEY = "cpmc_vendors";
+export const BUDGET_STORAGE_KEY = "cpmc_maintenance_budget";
+export const DOCUMENT_STORAGE_KEY = "cpmc_maintenance_documents";
 
 export const WORK_ORDER_CATEGORIES: {
   value: WorkOrderCategory;
@@ -361,6 +361,37 @@ export function emptyWorkOrder(): Omit<WorkOrder, "id" | "createdAt"> {
     dueDate: "",
     completedAt: "",
   };
+}
+
+/** Shared / common areas selectable on any property work order. */
+export const COMMON_PROPERTY_AREAS = [
+  "Lobby / entrance",
+  "Corridors / hallways",
+  "Restrooms",
+  "Elevator",
+  "Stairs / stairwell",
+  "Parking / garage",
+  "Exterior / grounds",
+  "Roof",
+  "Mechanical / HVAC room",
+  "Electrical room",
+  "Loading dock",
+  "Trash / dumpster area",
+  "Common kitchen / break room",
+  "Entire building",
+] as const;
+
+/** Split a stored unit/area string into selectable chips. */
+export function parseWorkOrderAreas(raw: string): string[] {
+  return raw
+    .split(/[,;|]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** Persist multiple selected areas back onto WorkOrder.unit. */
+export function formatWorkOrderAreas(areas: string[]): string {
+  return areas.map((a) => a.trim()).filter(Boolean).join(", ");
 }
 
 export function seedWorkOrders(): WorkOrder[] {

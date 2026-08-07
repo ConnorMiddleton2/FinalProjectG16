@@ -1,18 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getPortalTenantSessionClient } from "@/lib/portal/auth-client";
 import type {
   PaymentsFilters,
   PaymentsLoadState,
   PaymentsOverview,
   PaymentTransaction,
 } from "@/lib/portal/payments-types";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import {
-  getEmptyPaymentsOverviewFixture,
   getPaymentsOverview,
-  getPaymentsOverviewDemoFixture,
 } from "@/lib/portal/services/paymentService";
 
 const DEFAULT_FILTERS: PaymentsFilters = {
@@ -24,9 +20,15 @@ const DEFAULT_FILTERS: PaymentsFilters = {
 };
 
 function isPaymentsEmpty(data: PaymentsOverview) {
+  const due = Number(String(data.amountDue).replace(/[^0-9.-]/g, ""));
+  const bal = Number(String(data.currentBalance).replace(/[^0-9.-]/g, ""));
+  const hasBill =
+    (Number.isFinite(due) && due > 0.009) ||
+    (Number.isFinite(bal) && bal > 0.009);
   return (
+    !hasBill &&
     data.transactions.length === 0 &&
-    data.amountDue === "$0.00" &&
+    data.ledger.length === 0 &&
     !data.savedMethod
   );
 }
@@ -68,7 +70,7 @@ function inDateRange(
 export function filterTransactions(
   transactions: PaymentTransaction[],
   filters: PaymentsFilters,
-  today = new Date("2026-04-30T12:00:00")
+  today = new Date()
 ) {
   return transactions.filter((txn) => {
     if (filters.status !== "all" && txn.status !== filters.status) return false;
@@ -118,28 +120,6 @@ export function useTenantPayments() {
     }
   }, [applyData]);
 
-  const loadDemoData = useCallback(() => {
-    void (async () => {
-      const session = await getPortalTenantSessionClient();
-      if (!session || !sessionOwnsDemoFixtures(session)) {
-        void load();
-        return;
-      }
-      applyData(getPaymentsOverviewDemoFixture(), "mock");
-    })();
-  }, [applyData, load]);
-
-  const loadEmptyDemo = useCallback(() => {
-    void (async () => {
-      const session = await getPortalTenantSessionClient();
-      if (!session || !sessionOwnsDemoFixtures(session)) {
-        void load();
-        return;
-      }
-      applyData(getEmptyPaymentsOverviewFixture(), "mock");
-    })();
-  }, [applyData, load]);
-
   useEffect(() => {
     void load();
   }, [load]);
@@ -168,8 +148,6 @@ export function useTenantPayments() {
     filteredTransactions,
     successMessage,
     reload: load,
-    loadDemoData,
-    loadEmptyDemo,
     updateFilters,
     resetFilters,
     showSuccess,

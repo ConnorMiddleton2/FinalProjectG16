@@ -154,7 +154,7 @@ export function UnitRentSchedulePanel({
             Fair-market unit rent schedule
           </p>
           <p className="text-xs opacity-65">
-            After inspection, Harborline prices each unit from market comps
+            After inspection, CPMC prices each unit from market comps
             ($/SF and floor-plan mix), confirms asking rent, and publishes vacant
             inventory so leasing → move-in → AR billing use the same numbers.
           </p>

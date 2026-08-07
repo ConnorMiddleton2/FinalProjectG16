@@ -1,4 +1,3 @@
-import { getMockTenantProfile } from "@/lib/portal/profile-mock";
 import {
   loadStoredProfile,
   saveStoredProfile,
@@ -7,7 +6,6 @@ import type {
   Tenant,
   TenantProfileEditable,
 } from "@/lib/portal/models";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import { requirePortalServiceSession } from "@/lib/portal/services/session";
 import {
   assertNotForcedError,
@@ -45,6 +43,8 @@ export async function getTenant(): Promise<ServiceResult<Tenant>> {
           legalName: auth.data.displayName,
           propertyName: auth.data.propertyName || "Assigned property",
           unitNumber: auth.data.unit || "—",
+          occupancyClass: "commercial",
+          propertyType: "office",
           tenantId: auth.data.tenantScopeId,
           leaseStatus: "Active",
           preferredName: auth.data.displayName,
@@ -71,41 +71,38 @@ export async function getTenant(): Promise<ServiceResult<Tenant>> {
         "live"
       );
     }
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok(
-        {
-          legalName: auth.data.displayName,
-          propertyName: "Unlinked property",
-          unitNumber: "—",
-          occupancyClass: "personal",
-          propertyType: "other",
-          tenantId: auth.data.tenantScopeId,
-          leaseStatus: "Active",
-          preferredName: auth.data.displayName,
-          email: auth.data.email,
-          phone: "",
-          preferredContactMethod: "email",
-          emergencyContact: { name: "", phone: "", relationship: "" },
-          vehicle: {
-            hasVehicle: false,
-            makeModel: "",
-            color: "",
-            licensePlate: "",
-            parkingPermit: "",
-          },
-          pets: { hasPets: false, summary: "", details: "" },
-          communication: {
-            emailUpdates: true,
-            smsUpdates: false,
-            portalMessages: true,
-            phoneCalls: false,
-            marketingOptIn: false,
-          },
+    return ok(
+      {
+        legalName: auth.data.displayName,
+        propertyName: "Unlinked property",
+        unitNumber: "—",
+        occupancyClass: "personal",
+        propertyType: "other",
+        tenantId: auth.data.tenantScopeId,
+        leaseStatus: "Active",
+        preferredName: auth.data.displayName,
+        email: auth.data.email,
+        phone: "",
+        preferredContactMethod: "email",
+        emergencyContact: { name: "", phone: "", relationship: "" },
+        vehicle: {
+          hasVehicle: false,
+          makeModel: "",
+          color: "",
+          licensePlate: "",
+          parkingPermit: "",
         },
-        "mock"
-      );
-    }
-    return ok(getMockTenantProfile(), "mock");
+        pets: { hasPets: false, summary: "", details: "" },
+        communication: {
+          emailUpdates: true,
+          smsUpdates: false,
+          portalMessages: true,
+          phoneCalls: false,
+          marketingOptIn: false,
+        },
+      },
+      "live"
+    );
   } catch (err) {
     return failFromUnknown(err, "Could not load your profile.", "network");
   }
@@ -142,8 +139,8 @@ export async function updateTenant(
 }
 
 /** Sync demo helper — no latency. Prefer getTenant() in production paths. */
-export function getTenantDemoFixture(): Tenant {
-  return getMockTenantProfile();
+export function getTenantDemoFixture(): Tenant | null {
+  return null;
 }
 
 export function emptyTenantMessage(): string {

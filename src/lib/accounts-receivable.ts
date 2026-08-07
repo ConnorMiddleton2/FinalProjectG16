@@ -2,6 +2,7 @@ import {
   monthDay,
   monthPeriodLabel,
   monthSlug,
+  periodsMatch,
   shiftDays,
 } from "@/lib/seed-dates";
 
@@ -22,6 +23,7 @@ export type MiscChargeType =
   | "damage_reimbursement"
   | "key_access"
   | "utility_reimbursement"
+  | "management_fee"
   | "other";
 
 export type ReceivableKind = "rental" | "miscellaneous";
@@ -67,6 +69,7 @@ export const MISC_CHARGE_TYPES: {
   { value: "damage_reimbursement", label: "Damage reimbursement" },
   { value: "key_access", label: "Key / access-card charge" },
   { value: "utility_reimbursement", label: "Utility reimbursement" },
+  { value: "management_fee", label: "Management fee" },
   { value: "other", label: "Other" },
 ];
 
@@ -90,6 +93,126 @@ export function money(n: number) {
 
 export function round2(n: number) {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Portfolio / annual roll-up A/R rows (seed budget summaries). These are not
+ * unit lease collections and must not drive bank deposits or remittance math.
+ */
+export function isAggregateRentReceivable(row: {
+  id?: string;
+  unit?: string;
+  description?: string;
+  customerName?: string;
+}) {
+  const id = (row.id || "").trim().toLowerCase();
+  const unit = (row.unit || "").trim().toLowerCase();
+  const desc = (row.description || "").toLowerCase();
+  const customer = (row.customerName || "").toLowerCase();
+  if (id.startsWith("ar-annual-")) return true;
+  if (
+    unit === "all" ||
+    unit === "portfolio" ||
+    unit === "—" ||
+    unit === "-" ||
+    unit === ""
+  ) {
+    return true;
+  }
+  if (unit.includes("portfolio")) return true;
+  if (desc.includes("annual base rent") || desc.includes("rent roll")) {
+    return true;
+  }
+  if (customer.includes("rent roll")) return true;
+  return false;
+}
+
+/** True unit / suite lease collections (portal-aligned). */
+export function isUnitLevelRentReceivable(row: {
+  id?: string;
+  unit?: string;
+  description?: string;
+  customerName?: string;
+  category?: string;
+}) {
+  if (isAggregateRentReceivable(row)) return false;
+  const category = (row.category || "").toLowerCase();
+  if (category && category !== "base_rent") return false;
+  return true;
+}
+
+/** Sum of active in-place lease rents for a property (from property_tenants). */
+export function rentCollectedFromActiveLeases(
+  tenants: {
+    propertyName?: string;
+    status?: string;
+    monthlyRent?: string | number;
+  }[],
+  property: string
+) {
+  const propertyKey = property.trim().toLowerCase();
+  return round2(
+    tenants
+      .filter(
+        (t) =>
+          (t.propertyName || "").trim().toLowerCase() === propertyKey &&
+          (t.status || "").toLowerCase() === "active"
+      )
+      .reduce((sum, t) => sum + (Number(t.monthlyRent) || 0), 0)
+  );
+}
+
+/**
+ * Unit-level A/R collections for the period, plus active lease rents for units
+ * that have no unit-level A/R row (portal / lease roster fills the gaps).
+ */
+export function operationalRentCollected(
+  receivables: Pick<
+    Receivable,
+    | "id"
+    | "property"
+    | "period"
+    | "category"
+    | "amountReceived"
+    | "unit"
+    | "description"
+    | "customerName"
+  >[],
+  property: string,
+  period: string,
+  tenants?: {
+    propertyName?: string;
+    unit?: string;
+    status?: string;
+    monthlyRent?: string | number;
+  }[]
+) {
+  const fromAr = rentCollectedFromReceivables(receivables, property, period);
+  if (!tenants?.length) return fromAr;
+
+  const propertyKey = property.trim().toLowerCase();
+  const coveredUnits = new Set(
+    receivables
+      .filter(
+        (row) =>
+          (row.property || "").trim().toLowerCase() === propertyKey &&
+          isUnitLevelRentReceivable(row)
+      )
+      .map((row) => (row.unit || "").trim().toLowerCase())
+  );
+
+  const leaseGap = round2(
+    tenants
+      .filter(
+        (t) =>
+          (t.propertyName || "").trim().toLowerCase() === propertyKey &&
+          (t.status || "").toLowerCase() === "active" &&
+          !coveredUnits.has((t.unit || "").trim().toLowerCase())
+      )
+      .reduce((sum, t) => sum + (Number(t.monthlyRent) || 0), 0)
+  );
+
+  return round2(fromAr + leaseGap);
 }
 
 export function balanceOf(row: Receivable) {
@@ -260,22 +383,32 @@ export const SEED_RENT_ROLL: Lease[] = [
 /**
  * Sum of base rent collected for a property/period from live (or any)
  * receivable rows — used to size owner remittances after A/R edits.
+ * Ignores annual / portfolio aggregate rows.
  */
 export function rentCollectedFromReceivables(
   rows: Pick<
     Receivable,
-    "property" | "period" | "category" | "amountReceived"
+    | "id"
+    | "property"
+    | "period"
+    | "category"
+    | "amountReceived"
+    | "unit"
+    | "description"
+    | "customerName"
   >[],
   property: string,
   period: string
 ) {
+  const propertyKey = property.trim().toLowerCase();
   return round2(
     rows
       .filter(
         (row) =>
-          row.property === property &&
+          (row.property || "").trim().toLowerCase() === propertyKey &&
           row.category === "base_rent" &&
-          row.period === period
+          isUnitLevelRentReceivable(row) &&
+          periodsMatch(row.period || "", period)
       )
       .reduce((sum, row) => sum + row.amountReceived, 0)
   );

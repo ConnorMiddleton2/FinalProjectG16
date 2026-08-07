@@ -30,9 +30,9 @@ export function OwnerPropertyRevenuePanel({ financials }: Props) {
 
       <p className="owner-muted max-w-3xl text-sm leading-relaxed">
         These figures are <span className="font-medium text-[var(--harbor-ink)]">your properties&apos; rent collected</span>
-        — not Harborline&apos;s fee income. The management fee is shown separately
+        — not CPMC&apos;s fee income. The management fee is shown separately
         as an expense so you can see what the assets generated and what it cost
-        to have Harborline manage them.
+        to have CPMC manage them.
       </p>
 
       <div className="owner-stagger grid gap-3 sm:grid-cols-3">
@@ -49,7 +49,7 @@ export function OwnerPropertyRevenuePanel({ financials }: Props) {
         </div>
         <div className="owner-card p-5">
           <p className="text-xs uppercase tracking-wide opacity-55">
-            Harborline management fee (expense)
+            CPMC management fee (expense)
           </p>
           <p className="mt-2 font-display text-3xl tracking-tight text-[var(--harbor-ink)]">
             {formatOwnerMoney(financials.totalManagementFeeExpense)}

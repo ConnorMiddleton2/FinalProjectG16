@@ -1,6 +1,7 @@
 /**
- * Fixed assets / PP&E for managed properties (client-safe).
- * Feeds depreciation into management financial statements.
+ * Property equipment / PP&E tracking (client-safe).
+ * Records belong to the property owner unless CPMC actually owns them.
+ * Operational tracking only — do not treat as management-company books by default.
  */
 
 export type DepreciationMethod =
@@ -8,6 +9,9 @@ export type DepreciationMethod =
   | "declining_150"
   | "declining_200"
   | "none";
+
+/** Who owns the asset on the books. */
+export type AssetOwnership = "property_owner" | "management_company";
 
 export type PropertyAssetCategory =
   | "land"
@@ -20,6 +24,7 @@ export type PropertyAssetCategory =
   | "security_systems"
   | "furniture_fixtures"
   | "appliances"
+  | "equipment"
   | "other";
 
 export type PropertyAsset = {
@@ -35,6 +40,11 @@ export type PropertyAsset = {
   depreciationMethod: DepreciationMethod;
   /** ISO date YYYY-MM-DD when placed in service. */
   placedInServiceDate: string;
+  /**
+   * Default: property_owner — track for ops; not on CPMC's books
+   * unless ownership is management_company.
+   */
+  ownership: AssetOwnership;
   createdAt: string;
   updatedAt: string;
 };
@@ -47,6 +57,20 @@ export const DEPRECIATION_METHODS: {
   { value: "declining_150", label: "150% declining balance" },
   { value: "declining_200", label: "200% declining balance (DDB)" },
   { value: "none", label: "Non-depreciable" },
+];
+
+export const ASSET_OWNERSHIPS: {
+  value: AssetOwnership;
+  label: string;
+}[] = [
+  {
+    value: "property_owner",
+    label: "Property owner (not on CPMC books)",
+  },
+  {
+    value: "management_company",
+    label: "Management company (CPMC-owned)",
+  },
 ];
 
 export const ASSET_CATEGORIES: {
@@ -63,8 +87,48 @@ export const ASSET_CATEGORIES: {
   { value: "security_systems", label: "Security systems" },
   { value: "furniture_fixtures", label: "Furniture & fixtures" },
   { value: "appliances", label: "Appliances" },
+  { value: "equipment", label: "Equipment" },
   { value: "other", label: "Other" },
 ];
+
+export function assetOwnershipLabel(value: string) {
+  return (
+    ASSET_OWNERSHIPS.find((o) => o.value === value)?.label ??
+    "Property owner (not on CPMC books)"
+  );
+}
+
+export function normalizeAssetOwnership(
+  value: string | undefined | null
+): AssetOwnership {
+  return value === "management_company"
+    ? "management_company"
+    : "property_owner";
+}
+
+export function emptyPropertyAsset(input: {
+  propertyId: string;
+  propertyName: string;
+}): PropertyAsset {
+  const now = new Date().toISOString();
+  const today = now.slice(0, 10);
+  return {
+    id: crypto.randomUUID(),
+    propertyId: input.propertyId,
+    propertyName: input.propertyName,
+    name: "",
+    category: "equipment",
+    description: "",
+    costBasis: 0,
+    salvageValue: 0,
+    usefulLifeYears: 7,
+    depreciationMethod: "straight_line",
+    placedInServiceDate: today,
+    ownership: "property_owner",
+    createdAt: now,
+    updatedAt: now,
+  };
+}
 
 export function assetCategoryLabel(value: string) {
   return (
@@ -244,6 +308,7 @@ export function buildAssetsForProperty(
   const base = {
     propertyId: property.id,
     propertyName: property.propertyName,
+    ownership: "property_owner" as AssetOwnership,
     createdAt: nowIso,
     updatedAt: nowIso,
   };

@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Building2, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
 import { createClient } from "@/lib/supabase/client";
 import { ALL_ROLES, ROLE_META, type UserRole } from "@/lib/types";
+import { BrandLogo } from "@/components/BrandLogo";
+import { COMPANY_NAME } from "@/lib/brand";
 
 type Props = {
   email: string;
@@ -54,13 +56,11 @@ export function AppHeader({ email, role }: Props) {
     <header className="border-b border-base-300 bg-base-100 sticky top-0 z-30">
       <div className="mx-auto max-w-6xl px-4 py-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
-          <div className="rounded-box bg-primary/15 p-2 text-primary">
-            <Building2 className="h-5 w-5" />
-          </div>
+          <BrandLogo size="sm" />
           <div>
-            <p className="font-bold leading-tight">Harborline Property Management</p>
+            <p className="font-bold leading-tight">{COMPANY_NAME}</p>
             <p className="text-xs opacity-70">
-              Contract-to-cash skeleton · Final Project G16
+              Contract-to-cash · Final Project G16
             </p>
           </div>
         </div>

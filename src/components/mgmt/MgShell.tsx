@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { OpsBrandHomeLink } from "@/components/OpsBrandHomeLink";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
 import { MgSideNav } from "@/components/mgmt/MgSideNav";
 
 const tileClass =
-  "border border-[#8aa3b5]/55 bg-[#b7c9d6] text-[#2f4556] shadow-[0_1px_2px_rgba(47,69,86,0.10)] transition hover:-translate-y-0.5 hover:bg-[#a9bdcd] hover:border-[#7a95a9]/65";
+  "border border-[var(--harbor-border)] bg-[var(--harbor-card)] text-[var(--harbor-text)] shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]/40 hover:shadow-md";
 
 export { MG_NAV } from "@/components/mgmt/mg-nav";
 
@@ -15,6 +16,8 @@ type Props = {
   backLabel?: string;
   /** When set, show left-side links to other Management workspaces. */
   activeNavHref?: string;
+  /** Wider content column for data-heavy pages (analytics, ledgers). */
+  wide?: boolean;
   children: React.ReactNode;
 };
 
@@ -24,18 +27,17 @@ export function MgShell({
   backHref = "/ops",
   backLabel = "Back to operations",
   activeNavHref,
+  wide = false,
   children,
 }: Props) {
   const showSideNav = Boolean(activeNavHref);
+  const maxW = wide ? "max-w-[1600px]" : showSideNav ? "max-w-7xl" : "max-w-6xl";
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
+    <div className="min-h-screen bg-[var(--harbor-sand)]">
       <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Management</p>
-          </div>
+        <div className={`mx-auto flex ${maxW} items-center justify-between gap-4 px-4 py-4 sm:px-6`}>
+          <OpsBrandHomeLink subtitle="Management" />
           <form action={teamLogout}>
             <button
               type="submit"
@@ -48,11 +50,7 @@ export function MgShell({
         </div>
       </header>
 
-      <div
-        className={`mx-auto px-6 py-10 ${
-          showSideNav ? "max-w-7xl" : "max-w-6xl"
-        }`}
-      >
+      <div className={`mx-auto px-4 py-10 sm:px-6 ${maxW}`}>
         <Link
           href={backHref}
           className="mb-6 inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
@@ -64,7 +62,7 @@ export function MgShell({
         <div
           className={
             showSideNav
-              ? "grid gap-6 lg:grid-cols-[14.5rem_minmax(0,1fr)]"
+              ? "grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]"
               : "space-y-6"
           }
         >

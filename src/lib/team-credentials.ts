@@ -2,7 +2,7 @@
 export const DEMO_EMPLOYEE = {
   companyId: "G16",
   password: "team123",
-  name: "Harborline admin (full access)",
+  name: "CPMC admin (full access)",
 } as const;
 
 export const DEMO_CADE = {

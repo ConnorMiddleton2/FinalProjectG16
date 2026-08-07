@@ -12,6 +12,20 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: "/portal/future",
+        destination: "/portal/start",
+        permanent: true,
+      },
+      {
+        source: "/portal/future/:path*",
+        destination: "/portal/start",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

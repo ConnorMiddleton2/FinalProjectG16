@@ -12,7 +12,7 @@ export function getMockLeaseInformation(): LeaseInformation {
     occupancyClass: "commercial",
     propertyType: "office",
     propertyName: "Pier 12 Commerce",
-    propertyAddress: "120 Harborline Pier, Suite Building A, Harbor City, MS 39501",
+    propertyAddress: "120 CPMC Pier, Suite Building A, Harbor City, MS 39501",
     unitNumber: "Suite 210",
     leaseStartDate: "2026-01-01",
     leaseEndDate: "2027-12-31",
@@ -61,7 +61,7 @@ export function buildLeaseDocumentText(lease: LeaseInformation): string {
     .join("\n");
 
   return [
-    "Harborline Property Management",
+    "CPMC Property Management Company",
     "Lease summary (tenant copy — demo)",
     "",
     `Lease number: ${lease.leaseNumber}`,

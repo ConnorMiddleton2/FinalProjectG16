@@ -48,7 +48,7 @@ export function buildHistoryReceiptText(input: {
   propertyLabel: string;
 }) {
   return [
-    "Harborline Property Management",
+    "CPMC Property Management Company",
     "Payment receipt (demo — not a bank record)",
     "----------------------------------------",
     `Confirmation: ${input.confirmationNumber}`,

@@ -17,7 +17,7 @@ const DEMO_INVITES: TenantInviteRecord[] = [
   {
     code: "DEMO204",
     unit: "204",
-    propertyLabel: "Harborline Demo Residences · Unit 204",
+    propertyLabel: "CPMC Demo Residences · Unit 204",
     demoFixture: true,
   },
   {
@@ -63,7 +63,7 @@ export function validateTenantInvitation(
     return {
       ok: false,
       message:
-        "That invitation code is not valid. Check the code from Harborline management and try again.",
+        "That invitation code is not valid. Check the code from CPMC management and try again.",
     };
   }
 

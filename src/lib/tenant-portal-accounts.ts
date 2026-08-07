@@ -12,7 +12,7 @@ import { cookies } from "next/headers";
 
 export { ageFromDob, requiresGuarantor } from "@/lib/tenant-age";
 
-export const TENANT_PORTAL_COOKIE = "harborline_tenant_portal";
+export const TENANT_PORTAL_COOKIE = "cpmc_tenant_portal";
 
 export type TenantAccountStatus =
   | "prospect"
@@ -38,6 +38,12 @@ export type TenantAccount = {
   propertyId: string;
   propertyName: string;
   unit: string;
+  /** Set when S&M completes move-in / lease approval. */
+  monthlyRent?: number;
+  /** Preferred rent payment method for the portal. */
+  preferredPaymentMethod?: "ach" | "check" | "debit_card";
+  /** Masked last four only. */
+  paymentMethodLast4?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -141,6 +147,10 @@ export async function verifyTenantPortalLogin(email: string, password: string) {
 
 export async function setTenantPortalSession(account: TenantAccount) {
   const jar = await cookies();
+  // Do not keep an owner (or demo tenant) session alongside a portal tenant login.
+  jar.delete("cpmc_owner");
+  jar.delete("cpmc_portal_tenant_v2");
+  jar.delete("cpmc_portal_tenant_ui_v2");
   jar.set(TENANT_PORTAL_COOKIE, account.id, {
     httpOnly: true,
     sameSite: "lax",
@@ -152,6 +162,8 @@ export async function setTenantPortalSession(account: TenantAccount) {
 export async function clearTenantPortalSession() {
   const jar = await cookies();
   jar.delete(TENANT_PORTAL_COOKIE);
+  jar.delete("cpmc_portal_tenant_v2");
+  jar.delete("cpmc_portal_tenant_ui_v2");
 }
 
 export async function getTenantPortalSession(): Promise<TenantAccount | null> {

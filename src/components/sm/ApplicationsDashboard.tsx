@@ -19,9 +19,11 @@ import {
   type SmCalendarEvent,
   type SmTenantApplication,
 } from "@/lib/sales-marketing";
+import type { TenantPortalMessage } from "@/lib/tenant-portal-accounts";
 import {
   confirmSignedLeaseAndMoveIn,
   offerLeaseForApplication,
+  requestAdditionalApplicantForms,
   sendAvailabilityToApplicant,
 } from "@/app/ops/sm/tenant-pipeline-actions";
 
@@ -61,6 +63,9 @@ export function ApplicationsDashboard() {
   );
   const { items: unitRoster, refresh: refreshUnits } =
     useSharedCollection<SharedPropertyTenant>(COLLECTIONS.propertyTenants);
+  const { items: portalMessages } = useSharedCollection<TenantPortalMessage>(
+    COLLECTIONS.tenantPortalMessages
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -68,6 +73,8 @@ export function ApplicationsDashboard() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<SmTenantApplication | null>(null);
   const [moveInBusy, setMoveInBusy] = useState(false);
+  /** Vacant unit ids checked for the next availability send (max 5). */
+  const [offerUnitIds, setOfferUnitIds] = useState<string[]>([]);
   const [tourOptions, setTourOptions] = useState<TourOption[]>([
     defaultTourOption(2),
     defaultTourOption(3),
@@ -91,8 +98,10 @@ export function ApplicationsDashboard() {
       });
       setEditing(false);
       setPrompt(null);
+      setOfferUnitIds([]);
     } else {
       setDraft(null);
+      setOfferUnitIds([]);
     }
   }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps -- reset draft when selection changes
 
@@ -106,6 +115,21 @@ export function ApplicationsDashboard() {
       return u.propertyName.toLowerCase().includes(name.split("·")[0].trim());
     });
   }, [unitRoster, draft?.building, draft?.property, draft?.propertyId]);
+
+  const relatedPortalMessages = useMemo(() => {
+    if (!selected) return [];
+    return portalMessages
+      .filter(
+        (m) =>
+          m.relatedApplicationId === selected.id ||
+          m.tenantEmail.toLowerCase() === selected.email.toLowerCase()
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+      .slice(0, 12);
+  }, [portalMessages, selected]);
 
   const optionConflicts = useMemo(() => {
     return tourOptions.map((opt) =>
@@ -224,11 +248,64 @@ export function ApplicationsDashboard() {
 
   async function handleSendAvailability() {
     if (!selected || !draft) return;
+    if (offerUnitIds.length < 1 || offerUnitIds.length > 5) {
+      setMsg("Select between 1 and 5 vacant units to send.");
+      setTimeout(() => setMsg(null), 4000);
+      return;
+    }
     setMoveInBusy(true);
     try {
       const result = await sendAvailabilityToApplicant({
         applicationId: selected.id,
         propertyId: draft.propertyId,
+        unitIds: offerUnitIds,
+      });
+      if ("error" in result) {
+        setMsg(result.error ?? "Something went wrong.");
+        setTimeout(() => setMsg(null), 4000);
+        return;
+      }
+      setDraft((d) =>
+        d
+          ? {
+              ...d,
+              availabilityOfferedUnitIds: offerUnitIds,
+              availabilityOfferedAt: new Date().toISOString(),
+              unitSelectedFromAvailabilityAt: "",
+              unitId: undefined,
+              unitLabel: undefined,
+              proposedRent: undefined,
+            }
+          : d
+      );
+      setOfferUnitIds([]);
+      setMsg(
+        `Sent ${result.unitCount} vacant option${result.unitCount === 1 ? "" : "s"} to the applicant. They can select only one.`
+      );
+      setTimeout(() => setMsg(null), 5000);
+    } finally {
+      setMoveInBusy(false);
+    }
+  }
+
+  function toggleOfferUnit(unitId: string) {
+    setOfferUnitIds((prev) => {
+      if (prev.includes(unitId)) return prev.filter((id) => id !== unitId);
+      if (prev.length >= 5) {
+        setMsg("You can send at most 5 vacant options.");
+        setTimeout(() => setMsg(null), 3000);
+        return prev;
+      }
+      return [...prev, unitId];
+    });
+  }
+
+  async function handleRequestAdditionalForms() {
+    if (!selected) return;
+    setMoveInBusy(true);
+    try {
+      const result = await requestAdditionalApplicantForms({
+        applicationId: selected.id,
       });
       if ("error" in result) {
         setMsg(result.error ?? "Something went wrong.");
@@ -236,7 +313,7 @@ export function ApplicationsDashboard() {
         return;
       }
       setMsg(
-        `Sent ${result.unitCount} vacant unit option(s) to the applicant portal.`
+        "Additional information form sent to the applicant portal."
       );
       setTimeout(() => setMsg(null), 4000);
     } finally {
@@ -257,8 +334,21 @@ export function ApplicationsDashboard() {
         return;
       }
       await refreshUnits();
+      setDraft((d) =>
+        d
+          ? {
+              ...d,
+              smStatus: "approved",
+              status: "Completed",
+              leasePacketStatus: "approved",
+              movedInAt: new Date().toISOString(),
+              proposedRent: result.monthlyRent,
+              unitLabel: result.unitLabel,
+            }
+          : d
+      );
       setMsg(
-        `Lease approved & moved in at ${money(result.monthlyRent)}/mo. AR + portal invoice opened (${result.receivableId}).`
+        `Application completed. ${result.unitLabel} is now a current tenant at ${money(result.monthlyRent)}/mo (${result.receivableId}).`
       );
       setTimeout(() => setMsg(null), 5000);
     } finally {
@@ -302,7 +392,7 @@ export function ApplicationsDashboard() {
         end: opt.end,
         notes: `Soft hold for ${selected.email} · ${draft.building || selected.property} · ${draft.roomSize || "size TBD"}. Clears if they pick another option.`,
         relatedApplicationId: selected.id,
-        source: "harborline",
+        source: "cpmc",
         isHold: true,
         location: draft.building || selected.property,
       };
@@ -363,6 +453,16 @@ export function ApplicationsDashboard() {
                   {app.communicated && (
                     <span className="badge badge-info badge-sm">Reached out</span>
                   )}
+                  {app.leasePacketStatus === "signed" && !app.movedInAt ? (
+                    <span className="badge badge-warning badge-sm">
+                      Pending lease
+                    </span>
+                  ) : null}
+                  {app.status === "Completed" || app.movedInAt ? (
+                    <span className="badge badge-success badge-sm">
+                      Completed
+                    </span>
+                  ) : null}
                   <span className="badge badge-outline badge-sm capitalize">
                     {app.smStatus ?? "new"}
                   </span>
@@ -477,21 +577,76 @@ export function ApplicationsDashboard() {
 
             <div className="space-y-2 rounded-xl border border-[var(--harbor-deep)]/10 bg-[var(--harbor-sand)]/40 p-3">
               <p className="text-sm font-medium">
-                Assign vacant unit (FMR / asking rent)
+                Send vacant options &amp; assign lease unit
               </p>
               <p className="text-xs opacity-65">
-                Units appear after Management publishes fair-market asking rents.
-                Set status to <strong>approved</strong> to send a lease packet
-                to the applicant portal (not an instant move-in). After they
-                sign, confirm below to activate tenancy and open AR.
+                Check 1–5 vacant units to send. The applicant picks exactly one,
+                completes payment/agreement info, signs the lease, then it
+                appears here as <strong>Pending lease</strong>. Approve with
+                Confirm signed lease to complete the application and make them a
+                current tenant.
               </p>
+
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide opacity-55">
+                  Vacant options to send ({offerUnitIds.length}/5)
+                </p>
+                {vacantUnits.length === 0 ? (
+                  <p className="text-xs opacity-60">
+                    No vacant priced units found for this property filter. Ask
+                    Management to run FMR and publish rents on the owner
+                    application.
+                  </p>
+                ) : (
+                  <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-[var(--harbor-deep)]/15 bg-white p-2">
+                    {vacantUnits.map((u) => {
+                      const rent = Number(u.askingRent || u.monthlyRent || 0);
+                      const checked = offerUnitIds.includes(u.id);
+                      return (
+                        <label
+                          key={u.id}
+                          className={`flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-base-200/70 ${
+                            checked ? "bg-[var(--harbor-mist)]/60" : ""
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="checkbox checkbox-sm mt-0.5"
+                            checked={checked}
+                            disabled={
+                              moveInBusy ||
+                              Boolean(draft.movedInAt) ||
+                              (!checked && offerUnitIds.length >= 5)
+                            }
+                            onChange={() => toggleOfferUnit(u.id)}
+                          />
+                          <span>
+                            <span className="font-medium">{u.unit}</span>
+                            <span className="opacity-70">
+                              {u.floorPlan ? ` · ${u.floorPlan}` : ""} · {u.sqft}{" "}
+                              SF · {money(rent)}/mo
+                              <span className="opacity-50">
+                                {" "}
+                                · {u.propertyName}
+                              </span>
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <select
                 className="select select-bordered select-sm w-full bg-white"
                 value={draft.unitId ?? ""}
                 onChange={(e) => assignUnit(e.target.value)}
                 disabled={Boolean(draft.movedInAt)}
               >
-                <option value="">Select vacant unit…</option>
+                <option value="">
+                  Lease unit (after applicant picks, or assign manually)…
+                </option>
                 {properties.map((p) => {
                   const units = vacantUnits.filter((u) => u.propertyId === p.id);
                   if (units.length === 0) return null;
@@ -511,21 +666,51 @@ export function ApplicationsDashboard() {
                   );
                 })}
               </select>
-              {vacantUnits.length === 0 ? (
-                <p className="text-xs opacity-60">
-                  No vacant priced units found for this property filter. Ask
-                  Management to run FMR and publish rents on the owner
-                  application.
+              {draft.unitSelectedFromAvailabilityAt && draft.unitLabel ? (
+                <p className="text-xs text-[var(--harbor-deep)]">
+                  Applicant selected <strong>{draft.unitLabel}</strong>
+                  {draft.preLeaseFormStatus === "submitted"
+                    ? " · pre-lease form submitted"
+                    : " · waiting on pre-lease form"}
+                  {draft.preLeasePaymentMethod
+                    ? ` · payment: ${draft.preLeasePaymentMethod}`
+                    : ""}
+                  .
                 </p>
+              ) : null}
+              {draft.leasePacketStatus === "signed" && !draft.movedInAt ? (
+                <div className="rounded-lg border border-amber-300/50 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  <p className="font-medium">Pending lease agreement</p>
+                  <p className="text-xs opacity-80">
+                    {draft.leaseSignedName || draft.name} signed
+                    {draft.leaseSignedAt
+                      ? ` on ${new Date(draft.leaseSignedAt).toLocaleString()}`
+                      : ""}
+                    . Approve below to complete this application and activate
+                    them as a current tenant.
+                  </p>
+                </div>
               ) : null}
               <div className="flex flex-wrap gap-2 pt-1">
                 <button
                   type="button"
                   className="btn btn-outline btn-sm"
-                  disabled={moveInBusy}
+                  disabled={
+                    moveInBusy ||
+                    offerUnitIds.length < 1 ||
+                    Boolean(draft.movedInAt)
+                  }
                   onClick={() => void handleSendAvailability()}
                 >
-                  Send availability to portal
+                  Send availability ({offerUnitIds.length || 0})
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  disabled={moveInBusy || Boolean(draft.movedInAt)}
+                  onClick={() => void handleRequestAdditionalForms()}
+                >
+                  Request additional forms
                 </button>
                 {draft.leasePacketStatus === "signed" && !draft.movedInAt ? (
                   <button
@@ -534,17 +719,17 @@ export function ApplicationsDashboard() {
                     disabled={moveInBusy}
                     onClick={() => void handleConfirmSignedLease()}
                   >
-                    Confirm signed lease &amp; move in
+                    Approve lease &amp; complete as current tenant
                   </button>
                 ) : null}
                 {draft.leasePacketStatus === "sent" ? (
                   <span className="badge badge-info badge-sm self-center">
-                    Lease sent — awaiting tenant signature
+                    Lease ready — awaiting tenant signature
                   </span>
                 ) : null}
-                {draft.movedInAt ? (
+                {draft.status === "Completed" || draft.movedInAt ? (
                   <span className="badge badge-success badge-sm self-center">
-                    Moved in
+                    Completed · current tenant
                   </span>
                 ) : null}
               </div>
@@ -668,6 +853,28 @@ export function ApplicationsDashboard() {
                 Send 3 options + hold on calendar
               </button>
             </div>
+
+            {relatedPortalMessages.length > 0 ? (
+              <div className="space-y-2 rounded-xl border border-base-300 bg-base-100 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide opacity-55">
+                  Portal thread
+                </p>
+                <ul className="max-h-48 space-y-2 overflow-y-auto">
+                  {relatedPortalMessages.map((m) => (
+                    <li key={m.id} className="text-sm">
+                      <p className="font-medium">
+                        {m.subject}{" "}
+                        <span className="text-xs font-normal opacity-55">
+                          · {m.fromRole} ·{" "}
+                          {new Date(m.createdAt).toLocaleString()}
+                        </span>
+                      </p>
+                      <p className="whitespace-pre-wrap opacity-80">{m.body}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             {msg && <p className="text-sm text-emerald-800">{msg}</p>}
 

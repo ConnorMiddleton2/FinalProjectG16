@@ -54,7 +54,7 @@ export function getAllMockDocuments(): TenantDocument[] {
       previewSupported: true,
       description: "April 2026 rent payment confirmation.",
       previewText:
-        "Harborline Payment Receipt\nConfirmation: PAY-2026-0401-210\nAmount: $4,800.00\nPaid: Apr 1, 2026\nMethod: Card ending 4242",
+        "CPMC Payment Receipt\nConfirmation: PAY-2026-0401-210\nAmount: $4,800.00\nPaid: Apr 1, 2026\nMethod: Card ending 4242",
     },
     {
       id: "doc-receipt-2",
@@ -84,7 +84,7 @@ export function getAllMockDocuments(): TenantDocument[] {
     },
     {
       id: "doc-policy-2",
-      fileName: "harborline-pet-policy.pdf",
+      fileName: "cpmc-pet-policy.pdf",
       category: "Property Policies",
       dateAdded: "2026-01-05",
       fileType: "PDF",
@@ -201,7 +201,7 @@ export function getAllMockDocuments(): TenantDocument[] {
       previewSupported: true,
       description: "Required insurance coverage summary.",
       previewText:
-        "Insurance Requirements\nMinimum liability as stated in lease Section 12.\nHarborline listed as additional interest.",
+        "Insurance Requirements\nMinimum liability as stated in lease Section 12.\nCPMC listed as additional interest.",
     },
     {
       id: "doc-renewal-1",
@@ -227,7 +227,7 @@ export function getAllMockDocuments(): TenantDocument[] {
       previewSupported: true,
       description: "Renewal process FAQ.",
       previewText:
-        "Renewal FAQ\n1. Submit request in portal.\n2. Harborline confirms terms.\n3. Signed renewal appears here when complete.",
+        "Renewal FAQ\n1. Submit request in portal.\n2. CPMC confirms terms.\n3. Signed renewal appears here when complete.",
     },
     {
       id: "doc-moveout-1",
@@ -292,7 +292,7 @@ export function getAuthorizedMockDocuments(
 
 export function buildDocumentDownloadText(doc: TenantDocument): string {
   return [
-    "Harborline Property Management",
+    "CPMC Property Management Company",
     "Secure document center — tenant copy (demo)",
     "",
     `File: ${doc.fileName}`,

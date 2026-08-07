@@ -52,15 +52,28 @@ async function resolveAccount(
   return findTenantAccount(app.email);
 }
 
-/** Push vacant unit options to the applicant’s portal inbox. */
+/** Push 1–5 vacant unit options to the applicant’s portal inbox. */
 export async function sendAvailabilityToApplicant(input: {
   applicationId: string;
   propertyId?: string;
+  /** Explicit vacant unit roster ids to offer (required, 1–5). */
+  unitIds: string[];
   message?: string;
 }) {
   await requireOpsModule("sales-marketing");
   const app = await loadApp(input.applicationId);
   if (!app) return { error: "Application not found." as const };
+
+  const requested = [
+    ...new Set(
+      (input.unitIds || []).map((id) => String(id || "").trim()).filter(Boolean)
+    ),
+  ];
+  if (requested.length < 1 || requested.length > 5) {
+    return {
+      error: "Select between 1 and 5 vacant units to send." as const,
+    };
+  }
 
   const client = await createClient();
   const units = await listSharedRecords<SharedPropertyTenant>(
@@ -68,16 +81,28 @@ export async function sendAvailabilityToApplicant(input: {
     COLLECTIONS.propertyTenants
   );
   const propertyId = input.propertyId || app.propertyId || "";
-  const vacant = units.filter((u) => {
+  const byId = new Map(units.map((u) => [u.id, u]));
+  const selectedUnits: SharedPropertyTenant[] = [];
+  for (const id of requested) {
+    const u = byId.get(id);
+    if (!u) {
+      return { error: `Unit not found (${id}).` as const };
+    }
     const isVacant = u.status === "vacant" || !u.name?.trim();
-    if (!isVacant) return false;
-    if (propertyId) return u.propertyId === propertyId;
-    const name = (app.building || app.property || "").toLowerCase();
-    if (!name) return true;
-    return u.propertyName.toLowerCase().includes(name.split("·")[0].trim());
-  });
+    if (!isVacant) {
+      return {
+        error: `${u.unit || "Unit"} is no longer vacant.` as const,
+      };
+    }
+    if (propertyId && u.propertyId !== propertyId) {
+      return {
+        error: `${u.unit || "Unit"} is not on the application property.` as const,
+      };
+    }
+    selectedUnits.push(u);
+  }
 
-  const availability = vacant.map((u) => ({
+  const availability = selectedUnits.map((u) => ({
     unitId: u.id,
     propertyId: u.propertyId,
     propertyName: u.propertyName,
@@ -95,20 +120,30 @@ export async function sendAvailabilityToApplicant(input: {
     };
   }
 
+  const propertyLabel =
+    selectedUnits[0]?.propertyName || app.building || app.property;
   await postTenantPortalMessage({
     tenantAccountId: account.id,
     tenantEmail: account.email,
     fromRole: "sales_marketing",
-    subject: `Availability · ${app.building || app.property}`,
+    subject: `Availability · ${propertyLabel}`,
     body:
       input.message?.trim() ||
-      `Here are currently available units for ${app.building || app.property}. Select the unit you prefer in your portal, or discuss options on your tour.`,
+      `Sales & Marketing selected ${availability.length} available option${availability.length === 1 ? "" : "s"} at ${propertyLabel}. Choose exactly one unit in your portal to continue.`,
     relatedApplicationId: app.id,
     availabilityJson: JSON.stringify(availability),
   });
 
   const next: SmTenantApplication = {
     ...app,
+    propertyId: propertyId || selectedUnits[0]?.propertyId || app.propertyId,
+    availabilityOfferedUnitIds: selectedUnits.map((u) => u.id),
+    availabilityOfferedAt: new Date().toISOString(),
+    // Clear prior applicant pick so they must choose from this new offer
+    unitSelectedFromAvailabilityAt: "",
+    unitId: undefined,
+    unitLabel: undefined,
+    proposedRent: undefined,
     smStatus: app.smStatus === "new" ? "contacted" : app.smStatus,
     communicated: true,
     lastContactAt: new Date().toISOString(),
@@ -118,6 +153,52 @@ export async function sendAvailabilityToApplicant(input: {
   await saveApp(next);
 
   return { ok: true as const, unitCount: availability.length };
+}
+
+/** Ask the applicant to complete an additional information form in their portal. */
+export async function requestAdditionalApplicantForms(input: {
+  applicationId: string;
+  message?: string;
+}) {
+  await requireOpsModule("sales-marketing");
+  const app = await loadApp(input.applicationId);
+  if (!app) return { error: "Application not found." as const };
+
+  const account = await resolveAccount(app);
+  if (!account) {
+    return {
+      error:
+        "No tenant portal account for this applicant. They must start an application online first." as const,
+    };
+  }
+
+  await postTenantPortalMessage({
+    tenantAccountId: account.id,
+    tenantEmail: account.email,
+    fromRole: "sales_marketing",
+    subject: "Additional information requested",
+    body:
+      input.message?.trim() ||
+      `Sales & Marketing needs a few more details to continue your application for ${app.building || app.property}. Please complete the follow-up form in your portal (employment update, references, preferred move-in, and any tour notes).`,
+    relatedApplicationId: app.id,
+    availabilityJson: JSON.stringify({
+      type: "additional_forms",
+      requestedAt: new Date().toISOString(),
+    }),
+  });
+
+  await saveApp({
+    ...app,
+    documentsComplete: false,
+    additionalFormsRequestedAt: new Date().toISOString(),
+    smStatus: app.smStatus === "new" ? "contacted" : app.smStatus,
+    communicated: true,
+    lastContactAt: new Date().toISOString(),
+    lastContactMethod: "email",
+    status: "In review",
+  } as SmTenantApplication);
+
+  return { ok: true as const };
 }
 
 /**
@@ -214,23 +295,43 @@ export async function confirmSignedLeaseAndMoveIn(input: {
   });
   if ("error" in result) return result;
 
+  const propertyName = app.building || app.property;
   const account = await resolveAccount(app);
   if (account) {
     await saveTenantAccount({
       ...account,
       status: "active",
       propertyId: app.propertyId,
-      propertyName: app.building || app.property,
+      propertyName,
       unit: result.unitLabel,
-      tenantRecordId: account.tenantRecordId || app.id,
+      monthlyRent: result.monthlyRent,
+      tenantRecordId: result.tenantId,
       updatedAt: new Date().toISOString(),
+    });
+
+    await postTenantPortalMessage({
+      tenantAccountId: account.id,
+      tenantEmail: account.email,
+      fromRole: "sales_marketing",
+      subject: "Lease approved — you are a current tenant",
+      body: [
+        `Welcome! Sales & Marketing approved your lease at ${propertyName}${result.unitLabel ? ` · ${result.unitLabel}` : ""}.`,
+        result.monthlyRent
+          ? `Monthly rent: $${Number(result.monthlyRent).toLocaleString()}/mo.`
+          : "",
+        "Your applicant checklist is complete. Open the tenant portal home for rent, maintenance, and lease tools for this building.",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      relatedApplicationId: app.id,
+      availabilityJson: "",
     });
   }
 
   await saveApp({
     ...app,
     smStatus: "approved",
-    status: "In review",
+    status: "Completed",
     proposedRent: result.monthlyRent,
     unitLabel: result.unitLabel,
     movedInAt: new Date().toISOString(),

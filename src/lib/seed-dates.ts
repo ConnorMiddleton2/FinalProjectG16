@@ -60,3 +60,24 @@ export function monthPeriodLabel(monthsAgo: number) {
   const start = monthStart(monthsAgo);
   return `${SHORT_MONTHS[start.getMonth()]} ${start.getFullYear()}`;
 }
+
+/**
+ * Normalize period labels so "2026-08" and "Aug 2026" compare equal.
+ * Unrecognized strings fall back to trimmed lowercase.
+ */
+export function normalizePeriodKey(period: string) {
+  const p = period.trim();
+  if (/^\d{4}-\d{2}$/.test(p)) return p;
+  const labeled = p.match(/^([A-Za-z]{3})\s+(\d{4})$/);
+  if (labeled) {
+    const idx = SHORT_MONTHS.findIndex(
+      (m) => m.toLowerCase() === labeled[1].toLowerCase()
+    );
+    if (idx >= 0) return `${labeled[2]}-${pad(idx + 1)}`;
+  }
+  return p.toLowerCase();
+}
+
+export function periodsMatch(a: string, b: string) {
+  return normalizePeriodKey(a) === normalizePeriodKey(b);
+}

@@ -4,7 +4,7 @@ import type { MaintenanceSubmissionResult } from "@/lib/portal/maintenance-types
 import { getMockMaintenanceRequests } from "@/lib/portal/maintenance-mock";
 import { formatMaintenanceDate } from "@/lib/portal/maintenance-format";
 
-const STORAGE_KEY = "harborline.portal.maintenanceDetails.v1";
+const STORAGE_KEY = "cpmc.portal.maintenanceDetails.v1";
 
 function canUseStorage() {
   return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
@@ -93,9 +93,9 @@ export function createDetailFromSubmission(input: {
         id: crypto.randomUUID(),
         kind: "note",
         message:
-          "Harborline received your request. A coordinator will review and update this page.",
+          "CPMC received your request. A coordinator will review and update this page.",
         createdAt: submittedAt,
-        author: "Harborline",
+        author: "CPMC",
         visibility: "tenant",
       },
       {
@@ -135,7 +135,7 @@ function seedFromListItem(
     scheduledOn: request.scheduledOn,
     appointmentWindow: request.scheduledOn ? "Morning (8 AM – 12 PM)" : null,
     technicianName: request.technicianName,
-    technicianCompany: request.technicianName ? "Harborline Facilities" : null,
+    technicianCompany: request.technicianName ? "CPMC Facilities" : null,
     technicianPhone: request.technicianName ? "(662) 555-0177" : null,
     lastUpdate: request.lastUpdate,
     contactName: "Alex Tenant",
@@ -208,7 +208,7 @@ export function getSeedMaintenanceDetail(
           kind: "note",
           message: "Coordinator reviewing heating and cooling work order priority.",
           createdAt: "Apr 23, 2026, 9:02 AM",
-          author: "Harborline",
+          author: "CPMC",
           visibility: "tenant",
         },
         {
@@ -225,7 +225,7 @@ export function getSeedMaintenanceDetail(
           kind: "note",
           message: "Waiting on vendor availability for diagnostic visit.",
           createdAt: "Apr 28, 2026, 4:20 PM",
-          author: "Harborline",
+          author: "CPMC",
           visibility: "tenant",
         },
       ],
@@ -243,7 +243,7 @@ export function getSeedMaintenanceDetail(
       preferredServiceWindow: "morning",
       appointmentWindow: "Morning (8 AM – 12 PM)",
       technicianName: "Jordan Lee",
-      technicianCompany: "Harborline Facilities",
+      technicianCompany: "CPMC Facilities",
       technicianPhone: "(662) 555-0177",
       noticedOn: "2026-04-19",
       attachments: [
@@ -266,9 +266,9 @@ export function getSeedMaintenanceDetail(
         {
           id: "u2",
           kind: "technician",
-          message: "Assigned to Jordan Lee (Harborline Facilities).",
+          message: "Assigned to Jordan Lee (CPMC Facilities).",
           createdAt: "Apr 24, 2026, 11:10 AM",
-          author: "Harborline",
+          author: "CPMC",
           visibility: "tenant",
         },
         {
@@ -285,7 +285,7 @@ export function getSeedMaintenanceDetail(
           kind: "schedule",
           message: "Visit scheduled for May 2, 2026 · Morning (8 AM – 12 PM).",
           createdAt: "Apr 26, 2026, 3:05 PM",
-          author: "Harborline",
+          author: "CPMC",
           visibility: "tenant",
         },
       ],
@@ -324,7 +324,7 @@ export function getSeedMaintenanceDetail(
               kind: "technician" as const,
               message: `Assigned to ${request.technicianName}.`,
               createdAt: `${formatMaintenanceDate(request.lastUpdate)}, 11:00 AM`,
-              author: "Harborline",
+              author: "CPMC",
               visibility: "tenant" as const,
             },
           ]
@@ -334,7 +334,7 @@ export function getSeedMaintenanceDetail(
         kind: "status",
         message: statusMessage,
         createdAt: `${formatMaintenanceDate(request.lastUpdate)}, 3:00 PM`,
-        author: "Harborline",
+        author: "CPMC",
         visibility: "tenant",
       },
     ],

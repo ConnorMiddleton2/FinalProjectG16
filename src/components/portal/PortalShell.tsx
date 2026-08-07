@@ -44,7 +44,7 @@ export function PortalShell({
   }, [pathname]);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#f3efe6_0%,#e8f4f6_100%)]">
+    <div className="min-h-screen overflow-x-hidden bg-[var(--harbor-sand)]">
       <a
         href="#tenant-portal-main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-lg focus:bg-white focus:px-4 focus:py-3 focus:text-[var(--harbor-ink)] focus:shadow-lg portal-focus"
@@ -79,7 +79,7 @@ export function PortalShell({
           aria-modal={mobileOpen ? true : undefined}
           aria-label="Main navigation"
           tabIndex={mobileOpen ? -1 : undefined}
-          className={`z-50 rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/95 p-3 shadow-sm outline-none lg:sticky lg:top-6 lg:z-auto lg:block lg:self-start ${
+          className={`z-50 rounded-2xl border border-[var(--harbor-ink)] bg-[var(--harbor-ink)] p-3 text-[var(--harbor-on-dark)] shadow-sm outline-none lg:sticky lg:top-6 lg:z-auto lg:block lg:self-start ${
             mobileOpen
               ? "fixed left-4 right-4 top-20 max-h-[calc(100vh-6rem)] overflow-y-auto"
               : "hidden lg:block"

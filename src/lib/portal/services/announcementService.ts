@@ -1,12 +1,9 @@
-import { getMockAnnouncements } from "@/lib/portal/announcements-mock";
 import {
-  isAnnouncementRead,
   markAllAnnouncementsRead,
   markAnnouncementRead,
   markAnnouncementUnread,
 } from "@/lib/portal/announcements-read-store";
 import type { Announcement } from "@/lib/portal/models";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import { requirePortalServiceSession } from "@/lib/portal/services/session";
 import {
   assertNotForcedError,
@@ -40,15 +37,7 @@ export async function listAnnouncements(): Promise<
   try {
     await simulateLatency(DEFAULT_LOAD_DELAY_MS);
     // BACKEND_TODO: property-scoped feed for session tenant membership
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok([], "mock");
-    }
-    const scopeId = auth.data.tenantScopeId;
-    const items = getMockAnnouncements().map((item) => ({
-      ...item,
-      read: isAnnouncementRead(item.id, scopeId),
-    }));
-    return ok(items, "mock");
+    return ok([], "live");
   } catch (err) {
     return failFromUnknown(
       err,
@@ -110,5 +99,5 @@ export async function markAllAnnouncementsAsRead(
 }
 
 export function getAnnouncementsDemoFixture(): Announcement[] {
-  return getMockAnnouncements();
+  return [];
 }

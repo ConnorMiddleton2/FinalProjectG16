@@ -44,7 +44,7 @@ export default async function OwnerApprovalsPage() {
             Expenditure approvals
           </h1>
           <p className="owner-muted mt-2 max-w-2xl text-sm leading-relaxed sm:text-base">
-            Harborline requests your approval for spend at or above $
+            CPMC requests your approval for spend at or above $
             {OWNER_SPEND_APPROVAL_THRESHOLD.toLocaleString()} at your properties
             (or the threshold on your contract). Approve, reject, and leave a
             comment — decisions are audited.
@@ -57,7 +57,7 @@ export default async function OwnerApprovalsPage() {
             <OwnerEmptyState
               icon={ClipboardCheck}
               title="No pending approval requests"
-              description="When Harborline submits a spend request above your threshold, it will show up here for you to approve or reject."
+              description="When CPMC submits a spend request above your threshold, it will show up here for you to approve or reject."
               actionHref="/owners/dashboard"
               actionLabel="Back to portfolio"
             />
@@ -102,7 +102,7 @@ export default async function OwnerApprovalsPage() {
                         Requested by
                       </dt>
                       <dd className="mt-0.5">
-                        {item.requestedBy || "Harborline staff"}
+                        {item.requestedBy || "CPMC staff"}
                       </dd>
                     </div>
                   </dl>

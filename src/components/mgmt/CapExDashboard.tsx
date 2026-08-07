@@ -295,7 +295,7 @@ export function CapExDashboard() {
       await saveOne({
         ...selected,
         status: "cancelled",
-        ownerResponseNotes: "Withdrawn by Harborline Management before owner response.",
+        ownerResponseNotes: "Withdrawn by CPMC Property Management Company before owner response.",
         ownerRespondedAt: new Date().toISOString(),
       });
       setMsg("CapEx cancelled and withdrawn from the owner portal.");
@@ -336,7 +336,7 @@ export function CapExDashboard() {
 
     const message = `Dear ${selected.ownerName},
 
-Harborline requests your approval for a capital expenditure on ${selected.propertyName}:
+CPMC requests your approval for a capital expenditure on ${selected.propertyName}:
 
 Project: ${selected.title}
 Category: ${selected.category.replaceAll("_", " ")}
@@ -351,10 +351,10 @@ ${selected.justification}
 Vendor invoices on file:
 ${invoiceLines}
 
-Please sign in to your Harborline owner portal to review invoices, approve or decline, and choose how you want to pay:
+Please sign in to your CPMC owner portal to review invoices, approve or decline, and choose how you want to pay:
 ${portalUrl}
 
-— Harborline Management`;
+— CPMC Property Management Company`;
 
     const now = new Date().toISOString();
     await saveOne({

@@ -1,4 +1,3 @@
-import { getMockMoveOutContext } from "@/lib/portal/move-out-mock";
 import {
   clearStoredMoveOutNotice,
   loadStoredMoveOutNotice,
@@ -11,7 +10,6 @@ import type {
   MoveOutNotice,
   MoveOutStatus,
 } from "@/lib/portal/models";
-import { sessionOwnsDemoFixtures } from "@/lib/portal/tenant-scope";
 import { requirePortalServiceSession } from "@/lib/portal/services/session";
 import {
   assertNotForcedError,
@@ -47,21 +45,12 @@ export async function getMoveOutBundle(): Promise<ServiceResult<MoveOutBundle>> 
   try {
     await simulateLatency(DEFAULT_LOAD_DELAY_MS);
     // BACKEND_TODO: live lease notice rules + existing notice for session tenant
-    if (!sessionOwnsDemoFixtures(auth.data)) {
-      return ok(
-        {
-          context: getMockMoveOutContext(),
-          notice: null,
-        },
-        "mock"
-      );
-    }
     return ok(
       {
-        context: getMockMoveOutContext(),
+        context: emptyMoveOutContext(auth.data.displayName, auth.data.email),
         notice: loadStoredMoveOutNotice(auth.data.tenantScopeId),
       },
-      "mock"
+      "live"
     );
   } catch (err) {
     return failFromUnknown(
@@ -174,5 +163,25 @@ export async function clearMoveOutNotice(): Promise<
 }
 
 export function getMoveOutContextDemoFixture(): MoveOutContext {
-  return getMockMoveOutContext();
+  return emptyMoveOutContext("Tenant", "");
+}
+
+function emptyMoveOutContext(
+  displayName: string,
+  email: string
+): MoveOutContext {
+  return {
+    leaseNumber: "—",
+    propertyName: "—",
+    unitNumber: "—",
+    leaseEndDate: "",
+    requiredNoticeDays: 0,
+    noticeRequirementLabel:
+      "No lease is linked to this tenant account yet.",
+    todayIso: new Date().toISOString().slice(0, 10),
+    tenantContactName: displayName,
+    tenantContactPhone: "",
+    tenantContactEmail: email,
+    checklist: [],
+  };
 }

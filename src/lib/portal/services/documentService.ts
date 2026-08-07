@@ -1,6 +1,3 @@
-import {
-  getAuthorizedMockDocuments,
-} from "@/lib/portal/documents-mock";
 import { DEMO_TENANT_ID } from "@/lib/portal/documents-types";
 import type { Document } from "@/lib/portal/models";
 import { requirePortalServiceSession } from "@/lib/portal/services/session";
@@ -60,17 +57,16 @@ export async function listDocuments(input?: {
     };
 
     // BACKEND_TODO: fetch documents where tenant_id = session lease party
-    const documents = getAuthorizedMockDocuments(scopedViewer.tenantId);
-    return ok({ documents, viewer: scopedViewer }, "mock");
+    return ok({ documents: [], viewer: scopedViewer }, "live");
   } catch (err) {
     return failFromUnknown(err, "Could not load documents.", "network");
   }
 }
 
 export function getDocumentsDemoFixture(
-  tenantId: string = DEMO_TENANT_ID
+  _tenantId?: string
 ): Document[] {
-  return getAuthorizedMockDocuments(tenantId);
+  return [];
 }
 
 export function demoDocumentViewer(): DocumentViewer {

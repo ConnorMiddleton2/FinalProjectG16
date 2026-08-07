@@ -4,16 +4,20 @@
 }
 
 :root {
-  --harbor-ink: #0b2a32;
-  --harbor-deep: #134e5a;
-  --harbor-mid: #1f7a8c;
-  --harbor-mist: #d7eef2;
-  --harbor-sand: #f3efe6;
-  --harbor-glow: #f0c27a;
-  --harbor-card: rgba(255, 255, 255, 0.92);
-  --harbor-focus: #1f7a8c;
-  /* Muted body text ≥ ~4.5:1 on white / sand backgrounds */
-  --harbor-muted: color-mix(in srgb, var(--harbor-ink) 72%, white);
+  /* Design system — applied sitewide via these tokens */
+  --harbor-ink: #0f3d3e; /* primary dark teal: sidebars, headers, primary buttons */
+  --harbor-deep: #0f3d3e;
+  --harbor-mid: #0d9488; /* accent teal: links, active, highlights */
+  --harbor-mist: #ccfbf1; /* soft accent wash for chips / subtle fills */
+  --harbor-sand: #f8fafc; /* main page background */
+  --harbor-glow: #0d9488;
+  --harbor-card: #ffffff;
+  --harbor-focus: #0d9488;
+  --harbor-text: #0f172a; /* primary text */
+  --harbor-muted: #475569; /* secondary text */
+  --harbor-muted-soft: #94a3b8; /* muted text */
+  --harbor-border: #e2e8f0;
+  --harbor-on-dark: #ffffff;
 }
 
 html,
@@ -23,7 +27,8 @@ body {
 
 body {
   font-family: var(--font-sans), system-ui, sans-serif;
-  color: var(--harbor-ink);
+  background-color: var(--harbor-sand);
+  color: var(--harbor-text);
 }
 
 .font-display {
@@ -52,7 +57,7 @@ body {
   height: 2.75rem;
   padding: 0.5rem 2.25rem 0.5rem 0.75rem;
   border-radius: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--harbor-deep) 20%, transparent);
+  border: 1px solid var(--harbor-border);
   background-color: #fff;
   background-image: none;
   color: var(--harbor-ink);
@@ -83,7 +88,7 @@ body {
   max-width: 100%;
   padding: 0.625rem 0.75rem;
   border-radius: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--harbor-deep) 20%, transparent);
+  border: 1px solid var(--harbor-border);
   background-color: #fff;
   color: var(--harbor-ink);
   font-size: 0.875rem;
@@ -135,16 +140,28 @@ body {
   min-width: 2.75rem;
 }
 
+/* —— Shared page / card surfaces —— */
+.app-page-bg {
+  background-color: var(--harbor-sand);
+}
+
+.app-card {
+  border-radius: 1rem;
+  border: 1px solid var(--harbor-border);
+  background: var(--harbor-card);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
 /* —— Tenant portal design system —— */
 .portal-page-bg {
-  background: linear-gradient(180deg, #f3efe6 0%, #e8f4f6 55%, #d7eef2 100%);
+  background-color: var(--harbor-sand);
 }
 
 .portal-card {
   border-radius: 1rem;
-  border: 1px solid color-mix(in srgb, var(--harbor-deep) 12%, transparent);
+  border: 1px solid var(--harbor-border);
   background: var(--harbor-card);
-  box-shadow: 0 1px 2px rgba(11, 42, 50, 0.06);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .portal-card-interactive {
@@ -157,13 +174,13 @@ body {
 .portal-card-interactive:hover {
   transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--harbor-mid) 45%, transparent);
-  box-shadow: 0 8px 20px rgba(11, 42, 50, 0.1);
+  box-shadow: 0 8px 20px rgba(15, 61, 62, 0.1);
 }
 
 .portal-section-title {
   font-size: 1.125rem;
   font-weight: 600;
-  color: var(--harbor-ink);
+  color: var(--harbor-text);
   letter-spacing: -0.01em;
 }
 
@@ -233,14 +250,14 @@ body {
 
 .portal-btn-primary {
   border: 1px solid transparent;
-  background: var(--harbor-deep);
-  color: var(--harbor-sand);
+  background: var(--harbor-ink);
+  color: var(--harbor-on-dark);
 }
 
 .portal-btn-primary:hover:not(:disabled) {
-  background: var(--harbor-ink);
+  background: color-mix(in srgb, var(--harbor-ink) 88%, black);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(11, 42, 50, 0.18);
+  box-shadow: 0 4px 12px rgba(15, 61, 62, 0.18);
 }
 
 .portal-btn-secondary {
@@ -266,16 +283,16 @@ body {
 
 /* —— Owner portal design system —— */
 .owner-page-bg {
-  background: linear-gradient(180deg, #f3efe6 0%, #e8f4f6 55%, #d7eef2 100%);
+  background-color: var(--harbor-sand);
 }
 
 .owner-auth-bg {
-  background: linear-gradient(165deg, #f3efe6 0%, #d7eef2 50%, #e8f4f6 100%);
+  background-color: var(--harbor-sand);
 }
 
 .owner-card {
   border-radius: 1rem;
-  border: 1px solid color-mix(in srgb, var(--harbor-deep) 12%, transparent);
+  border: 1px solid var(--harbor-border);
   background: var(--harbor-card);
   box-shadow: 0 1px 2px rgba(11, 42, 50, 0.06);
 }
@@ -521,6 +538,40 @@ body {
   animation: welcome-wash 8s ease-in-out infinite;
 }
 
+/* Operations home — subtle white texture in empty field */
+.ops-home-pattern {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(
+    ellipse 70% 80% at 78% 45%,
+    #000 0%,
+    transparent 72%
+  );
+}
+
+.ops-home-pattern-fine {
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.35) 0.8px,
+    transparent 0.9px
+  );
+  background-size: 18px 18px;
+  mask-image: radial-gradient(
+    ellipse 65% 70% at 82% 50%,
+    #000 10%,
+    transparent 68%
+  );
+}
+
+.ops-home-drift {
+  animation: welcome-drift 9s ease-in-out infinite;
+}
+
+.ops-home-drift-delayed {
+  animation: welcome-drift 11s ease-in-out 1.2s infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -535,6 +586,8 @@ body {
   .welcome-rise-delay,
   .welcome-drift,
   .welcome-wash,
+  .ops-home-drift,
+  .ops-home-drift-delayed,
   .owner-stagger > *,
   .owner-badge-pulse,
   .owner-skeleton,

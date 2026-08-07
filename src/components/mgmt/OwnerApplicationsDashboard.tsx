@@ -1,19 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Sparkles } from "lucide-react";
 import {
   COLLECTIONS,
   useSharedCollection,
 } from "@/hooks/useSharedCollection";
 import type { OwnerApplication } from "@/lib/owner-auth";
-import { propertyLocationLabel } from "@/lib/owner-application-intake";
+import {
+  demoOwnerApplicationDiligence,
+  propertyLocationLabel,
+} from "@/lib/owner-application-intake";
 import { OwnerApplicationPropertySummary } from "@/components/OwnerApplicationPropertySummary";
 import { UnitRentSchedulePanel } from "@/components/mgmt/UnitRentSchedulePanel";
-import { provisionOwnerTempPassword } from "@/app/ops/management/owner-applications/actions";
 import {
-  draftManagementAgreement,
-  type OwnerContract,
-} from "@/lib/management";
+  dedupeOwnerApplicationContractsAction,
+  finalizeOwnerApplicationAction,
+  sendOwnerApplicationContractAction,
+} from "@/app/ops/management/owner-applications/actions";
+import type { OwnerContract } from "@/lib/management";
 
 function FileList({
   files,
@@ -73,10 +78,12 @@ export function OwnerApplicationsDashboard() {
     saveOne,
     loading,
     error,
+    refresh: refreshApps,
   } = useSharedCollection<OwnerApplication>(COLLECTIONS.ownerApplications);
   const {
     items: contracts,
     saveOne: saveContract,
+    refresh: refreshContracts,
   } = useSharedCollection<OwnerContract>(COLLECTIONS.ownerContracts);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -85,7 +92,7 @@ export function OwnerApplicationsDashboard() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
-  const [mgrSigner, setMgrSigner] = useState("Harborline Management");
+  const [mgrSigner, setMgrSigner] = useState("CPMC Property Management Company");
   const [seeded, setSeeded] = useState(false);
 
   useEffect(() => {
@@ -95,16 +102,21 @@ export function OwnerApplicationsDashboard() {
   }, [loading, seeded]);
 
   const selected = apps.find((a) => a.id === selectedId) ?? null;
-  const relatedContracts = useMemo(
-    () =>
-      contracts.filter(
-        (c) =>
-          c.relatedApplicationId === selectedId ||
-          (selected &&
-            c.ownerEmail.toLowerCase() === selected.email.toLowerCase())
-      ),
-    [contracts, selectedId, selected]
-  );
+  const relatedContracts = useMemo(() => {
+    if (!selectedId) return [];
+    const forApp = contracts.filter(
+      (c) =>
+        c.relatedApplicationId === selectedId ||
+        (selected?.contractId != null && c.id === selected.contractId)
+    );
+    // One agreement per application in the UI
+    const byId = new Map(forApp.map((c) => [c.id, c]));
+    return [...byId.values()].sort((a, b) =>
+      (b.sentAt || b.createdAt).localeCompare(a.sentAt || a.createdAt)
+    );
+  }, [contracts, selectedId, selected]);
+
+  const [dedupedAppId, setDedupedAppId] = useState<string | null>(null);
 
   useEffect(() => {
     if (selected) {
@@ -120,9 +132,45 @@ export function OwnerApplicationsDashboard() {
     } else setDraft(null);
   }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!selectedId || relatedContracts.length <= 1) return;
+    if (dedupedAppId === selectedId) return;
+    setDedupedAppId(selectedId);
+    void (async () => {
+      await dedupeOwnerApplicationContractsAction({
+        applicationId: selectedId,
+        preferredContractId: selected?.contractId,
+      });
+      await refreshContracts();
+    })();
+  }, [
+    selectedId,
+    relatedContracts.length,
+    selected?.contractId,
+    refreshContracts,
+    dedupedAppId,
+  ]);
+
   async function persist(next: OwnerApplication) {
     await saveOne(next);
     setDraft(next);
+  }
+
+  function generateDiligenceFields() {
+    if (!draft) return;
+    const primary = draft.properties[0];
+    const demo = demoOwnerApplicationDiligence({
+      propertyName: primary?.propertyName,
+      city: primary?.city,
+    });
+    setDraft({
+      ...draft,
+      ...demo,
+    });
+    setMsg(
+      "Generated inspection, market research, and negotiation fields. Review, then Save diligence."
+    );
+    setTimeout(() => setMsg(null), 4000);
   }
 
   async function saveDiligence() {
@@ -151,39 +199,19 @@ export function OwnerApplicationsDashboard() {
     setBusy(true);
     setActionError(null);
     try {
-      const body = draftManagementAgreement(draft);
-      const contractId = crypto.randomUUID();
-      const propertyName =
-        draft.properties[0]?.location || draft.companyName || "Owner asset";
-      const now = new Date().toISOString();
-
-      const contract: OwnerContract = {
-        id: contractId,
-        ownerName: draft.fullName,
-        ownerEmail: draft.email,
-        propertyName,
-        documentTitle: "Exclusive Property Management Agreement",
-        body,
-        status: "pending_owner_signature",
-        createdAt: now,
-        sentAt: now,
-        harborlineSignedAt: now,
-        harborlineSignedBy: mgrSigner.trim(),
-        relatedApplicationId: draft.id,
-      };
-      await saveContract(contract);
-
-      await persist({
-        ...draft,
-        draftContract: body,
-        contractId,
-        contractSentAt: now,
-        mgmtStatus: "contract_sent",
-        accountMessage: `Harborline has signed and sent your Property Management Agreement (${new Date().toLocaleString()}). Open Contracts in your portal to review and sign.`,
+      const result = await sendOwnerApplicationContractAction({
+        applicationId: draft.id,
+        managerSigner: mgrSigner.trim(),
       });
-
+      if ("error" in result) {
+        setActionError(result.error ?? "Could not send contract.");
+        return;
+      }
+      setDraft(result.application);
+      await refreshApps();
+      await refreshContracts();
       setMsg(
-        "Contract signed by management and sent to the owner portal for signature."
+        `Contract sent for owner signature. ${result.propertyCount} asset(s) staged — they appear on the owner dashboard after they sign.`
       );
     } catch (err) {
       setActionError(
@@ -196,42 +224,26 @@ export function OwnerApplicationsDashboard() {
 
   async function provisionTempPassword() {
     if (!draft || busy) return;
-    const signed = relatedContracts.find(
-      (c) => c.status === "signed_by_owner" || c.status === "fully_executed"
-    );
-    if (!signed) {
-      setMsg("Wait until the owner has signed the contract in their portal.");
-      return;
-    }
-
     setBusy(true);
     setActionError(null);
     try {
-      const provisioned = await provisionOwnerTempPassword({
+      const result = await finalizeOwnerApplicationAction({
+        applicationId: draft.id,
         email: draft.email,
         fullName: draft.fullName,
       });
-      if ("error" in provisioned) {
-        setActionError(provisioned.error ?? "Could not create temp password.");
+      if ("error" in result) {
+        setActionError(result.error ?? "Could not finalize application.");
         return;
       }
-
-      await saveContract({
-        ...signed,
-        status: "fully_executed",
-      });
-
-      await persist({
-        ...draft,
-        status: "approved",
-        mgmtStatus: "account_provisioned",
-        tempPasswordIssuedAt: new Date().toISOString(),
-        accountMessage: `Your management agreement is fully executed. Use the temporary password from Harborline Management to sign in at /owners.`,
-      });
-
-      setTempPassword(provisioned.temporaryPassword);
+      setDraft(result.application);
+      await refreshApps();
+      await refreshContracts();
+      if (result.temporaryPassword) {
+        setTempPassword(result.temporaryPassword);
+      }
       setMsg(
-        `Temporary password created for ${provisioned.email}. Share it with the owner so they can sign in.`
+        `Application completed. ${result.propertyCount} asset(s) linked to the owner dashboard.`
       );
     } catch (err) {
       setActionError(
@@ -242,34 +254,89 @@ export function OwnerApplicationsDashboard() {
     }
   }
 
-  const pending = apps.filter((a) => a.status === "pending");
+  const pending = apps.filter((a) =>
+    ["pending", "needs_info", "awaiting_signature"].includes(a.status)
+  );
+  const completed = apps.filter((a) =>
+    ["approved", "declined"].includes(a.status)
+  );
+  const agreementSent = Boolean(
+    draft &&
+      (draft.contractSentAt ||
+        draft.contractId ||
+        draft.status === "awaiting_signature" ||
+        draft.status === "approved" ||
+        draft.status === "declined" ||
+        draft.mgmtStatus === "contract_sent" ||
+        draft.mgmtStatus === "owner_signed" ||
+        draft.mgmtStatus === "account_provisioned" ||
+        relatedContracts.some((c) => Boolean(c.sentAt)))
+  );
 
   return (
     <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
       <div className="space-y-2">
         {error && <p className="text-sm text-red-700">{error}</p>}
         {loading && <p className="text-sm opacity-60">Loading…</p>}
-        {pending.map((app) => (
-          <button
-            key={app.id}
-            type="button"
-            onClick={() => setSelectedId(app.id)}
-            className={`w-full rounded-xl border px-3 py-3 text-left ${
-              selectedId === app.id
-                ? "border-[var(--harbor-mid)] bg-white shadow-sm"
-                : "border-[var(--harbor-deep)]/10 bg-white/80"
-            }`}
-          >
-            <p className="font-semibold">{app.fullName}</p>
-            <p className="text-sm opacity-70">{app.companyName || app.email}</p>
-            <p className="text-xs opacity-55">
-              {app.properties[0]
-                ? propertyLocationLabel(app.properties[0])
-                : "No property"}{" "}
-              · {app.mgmtStatus ?? "new"}
+        <p className="text-xs font-semibold uppercase tracking-wide opacity-55">
+          Open ({pending.length})
+        </p>
+        {pending.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-[var(--harbor-deep)]/20 px-3 py-6 text-center text-sm opacity-55">
+            No open applications.
+          </p>
+        ) : (
+          pending.map((app) => (
+            <button
+              key={app.id}
+              type="button"
+              onClick={() => setSelectedId(app.id)}
+              className={`w-full rounded-xl border px-3 py-3 text-left ${
+                selectedId === app.id
+                  ? "border-[var(--harbor-mid)] bg-white shadow-sm"
+                  : "border-[var(--harbor-deep)]/10 bg-white/80"
+              }`}
+            >
+              <p className="font-semibold">{app.fullName}</p>
+              <p className="text-sm opacity-70">
+                {app.companyName || app.email}
+              </p>
+              <p className="text-xs opacity-55">
+                {app.properties[0]
+                  ? propertyLocationLabel(app.properties[0])
+                  : "No property"}{" "}
+                · {app.status.replaceAll("_", " ")}
+                {app.mgmtStatus ? ` · ${app.mgmtStatus}` : ""}
+              </p>
+            </button>
+          ))
+        )}
+        {completed.length > 0 ? (
+          <>
+            <p className="pt-3 text-xs font-semibold uppercase tracking-wide opacity-55">
+              Completed ({completed.length})
             </p>
-          </button>
-        ))}
+            {completed.map((app) => (
+              <button
+                key={app.id}
+                type="button"
+                onClick={() => setSelectedId(app.id)}
+                className={`w-full rounded-xl border px-3 py-2.5 text-left opacity-80 ${
+                  selectedId === app.id
+                    ? "border-[var(--harbor-mid)] bg-white shadow-sm"
+                    : "border-[var(--harbor-deep)]/10 bg-white/60"
+                }`}
+              >
+                <p className="font-medium text-sm">{app.fullName}</p>
+                <p className="text-xs opacity-55 capitalize">
+                  {app.status.replaceAll("_", " ")} ·{" "}
+                  {app.properties.length} asset
+                  {app.properties.length === 1 ? "" : "s"}
+                </p>
+              </button>
+            ))}
+          </>
+        ) : null}
       </div>
 
       <div className="max-h-[70vh] space-y-3 overflow-y-auto rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/95 p-4 shadow-sm">
@@ -309,6 +376,26 @@ export function OwnerApplicationsDashboard() {
                 )}
               </div>
             )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-[var(--harbor-deep)]/25 bg-[var(--harbor-mist)]/25 px-3 py-2.5">
+              <div>
+                <p className="text-sm font-semibold text-[var(--harbor-ink)]">
+                  Demo shortcut
+                </p>
+                <p className="text-xs opacity-60">
+                  Fill inspection, meetings, negotiation, fee, and term fields
+                  with new sample data each click.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm gap-1 border-0 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]"
+                onClick={generateDiligenceFields}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Generate fields
+              </button>
+            </div>
 
             <div className="space-y-2 border-t border-base-200 pt-3">
               <p className="text-sm font-medium">Inspection & asset</p>
@@ -503,9 +590,9 @@ export function OwnerApplicationsDashboard() {
             <div className="space-y-3 border-t border-base-200 pt-3">
               <p className="text-sm font-medium">Contract</p>
               <p className="text-xs opacity-65">
-                Save diligence, then sign as manager and send the agreement to
-                the owner portal. No email — the owner reviews and signs in
-                their portal.
+                Save diligence, then sign as manager and send the agreement once
+                to the owner portal. The button locks after send — no duplicate
+                agreements.
               </p>
               <label className="form-control w-full max-w-sm">
                 <span className="label-text text-xs mb-1">Manager signer</span>
@@ -513,7 +600,8 @@ export function OwnerApplicationsDashboard() {
                   className="input input-bordered input-sm bg-white"
                   value={mgrSigner}
                   onChange={(e) => setMgrSigner(e.target.value)}
-                  placeholder="Your name / Harborline Management"
+                  placeholder="Your name / CPMC Property Management Company"
+                  disabled={agreementSent || busy}
                 />
               </label>
               <div className="flex flex-wrap gap-2">
@@ -528,39 +616,46 @@ export function OwnerApplicationsDashboard() {
                 <button
                   type="button"
                   className="btn btn-neutral btn-sm"
-                  disabled={busy}
+                  disabled={busy || agreementSent}
                   onClick={() => void signAndSendToOwnerPortal()}
                 >
-                  Sign & send to owner portal
+                  {agreementSent
+                    ? "Application sent"
+                    : "Sign & send to owner portal"}
                 </button>
                 <button
                   type="button"
                   className="btn btn-outline btn-sm"
                   disabled={
                     busy ||
-                    !relatedContracts.some(
-                      (c) =>
-                        c.status === "signed_by_owner" ||
-                        c.status === "fully_executed"
+                    draft.status === "approved" ||
+                    !(
+                      draft.status === "awaiting_signature" ||
+                      draft.mgmtStatus === "owner_signed" ||
+                      relatedContracts.some(
+                        (c) =>
+                          c.status === "signed_by_owner" ||
+                          c.status === "fully_executed"
+                      )
                     )
                   }
                   onClick={() => void provisionTempPassword()}
                 >
-                  Create temp password (after owner signs)
+                  Complete & link assets
                 </button>
               </div>
             </div>
 
             <div className="space-y-2 border-t border-base-200 pt-3">
               <p className="text-sm font-medium">
-                Contracts for this application
+                Agreement for this application
               </p>
               {relatedContracts.length === 0 ? (
                 <p className="text-xs opacity-55">
-                  No contracts yet — sign & send to generate one.
+                  No agreement yet — sign & send once to generate it.
                 </p>
               ) : (
-                relatedContracts.map((c) => (
+                relatedContracts.slice(0, 1).map((c) => (
                   <div
                     key={c.id}
                     className="rounded-lg border border-base-300 bg-base-100 p-2 text-sm"
@@ -568,8 +663,8 @@ export function OwnerApplicationsDashboard() {
                     <p className="font-medium">{c.documentTitle}</p>
                     <p className="text-xs opacity-60">
                       Status: {c.status.replaceAll("_", " ")}
-                      {c.harborlineSignedBy
-                        ? ` · Manager: ${c.harborlineSignedBy}`
+                      {c.cpmcSignedBy
+                        ? ` · Manager: ${c.cpmcSignedBy}`
                         : ""}
                       {c.ownerSignedAt
                         ? ` · Owner signed ${new Date(c.ownerSignedAt).toLocaleString()}`

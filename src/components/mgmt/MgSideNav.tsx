@@ -43,14 +43,14 @@ function MgSideNavInner({ activeNavHref }: Props) {
   const selected = searchParams.get("property") ?? "";
 
   return (
-    <aside className="lg:sticky lg:top-6 lg:self-start">
-      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--harbor-ink)]/45">
+    <aside className="rounded-2xl border border-[var(--harbor-ink)] bg-[var(--harbor-ink)] p-3 text-[var(--harbor-on-dark)] lg:sticky lg:top-6 lg:self-start">
+      <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--harbor-on-dark)]/55">
         Management
       </p>
       <nav className="flex flex-row flex-wrap gap-2 lg:flex-col lg:gap-1">
         <Link
           href="/ops/management"
-          className="rounded-lg px-3 py-2 text-sm text-[var(--harbor-ink)]/70 transition hover:bg-white/70"
+          className="rounded-lg px-3 py-2 text-sm text-[var(--harbor-on-dark)]/80 transition hover:bg-white/10"
         >
           Hub overview
         </Link>
@@ -63,20 +63,20 @@ function MgSideNavInner({ activeNavHref }: Props) {
                 href={item.href}
                 className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
                   active
-                    ? "bg-[var(--harbor-deep)] text-[var(--harbor-sand)] shadow-sm"
-                    : "bg-white/70 text-[var(--harbor-ink)]/80 hover:bg-white"
+                    ? "bg-[var(--harbor-mid)] text-[var(--harbor-on-dark)] shadow-sm"
+                    : "text-[var(--harbor-on-dark)]/85 hover:bg-white/10"
                 }`}
               >
                 {item.label}
               </Link>
               {isBudgets && budgetsActive ? (
-                <div className="mt-1 space-y-0.5 border-l border-[var(--harbor-deep)]/20 py-0.5 pl-2 ml-2">
+                <div className="mt-1 space-y-0.5 border-l border-white/20 py-0.5 pl-2 ml-2">
                   <Link
                     href={BUDGETS_HREF}
                     className={`block rounded-md px-2 py-1 text-[11px] leading-tight transition ${
                       !selected
-                        ? "bg-[var(--harbor-deep)]/15 font-semibold text-[var(--harbor-ink)]"
-                        : "text-[var(--harbor-ink)]/70 hover:bg-white/80"
+                        ? "bg-white/15 font-semibold text-[var(--harbor-on-dark)]"
+                        : "text-[var(--harbor-on-dark)]/70 hover:bg-white/10"
                     }`}
                   >
                     All properties
@@ -85,8 +85,8 @@ function MgSideNavInner({ activeNavHref }: Props) {
                     href={propertyHref(COMPANY_BUDGET_VIEW)}
                     className={`block rounded-md px-2 py-1 text-[11px] leading-tight transition ${
                       selected === COMPANY_BUDGET_VIEW
-                        ? "bg-[var(--harbor-deep)]/15 font-semibold text-[var(--harbor-ink)]"
-                        : "text-[var(--harbor-ink)]/70 hover:bg-white/80"
+                        ? "bg-white/15 font-semibold text-[var(--harbor-on-dark)]"
+                        : "text-[var(--harbor-on-dark)]/70 hover:bg-white/10"
                     }`}
                   >
                     Company net
@@ -97,8 +97,8 @@ function MgSideNavInner({ activeNavHref }: Props) {
                       href={propertyHref(p.id)}
                       className={`block truncate rounded-md px-2 py-1 text-[11px] leading-tight transition ${
                         selected === p.id
-                          ? "bg-[var(--harbor-deep)]/15 font-semibold text-[var(--harbor-ink)]"
-                          : "text-[var(--harbor-ink)]/70 hover:bg-white/80"
+                          ? "bg-white/15 font-semibold text-[var(--harbor-on-dark)]"
+                          : "text-[var(--harbor-on-dark)]/70 hover:bg-white/10"
                       }`}
                       title={p.name}
                     >
@@ -119,13 +119,13 @@ export function MgSideNav(props: Props) {
   return (
     <Suspense
       fallback={
-        <aside className="lg:sticky lg:top-6 lg:self-start">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--harbor-ink)]/45">
+        <aside className="rounded-2xl border border-[var(--harbor-ink)] bg-[var(--harbor-ink)] p-3 lg:sticky lg:top-6 lg:self-start">
+          <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--harbor-on-dark)]/55">
             Management
           </p>
           <nav className="flex flex-col gap-1">
-            <div className="h-8 animate-pulse rounded-lg bg-white/50" />
-            <div className="h-8 animate-pulse rounded-lg bg-white/50" />
+            <div className="h-8 animate-pulse rounded-lg bg-white/10" />
+            <div className="h-8 animate-pulse rounded-lg bg-white/10" />
           </nav>
         </aside>
       }

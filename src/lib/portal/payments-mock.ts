@@ -15,9 +15,9 @@ export function getMockPaymentsOverview(): PaymentsOverview {
     },
     savedMethod: {
       id: "pm-1",
-      brand: "Visa",
+      brand: "Debit",
       last4: "4242",
-      kind: "Card",
+      kind: "Debit card",
       isDefault: true,
     },
     ledger: [
@@ -122,6 +122,7 @@ export function getMockPaymentsOverview(): PaymentsOverview {
         receiptAvailable: true,
       },
     ],
+    pendingCheck: null,
   };
 }
 
@@ -140,5 +141,6 @@ export function getEmptyPaymentsOverview(): PaymentsOverview {
     savedMethod: null,
     ledger: [],
     transactions: [],
+    pendingCheck: null,
   };
 }

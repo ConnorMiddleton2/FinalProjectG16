@@ -27,7 +27,7 @@ export type StaffApplicationState = {
 };
 
 function reviewerLabel() {
-  return "Harborline staff";
+  return "CPMC staff";
 }
 
 const FEE_STRUCTURES: FeeStructure[] = [
@@ -48,8 +48,11 @@ export async function sendContractForSignatureAction(
   _prev: StaffApplicationState,
   formData: FormData
 ): Promise<StaffApplicationState> {
-  if (!(await canAccessOpsModule("properties"))) {
-    return { error: "Properties access required." };
+  if (!(await canAccessOpsModule("management"))) {
+    return {
+      error:
+        "Only Management can send contracts for owner signature. Properties staff can view applications but not decide them.",
+    };
   }
 
   const applicationId = String(formData.get("applicationId") ?? "");
@@ -83,6 +86,7 @@ export async function sendContractForSignatureAction(
 
   revalidatePath("/ops/properties");
   revalidatePath("/ops/properties/applications");
+  revalidatePath("/ops/management/owners");
   revalidatePath("/owners/status");
 
   return {
@@ -94,8 +98,11 @@ export async function declineApplicationAction(
   _prev: StaffApplicationState,
   formData: FormData
 ): Promise<StaffApplicationState> {
-  if (!(await canAccessOpsModule("properties"))) {
-    return { error: "Properties access required." };
+  if (!(await canAccessOpsModule("management"))) {
+    return {
+      error:
+        "Only Management can decline owner applications. Properties staff can view applications but not decide them.",
+    };
   }
 
   const applicationId = String(formData.get("applicationId") ?? "");
@@ -111,6 +118,7 @@ export async function declineApplicationAction(
 
   revalidatePath("/ops/properties");
   revalidatePath("/ops/properties/applications");
+  revalidatePath("/ops/management/owners");
   return { success: "Application declined." };
 }
 
@@ -118,8 +126,11 @@ export async function requestMoreInfoAction(
   _prev: StaffApplicationState,
   formData: FormData
 ): Promise<StaffApplicationState> {
-  if (!(await canAccessOpsModule("properties"))) {
-    return { error: "Properties access required." };
+  if (!(await canAccessOpsModule("management"))) {
+    return {
+      error:
+        "Only Management can request more information on owner applications. Properties staff can view applications but not decide them.",
+    };
   }
 
   const applicationId = String(formData.get("applicationId") ?? "");
@@ -135,6 +146,7 @@ export async function requestMoreInfoAction(
 
   revalidatePath("/ops/properties");
   revalidatePath("/ops/properties/applications");
+  revalidatePath("/ops/management/owners");
   return {
     success: "Marked as needs more information. Applicant can see your note on the status page.",
   };

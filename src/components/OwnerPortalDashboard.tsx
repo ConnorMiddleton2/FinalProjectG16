@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   COLLECTIONS,
   useSharedCollection,
@@ -14,37 +14,58 @@ import {
   type CapitalExpenditure,
   type OwnerContract,
 } from "@/lib/management";
+import { signOwnerProposedContract } from "@/lib/owner-application-portal";
 
 type Props = {
   owner: OwnerAccount;
 };
 
 export function OwnerPortalDashboard({ owner }: Props) {
-  const { items: contracts, saveOne: saveContract } =
+  const { items: contracts, refresh: refreshContracts } =
     useSharedCollection<OwnerContract>(COLLECTIONS.ownerContracts);
-  const { items: apps, saveOne: saveApp } = useSharedCollection<{
+  const { items: apps, refresh: refreshApps } = useSharedCollection<{
     id: string;
     email: string;
     accountMessage?: string;
     mgmtStatus?: string;
     contractId?: string;
+    status?: string;
   }>(COLLECTIONS.ownerApplications);
   const { items: capex, saveOne: saveCapex } =
     useSharedCollection<CapitalExpenditure>(COLLECTIONS.capitalExpenditures);
 
   const [msg, setMsg] = useState<string | null>(null);
   const [signer, setSigner] = useState(owner.fullName);
+  const [pending, startTransition] = useTransition();
   const [paymentByCapex, setPaymentByCapex] = useState<
     Record<string, CapExPaymentMethod>
   >({});
 
-  const myContracts = useMemo(
-    () =>
-      contracts.filter(
-        (c) => c.ownerEmail.toLowerCase() === owner.email.toLowerCase()
-      ),
-    [contracts, owner.email]
-  );
+  const myContracts = useMemo(() => {
+    const mine = contracts.filter(
+      (c) => c.ownerEmail.toLowerCase() === owner.email.toLowerCase()
+    );
+    // One agreement per application (or standalone id)
+    const byKey = new Map<string, OwnerContract>();
+    for (const c of mine) {
+      const key = c.relatedApplicationId || c.id;
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, c);
+        continue;
+      }
+      const rank = (x: OwnerContract) =>
+        x.status === "fully_executed"
+          ? 3
+          : x.status === "signed_by_owner"
+            ? 2
+            : x.sentAt
+              ? 1
+              : 0;
+      if (rank(c) >= rank(existing)) byKey.set(key, c);
+    }
+    return [...byKey.values()];
+  }, [contracts, owner.email]);
   const myApps = useMemo(
     () =>
       apps.filter((a) => a.email.toLowerCase() === owner.email.toLowerCase()),
@@ -62,27 +83,34 @@ export function OwnerPortalDashboard({ owner }: Props) {
     [capex, owner.email]
   );
 
-  async function signContract(c: OwnerContract) {
+  function signContract(c: OwnerContract) {
     if (!signer.trim()) return;
-    await saveContract({
-      ...c,
-      status: "signed_by_owner",
-      ownerSignedAt: new Date().toISOString(),
-      ownerSignatureName: signer.trim(),
-    });
     const related = myApps.find(
       (a) => a.contractId === c.id || a.id === c.relatedApplicationId
     );
-    if (related) {
-      await saveApp({
-        ...related,
-        mgmtStatus: "owner_signed",
-        accountMessage: `Contract signed and returned to Harborline on ${new Date().toLocaleString()}. Awaiting account provisioning.`,
-      });
+    if (!related) {
+      setMsg("Could not find the related application for this contract.");
+      return;
     }
-    setMsg(
-      "Contract signed and returned to Harborline Management. They will provision your full account access."
-    );
+    startTransition(async () => {
+      const result = await signOwnerProposedContract({
+        contractId: c.id,
+        email: owner.email,
+        applicationId: related.id,
+        signatureName: signer.trim(),
+      });
+      if ("error" in result) {
+        setMsg(result.error ?? "Could not sign the agreement.");
+        return;
+      }
+      await refreshContracts();
+      await refreshApps();
+      setMsg(
+        result.temporaryPassword
+          ? `Signed. Your assets are on the dashboard. Temp password: ${result.temporaryPassword}`
+          : "Signed. Your assets now appear under management contracts on your dashboard."
+      );
+    });
   }
 
   async function respondCapex(
@@ -103,7 +131,7 @@ export function OwnerPortalDashboard({ owner }: Props) {
         ownerResponseNotes: `Owner approved CapEx. Payment preference: ${capexPaymentLabel(method)}.`,
       });
       setMsg(
-        `CapEx approved · ${capexPaymentLabel(method)}. Harborline will follow up.`
+        `CapEx approved · ${capexPaymentLabel(method)}. CPMC will follow up.`
       );
       return;
     }
@@ -125,7 +153,7 @@ export function OwnerPortalDashboard({ owner }: Props) {
       )}
 
       <section className="rounded-2xl border border-[var(--harbor-deep)]/10 bg-white/85 p-5 shadow-sm">
-        <h2 className="text-lg font-semibold">Messages from Harborline</h2>
+        <h2 className="text-lg font-semibold">Messages from CPMC</h2>
         {myApps.length === 0 ? (
           <p className="mt-2 text-sm opacity-60">No application messages.</p>
         ) : (
@@ -178,9 +206,10 @@ export function OwnerPortalDashboard({ owner }: Props) {
                   <button
                     type="button"
                     className="btn btn-neutral btn-sm"
+                    disabled={pending}
                     onClick={() => void signContract(c)}
                   >
-                    Sign & return to Harborline
+                    {pending ? "Signing…" : "Sign & return to CPMC"}
                   </button>
                 </div>
               ) : (
@@ -234,7 +263,7 @@ export function OwnerPortalDashboard({ owner }: Props) {
                 </p>
                 {(c.vendorInvoices ?? []).length === 0 ? (
                   <p className="text-xs opacity-55">
-                    No invoices attached. Ask Harborline to upload the vendor
+                    No invoices attached. Ask CPMC to upload the vendor
                     quotes before approving if needed.
                   </p>
                 ) : (

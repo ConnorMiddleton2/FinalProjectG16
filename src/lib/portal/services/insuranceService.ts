@@ -88,7 +88,7 @@ export async function uploadCertificateOfInsurance(
       documentLabel:
         input.documentLabel.trim() ||
         `Certificate-${input.policyNumber.trim().replace(/\s+/g, "")}.pdf`,
-      notes: "Uploaded by tenant — pending Harborline review (demo).",
+      notes: "Uploaded by tenant — pending CPMC review (demo).",
     };
 
     const existing = getInsurancePoliciesForTenant(auth.data.tenantScopeId);

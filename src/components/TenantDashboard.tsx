@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { OpsBrandHomeLink } from "@/components/OpsBrandHomeLink";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowDown,
   ArrowLeft,
@@ -20,6 +22,7 @@ import {
 import { useCollectionsCatchUpSync } from "@/hooks/useEnsureManagementAlerts";
 import {
   CURRENT_RENT_DUE_HELPER,
+  MANAGEMENT_REVIEW_DAYS,
   buildTenantCollectionsSnapshot,
   COLLECTIONS_FILTERS,
   matchesCollectionsFilter,
@@ -50,13 +53,13 @@ import {
   getLeaseStart,
   getMonthlyRent,
   getOutstandingBalance,
+  getPaymentMethod,
   getPaymentStatus,
   isCurrentTenant,
   isExpiringOccupant,
   isFormerOrExpired,
   isLatePayingCurrent,
   isLeaseExpiringWithinDays,
-  leaseStatusOverviewLabel,
   matchesOccupancyFilter,
   MISSING_FIELD_LABEL,
   OCCUPANCY_FILTERS,
@@ -64,11 +67,14 @@ import {
   paymentStatusLabel,
   TENANT_CATEGORIES,
   tenantCategoryLabel,
+  withPaymentMethod,
   type OccupancyFilter,
   type PaymentStatus,
   type TenantCategory,
+  type TenantPaymentMethod,
   type TenantRecord,
 } from "@/lib/tenants";
+import { TENANT_PAYMENT_METHODS } from "@/lib/payment-methods";
 
 type Filters = {
   search: string;
@@ -118,12 +124,12 @@ function stickyCellBg(
 
 /**
  * Tenant master-list row tone priority:
- * 1. 90+ days overdue + management review → dark red
- * 2. 1–89 days qualifying overdue → light red
+ * 1. 60+ days overdue + management review → dark red
+ * 2. 1–59 days qualifying overdue → light red
  * 3. Non-overdue warnings (payment plan, lease expiring, etc.) → yellow
  * 4. Otherwise → neutral
  *
- * Based on collections Days overdue / Rent overdue only — never Current rent due alone,
+ * Based on collections Days late / Rent overdue only — never Current rent due alone,
  * disputed amounts, former status, or lease category.
  */
 function tenantRowTone(input: {
@@ -137,10 +143,13 @@ function tenantRowTone(input: {
   const overdueDays = input.daysOverdue > 0 ? input.daysOverdue : 0;
   const hasQualifyingOverdue = overdueDays >= 1 && input.rentOverdue > 0;
 
-  if (hasQualifyingOverdue && overdueDays >= 90) {
+  if (
+    hasQualifyingOverdue &&
+    (overdueDays >= MANAGEMENT_REVIEW_DAYS || input.managementReviewRequired)
+  ) {
     return "redDark";
   }
-  if (hasQualifyingOverdue && overdueDays < 90) {
+  if (hasQualifyingOverdue && overdueDays < MANAGEMENT_REVIEW_DAYS) {
     return "redLight";
   }
   if (
@@ -163,6 +172,8 @@ function categoryBadgeClass(category: TenantCategory): string {
       return "badge-error";
     case "vacating":
       return "badge-ghost";
+    case "terminated":
+      return "badge-neutral";
     default:
       return "badge-outline";
   }
@@ -321,6 +332,7 @@ export function TenantDashboard() {
       !accountStatesLoading,
   });
 
+  const searchParams = useSearchParams();
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -328,6 +340,27 @@ export function TenantDashboard() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const tenantTableRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const collections = searchParams.get("collections");
+    if (
+      collections === "days_60" ||
+      collections === "days_30" ||
+      collections === "days_90" ||
+      collections === "any_overdue" ||
+      collections === "review_required" ||
+      collections === "notices_due" ||
+      collections === "paused" ||
+      collections === "payment_plan" ||
+      collections === "disputed" ||
+      collections === "all"
+    ) {
+      setFilters((f) => ({
+        ...f,
+        collections: collections as CollectionsFilter,
+      }));
+    }
+  }, [searchParams]);
 
   function applyKpiFilter(patch: Partial<Filters>) {
     setFilters({ ...defaultFilters, ...patch });
@@ -600,14 +633,20 @@ export function TenantDashboard() {
     await saveTenant({ ...current, paymentStatus });
   }
 
+  async function updatePaymentMethod(
+    id: string,
+    paymentMethod: TenantPaymentMethod
+  ) {
+    const current = tenants.find((t) => t.id === id);
+    if (!current) return;
+    await saveTenant(withPaymentMethod(current, paymentMethod));
+  }
+
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
+    <div className="min-h-screen bg-[var(--harbor-sand)]">
       <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Tenant</p>
-          </div>
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <OpsBrandHomeLink subtitle="Tenant" />
           <form action={teamLogout}>
             <button
               type="submit"
@@ -620,7 +659,7 @@ export function TenantDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-6 px-6 py-10">
+      <main className="mx-auto max-w-[1600px] space-y-6 px-4 py-10 sm:px-6">
         <Link
           href="/ops"
           className="inline-flex items-center gap-2 text-sm text-[var(--harbor-ink)]/70 hover:text-[var(--harbor-ink)]"
@@ -1154,14 +1193,14 @@ export function TenantDashboard() {
                   className="inline-block h-2.5 w-2.5 rounded-sm bg-red-200"
                   aria-hidden
                 />
-                Dark red: 90+ days overdue; management review required
+                Dark red: 60+ days late; management review required
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span
                   className="inline-block h-2.5 w-2.5 rounded-sm border border-red-200 bg-red-50"
                   aria-hidden
                 />
-                Light red: Rent overdue, under 90 days
+                Light red: Rent overdue, under 60 days
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span
@@ -1172,10 +1211,10 @@ export function TenantDashboard() {
               </span>
             </div>
             <div className="overflow-x-auto scroll-smooth [scrollbar-gutter:stable]">
-              <table className="table table-sm">
+              <table className="table table-sm w-full min-w-0">
                 <thead>
                   <tr className="text-[var(--harbor-ink)]">
-                    <th className="sticky left-0 z-30 min-w-[10rem] max-w-[10rem] border-b border-base-200 bg-base-200">
+                    <th className="sticky left-0 z-30 min-w-[8rem] max-w-[9rem] border-b border-base-200 bg-base-200">
                       <SortButton
                         label="Tenant"
                         active={sortKey === "name"}
@@ -1183,7 +1222,7 @@ export function TenantDashboard() {
                         onClick={() => toggleSort("name")}
                       />
                     </th>
-                    <th className="sticky left-[10rem] z-30 min-w-[10rem] max-w-[10rem] border-b border-r border-base-300 bg-base-200 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.12)]">
+                    <th className="sticky left-[8rem] z-30 min-w-[8rem] max-w-[9rem] border-b border-r border-base-300 bg-base-200 shadow-[4px_0_6px_-2px_rgba(0,0,0,0.12)]">
                       <SortButton
                         label="Property"
                         active={sortKey === "property"}
@@ -1191,58 +1230,53 @@ export function TenantDashboard() {
                         onClick={() => toggleSort("property")}
                       />
                     </th>
-                    <th className="min-w-[5rem] whitespace-nowrap bg-base-200">
-                      Unit
-                    </th>
-                    <th className="min-w-[7rem] whitespace-nowrap bg-base-200">
+                    <th className="whitespace-nowrap bg-base-200 px-2">Unit</th>
+                    <th className="whitespace-nowrap bg-base-200 px-2">
                       Category
                     </th>
-                    <th className="min-w-[5rem] whitespace-nowrap bg-base-200">
-                      Sq ft
-                    </th>
-                    <th className="min-w-[6.5rem] whitespace-nowrap bg-base-200">
-                      Lease status
-                    </th>
-                    <th className="min-w-[6.5rem] whitespace-nowrap bg-base-200">
+                    <th className="whitespace-nowrap bg-base-200 px-2">
                       Lease end
                     </th>
-                    <th className="min-w-[6.5rem] whitespace-nowrap bg-base-200">
+                    <th className="whitespace-nowrap bg-base-200 px-2">
                       <SortButton
-                        label="Monthly rent"
+                        label="Rent"
                         active={sortKey === "monthlyRent"}
                         dir={sortDir}
                         onClick={() => toggleSort("monthlyRent")}
                       />
                     </th>
-                    <th className="min-w-[7.5rem] whitespace-nowrap bg-base-200">
+                    <th className="whitespace-nowrap bg-base-200 px-2">
                       <SortButton
-                        label="Current rent due"
+                        label="Due"
                         active={sortKey === "currentRentDue"}
                         dir={sortDir}
                         onClick={() => toggleSort("currentRentDue")}
                       />
                     </th>
-                    <th className="min-w-[7rem] whitespace-nowrap bg-base-200">
+                    <th className="whitespace-nowrap bg-base-200 px-2">
                       <SortButton
-                        label="Rent overdue"
+                        label="Overdue"
                         active={sortKey === "rentOverdue"}
                         dir={sortDir}
                         onClick={() => toggleSort("rentOverdue")}
                       />
                     </th>
-                    <th className="min-w-[5.5rem] whitespace-nowrap bg-base-200">
+                    <th className="whitespace-nowrap bg-base-200 px-2">
                       <SortButton
-                        label="Days overdue"
+                        label="Days late"
                         active={sortKey === "daysOverdue"}
                         dir={sortDir}
                         onClick={() => toggleSort("daysOverdue")}
                       />
                     </th>
-                    <th className="min-w-[6.5rem] whitespace-nowrap bg-base-200">
+                    <th className="whitespace-nowrap bg-base-200 px-2">
+                      Payment method
+                    </th>
+                    <th className="whitespace-nowrap bg-base-200 px-2">
                       Collections
                     </th>
-                    <th className="min-w-[7.5rem] whitespace-nowrap bg-base-200">
-                      Management review
+                    <th className="whitespace-nowrap bg-base-200 px-2">
+                      Mgmt review
                     </th>
                   </tr>
                 </thead>
@@ -1293,11 +1327,11 @@ export function TenantDashboard() {
                         managedProperties,
                         t.propertyLeased
                       );
-                      const leaseLabel = leaseStatusOverviewLabel(t);
                       const daysOverdue = snap?.daysOverdue ?? 0;
                       const managementReviewRequired =
                         !!snap &&
-                        (snap.managementReviewRequired || daysOverdue >= 90);
+                        (snap.managementReviewRequired ||
+                          daysOverdue >= MANAGEMENT_REVIEW_DAYS);
                       const paymentPlan =
                         snap?.stage === "payment_plan" ||
                         !!snap?.accountState?.paymentPlanApproved;
@@ -1316,25 +1350,30 @@ export function TenantDashboard() {
                         collectionsWarning,
                       });
                       const rowBg = stickyCellBg(toneKey);
-                      const stickyTenant = `sticky left-0 z-20 min-w-[10rem] max-w-[10rem] ${rowBg}`;
-                      const stickyProperty = `sticky left-[10rem] z-20 min-w-[10rem] max-w-[10rem] border-r border-base-300 ${rowBg} shadow-[4px_0_6px_-2px_rgba(0,0,0,0.12)]`;
+                      const stickyTenant = `sticky left-0 z-20 min-w-[8rem] max-w-[9rem] ${rowBg}`;
+                      const stickyProperty = `sticky left-[8rem] z-20 min-w-[8rem] max-w-[9rem] border-r border-base-300 ${rowBg} shadow-[4px_0_6px_-2px_rgba(0,0,0,0.12)]`;
                       const collectionsBadge = !snap
                         ? "Current"
-                        : snap.stage === "days_90_review"
-                          ? "90+ review"
-                          : snap.stage === "days_60"
-                            ? "60+ OD"
-                            : snap.stage === "days_30"
-                              ? "30+ OD"
-                              : snap.stage === "overdue"
-                                ? "Overdue"
-                                : snap.stage === "paused"
-                                  ? "Paused"
-                                  : snap.stage === "disputed"
-                                    ? "Disputed"
-                                    : snap.stage === "payment_plan"
-                                      ? "Payment plan"
-                                      : "Current";
+                        : managementReviewRequired &&
+                            daysOverdue >= MANAGEMENT_REVIEW_DAYS
+                          ? daysOverdue >= 90
+                            ? "90+ review"
+                            : "60+ review"
+                          : snap.stage === "days_90_review"
+                            ? "90+ review"
+                            : snap.stage === "days_60"
+                              ? "60+ OD"
+                              : snap.stage === "days_30"
+                                ? "30+ OD"
+                                : snap.stage === "overdue"
+                                  ? "Overdue"
+                                  : snap.stage === "paused"
+                                    ? "Paused"
+                                    : snap.stage === "disputed"
+                                      ? "Disputed"
+                                      : snap.stage === "payment_plan"
+                                        ? "Payment plan"
+                                        : "Current";
                       const reviewRequired = managementReviewRequired;
                       const reviewStatusLabel = !reviewRequired
                         ? "Not required"
@@ -1343,6 +1382,7 @@ export function TenantDashboard() {
                           : snap.openAlert?.reviewStatus === "reviewed"
                             ? "Reviewed"
                             : "Open";
+                      const payMethod = getPaymentMethod(t);
 
                       return (
                         <tr key={t.id} className={`hover ${rowBg}`}>
@@ -1363,10 +1403,10 @@ export function TenantDashboard() {
                               className="block truncate"
                             />
                           </td>
-                          <td className="whitespace-nowrap text-sm">
+                          <td className="whitespace-nowrap px-2 text-sm">
                             {t.unit || MISSING_FIELD_LABEL}
                           </td>
-                          <td>
+                          <td className="px-2">
                             <select
                               className={`select select-bordered select-xs ${categoryBadgeClass(t.category)}`}
                               value={t.category}
@@ -1385,30 +1425,11 @@ export function TenantDashboard() {
                               ))}
                             </select>
                           </td>
-                          <td className="whitespace-nowrap text-sm opacity-80">
-                            {t.sqft ? t.sqft.toLocaleString() : "—"}
-                          </td>
-                          <td>
-                            <span
-                              className={`badge badge-sm whitespace-nowrap ${
-                                leaseLabel === "Past due"
-                                  ? "badge-error"
-                                  : leaseLabel === "Expiring" ||
-                                      leaseLabel === "Pending"
-                                    ? "badge-warning"
-                                    : leaseLabel === "Former"
-                                      ? "badge-ghost"
-                                      : "badge-outline"
-                              }`}
-                            >
-                              {leaseLabel}
-                            </span>
-                          </td>
-                          <td className="whitespace-nowrap text-xs">
+                          <td className="whitespace-nowrap px-2 text-xs">
                             {formatOptionalLeaseDate(t.leaseEnd || "")}
                           </td>
                           <td
-                            className={`whitespace-nowrap text-sm ${
+                            className={`whitespace-nowrap px-2 text-sm ${
                               rent <= 0 ? "italic opacity-55" : ""
                             }`}
                           >
@@ -1442,11 +1463,11 @@ export function TenantDashboard() {
                               <span className="opacity-55">—</span>
                             )}
                           </td>
-                          <td className="whitespace-nowrap text-sm">
+                          <td className="whitespace-nowrap px-2 text-sm">
                             {snap && snap.daysOverdue > 0 ? (
                               <span
                                 className={
-                                  snap.daysOverdue >= 90
+                                  snap.daysOverdue >= MANAGEMENT_REVIEW_DAYS
                                     ? "font-semibold text-red-800"
                                     : snap.daysOverdue >= 30
                                       ? "font-medium text-amber-900"
@@ -1459,10 +1480,30 @@ export function TenantDashboard() {
                               <span className="opacity-55">—</span>
                             )}
                           </td>
-                          <td>
+                          <td className="px-2">
+                            <select
+                              className="select select-bordered select-xs max-w-[7.5rem]"
+                              value={payMethod}
+                              onChange={(e) =>
+                                void updatePaymentMethod(
+                                  t.id,
+                                  e.target.value as TenantPaymentMethod
+                                )
+                              }
+                              aria-label={`Payment method for ${t.name}`}
+                            >
+                              {TENANT_PAYMENT_METHODS.map((m) => (
+                                <option key={m.value} value={m.value}>
+                                  {m.label}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-2">
                             <span
                               className={`badge badge-sm whitespace-nowrap ${
-                                collectionsBadge === "90+ review"
+                                collectionsBadge === "90+ review" ||
+                                collectionsBadge === "60+ review"
                                   ? "badge-error"
                                   : collectionsBadge === "60+ OD" ||
                                       collectionsBadge === "30+ OD" ||
@@ -1478,7 +1519,7 @@ export function TenantDashboard() {
                               {collectionsBadge}
                             </span>
                           </td>
-                          <td className="min-w-[7.5rem] align-top text-sm">
+                          <td className="min-w-[6rem] align-top px-2 text-sm">
                             {reviewRequired ? (
                               <div className="flex flex-col items-start gap-1">
                                 <span className="badge badge-error badge-sm whitespace-nowrap">

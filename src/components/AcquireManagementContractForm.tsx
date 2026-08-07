@@ -143,7 +143,7 @@ export function AcquireManagementContractForm({ onCancel, onSaved }: Props) {
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-[var(--harbor-ink)]/65">
             Capture asset identity, owner engagement terms, fee structure, and
-            operating metrics before Harborline takes over management.
+            operating metrics before CPMC takes over management.
           </p>
         </div>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
@@ -407,7 +407,7 @@ export function AcquireManagementContractForm({ onCancel, onSaved }: Props) {
 
       <Section
         title="3. Management fee structure"
-        subtitle="How Harborline gets paid for managing this asset."
+        subtitle="How CPMC gets paid for managing this asset."
       >
         <Field label="Fee structure">
           <select
@@ -566,9 +566,9 @@ export function AcquireManagementContractForm({ onCancel, onSaved }: Props) {
 
       <Section
         title="5. Operations handoff"
-        subtitle="Who runs it day-to-day and what Harborline should watch."
+        subtitle="Who runs it day-to-day and what CPMC should watch."
       >
-        <Field label="Assigned Harborline manager">
+        <Field label="Assigned CPMC manager">
           <input
             className={inputClass}
             value={form.assignedManager}

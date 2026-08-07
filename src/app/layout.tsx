@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Outfit } from "next/font/google";
+import { COMPANY_NAME, COMPANY_SHORT } from "@/lib/brand";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -13,9 +14,11 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Harborline Property Management | Final Project G16",
-  description:
-    "Harborline helps tenants apply for space and helps the property team run contracts, billing, and operations.",
+  title: `${COMPANY_NAME} | Final Project G16`,
+  description: `${COMPANY_SHORT} helps tenants apply for space and helps the property team run contracts, billing, and operations.`,
+  icons: {
+    icon: "/cpmc-logo.png",
+  },
 };
 
 export default function RootLayout({

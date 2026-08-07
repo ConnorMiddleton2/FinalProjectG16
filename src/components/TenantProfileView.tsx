@@ -20,6 +20,7 @@ import {
 import type { WorkOrder } from "@/lib/maintenance";
 import {
   AMOUNT_DUE_HELPER,
+  MANAGEMENT_REVIEW_DAYS,
   buildTenantCollectionsSnapshot,
   formatIsoDisplay,
   MISSING_TENANT_CONTACT_MESSAGE,
@@ -43,11 +44,13 @@ import {
   getLeaseEnd,
   getLeaseStart,
   getMonthlyRent,
+  getPaymentMethod,
   getPaymentStatus,
   paymentStatusLabel,
   tenantCategoryLabel,
   type TenantRecord,
 } from "@/lib/tenants";
+import { paymentMethodLabel } from "@/lib/payment-methods";
 import {
   daysRemainingOnLease,
   deriveTenantActivity,
@@ -246,6 +249,15 @@ export function TenantProfileView({ tenantId }: Props) {
           <span className="badge badge-outline capitalize">
             {paymentStatusLabel(payment)}
           </span>
+          <span
+            className={`badge capitalize ${
+              getPaymentMethod(tenant) === "ach"
+                ? "badge-success badge-outline"
+                : "badge-ghost"
+            }`}
+          >
+            {paymentMethodLabel(getPaymentMethod(tenant))}
+          </span>
         </div>
       </div>
 
@@ -300,6 +312,10 @@ export function TenantProfileView({ tenantId }: Props) {
           }
         />
         <SummaryCard
+          label="Payment method"
+          value={paymentMethodLabel(getPaymentMethod(tenant))}
+        />
+        <SummaryCard
           label="Lease status"
           value={tenantCategoryLabel(tenant.category)}
         />
@@ -317,8 +333,8 @@ export function TenantProfileView({ tenantId }: Props) {
               Overdue rent (collections)
             </h2>
             <p className="mt-1 text-sm text-[var(--harbor-ink)]/70">
-              Qualifying unpaid base rent used for days overdue, 30/60/90 aging,
-              weekly notices, Notice 12, and day-90 management review. This is
+              Qualifying unpaid base rent used for days late, 30/60/90 aging,
+              weekly notices, and automatic 60-day management review. This is
               the overdue portion of Amount due, not a second master-list
               balance.
             </p>
@@ -330,9 +346,13 @@ export function TenantProfileView({ tenantId }: Props) {
               tone="danger"
             />
             <SummaryCard
-              label="Days overdue"
+              label="Days late"
               value={String(collectionsSnap.daysOverdue)}
-              tone={collectionsSnap.daysOverdue >= 90 ? "danger" : "warn"}
+              tone={
+                collectionsSnap.daysOverdue >= MANAGEMENT_REVIEW_DAYS
+                  ? "danger"
+                  : "warn"
+              }
             />
             <SummaryCard
               label="Oldest unpaid rent due date"

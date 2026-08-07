@@ -19,6 +19,13 @@ export function portalSessionFromTenantAccount(
     propertyId: account.propertyId || undefined,
     propertyName: account.propertyName || undefined,
     unit: account.unit || undefined,
+    monthlyRent:
+      account.monthlyRent != null && Number.isFinite(account.monthlyRent)
+        ? account.monthlyRent
+        : undefined,
+    preferredPaymentMethod: account.preferredPaymentMethod,
+    paymentMethodLast4: account.paymentMethodLast4,
+    tenantRecordId: account.tenantRecordId || undefined,
     tenantAccountId: account.id,
   };
 }

@@ -1,11 +1,7 @@
 export const MG_NAV = [
   {
     href: "/ops/management/owners",
-    label: "Owner accounts",
-  },
-  {
-    href: "/ops/management/owner-applications",
-    label: "Owner applications",
+    label: "Owner Accounts & Applications",
   },
   {
     href: "/ops/management/budgets",
@@ -21,7 +17,7 @@ export const MG_NAV = [
   },
   {
     href: "/ops/management/missed-payments",
-    label: "Missed payments",
+    label: "Overdue tenants",
   },
   {
     href: "/ops/management/approvals",

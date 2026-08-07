@@ -1,6 +1,6 @@
 import { portalStorageKey } from "@/lib/portal/storage-key";
 
-const STORAGE_BASE = "harborline.portal.notificationRead.v1";
+const STORAGE_BASE = "cpmc.portal.notificationRead.v1";
 
 /** Default unread set for first visit — mirrors announcements read pattern. */
 const DEFAULT_UNREAD_IDS = [
@@ -73,7 +73,7 @@ export function markAllNotificationsRead(
 
 function notifyReadersChanged() {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event("harborline:notifications-changed"));
+  window.dispatchEvent(new Event("cpmc:notifications-changed"));
 }
 
 export function countUnreadNotifications(

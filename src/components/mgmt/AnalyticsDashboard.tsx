@@ -7,11 +7,17 @@ import {
 } from "@/hooks/useSharedCollection";
 import type { WorkOrder } from "@/lib/maintenance";
 import type { SmCampaign } from "@/lib/sales-marketing";
-import type { TenantRecord } from "@/lib/tenants";
+import { softPropertyNamesMatch, type TenantRecord } from "@/lib/tenants";
 import { money } from "@/lib/management";
 import type { ManagementContractDraft } from "@/lib/management-contract";
 import type { DepartmentExpense } from "@/lib/management";
 import type { SmReceipt } from "@/lib/sales-marketing";
+import {
+  ChartCard,
+  DonutChart,
+  GroupedBarChart,
+  HorizontalBarChart,
+} from "@/components/mgmt/AnalyticsCharts";
 
 function Kpi({
   label,
@@ -23,18 +29,25 @@ function Kpi({
   hint?: string;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--harbor-deep)]/10 bg-white/90 px-3 py-3 shadow-sm">
-      <p className="text-[10px] uppercase tracking-wide opacity-55">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-[var(--harbor-ink)]">
+    <div className="rounded-xl border border-[var(--harbor-deep)]/10 bg-white/90 px-4 py-3.5 shadow-sm">
+      <p className="text-xs font-medium text-[var(--harbor-ink)]/55">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-[var(--harbor-ink)]">
         {value}
       </p>
-      {hint ? <p className="mt-0.5 text-xs opacity-55">{hint}</p> : null}
+      {hint ? (
+        <p className="mt-1 text-xs text-[var(--harbor-ink)]/50">{hint}</p>
+      ) : null}
     </div>
   );
 }
 
-export function AnalyticsDashboard() {
-  const { items: properties } = useSharedCollection<ManagementContractDraft>(
+type Props = {
+  /** "all" or a managed property id */
+  propertyId?: string;
+};
+
+export function AnalyticsDashboard({ propertyId = "all" }: Props) {
+  const { items: allProperties } = useSharedCollection<ManagementContractDraft>(
     COLLECTIONS.managedProperties
   );
   const { items: workOrders } = useSharedCollection<WorkOrder>(
@@ -53,6 +66,30 @@ export function AnalyticsDashboard() {
     COLLECTIONS.smReceipts
   );
 
+  const properties = useMemo(() => {
+    if (propertyId === "all") return allProperties;
+    return allProperties.filter((p) => p.id === propertyId);
+  }, [allProperties, propertyId]);
+
+  const selectedName =
+    propertyId === "all"
+      ? null
+      : allProperties.find((p) => p.id === propertyId)?.propertyName || "";
+
+  const scopedTenants = useMemo(() => {
+    if (propertyId === "all" || !selectedName) return tenants;
+    return tenants.filter((t) =>
+      softPropertyNamesMatch(t.propertyLeased, selectedName)
+    );
+  }, [tenants, propertyId, selectedName]);
+
+  const scopedWorkOrders = useMemo(() => {
+    if (propertyId === "all" || !selectedName) return workOrders;
+    return workOrders.filter((w) =>
+      softPropertyNamesMatch(w.property || "", selectedName)
+    );
+  }, [workOrders, propertyId, selectedName]);
+
   const stats = useMemo(() => {
     const revenue = properties.reduce(
       (s, p) => s + (Number(p.monthlyRentRoll) || 0) * 12,
@@ -67,8 +104,8 @@ export function AnalyticsDashboard() {
       0
     );
     const margin = revenue > 0 ? (noi / revenue) * 100 : 0;
-    const completed = workOrders.filter((w) => w.status === "completed");
-    const openWo = workOrders.filter((w) => w.status !== "completed");
+    const completed = scopedWorkOrders.filter((w) => w.status === "completed");
+    const openWo = scopedWorkOrders.filter((w) => w.status !== "completed");
     const avgOcc =
       properties.length === 0
         ? 0
@@ -76,16 +113,13 @@ export function AnalyticsDashboard() {
             (s, p) => s + (Number(p.occupancyPercent) || 0),
             0
           ) / properties.length;
-    const pastDue = tenants.filter((t) => t.pendingDue > 0).length;
+    const pastDue = scopedTenants.filter((t) => t.pendingDue > 0).length;
     const smSpend = campaigns.reduce((s, c) => s + c.cost, 0);
     const pendingSpend =
       deptExp.filter((e) => e.status === "pending").reduce((s, e) => s + e.amount, 0) +
       smReceipts
         .filter((e) => e.status === "pending")
         .reduce((s, e) => s + e.amount, 0);
-
-    // Demo HR turnover until HR module exists
-    const employeeTurnover = 12.5;
 
     const completionDays =
       completed.length === 0
@@ -109,103 +143,226 @@ export function AnalyticsDashboard() {
       pastDue,
       smSpend,
       pendingSpend,
-      employeeTurnover,
       completionDays,
       propertyCount: properties.length,
-      tenantCount: tenants.length,
+      tenantCount: scopedTenants.length,
+      campaignCount: campaigns.length,
+      monthlyRent: properties.reduce(
+        (s, p) => s + (Number(p.monthlyRentRoll) || 0),
+        0
+      ),
     };
-  }, [properties, workOrders, tenants, campaigns, deptExp, smReceipts]);
+  }, [
+    properties,
+    scopedWorkOrders,
+    scopedTenants,
+    campaigns,
+    deptExp,
+    smReceipts,
+  ]);
+
+  const topPropertiesByRent = useMemo(() => {
+    const source = propertyId === "all" ? allProperties : properties;
+    return [...source]
+      .map((p) => ({
+        id: p.id,
+        label: p.propertyName || "Untitled",
+        value: (Number(p.monthlyRentRoll) || 0) * 12 || Number(p.annualGpr) || 0,
+      }))
+      .filter((r) => r.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+  }, [allProperties, properties, propertyId]);
+
+  const scopeHint =
+    propertyId === "all" ? "Whole portfolio" : selectedName || "This property";
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm opacity-65">
-        Live KPIs roll up from shared properties, maintenance, tenants, and spend
-        queues. HR turnover is a placeholder until the HR module writes data.
-      </p>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Kpi
-          label="Portfolio revenue (ann.)"
-          value={money(stats.revenue || 4200000)}
-          hint="From rent rolls · demo floor if empty"
+          label="Yearly rent (what we bill)"
+          value={money(stats.revenue)}
+          hint={`${scopeHint} · ${money(stats.monthlyRent)}/mo`}
         />
         <Kpi
-          label="NOI"
-          value={money(stats.noi || 1680000)}
-          hint={`Margin ${stats.margin ? stats.margin.toFixed(1) : "40.0"}%`}
+          label="Operating expenses"
+          value={money(stats.opex)}
+          hint="Property operating costs (annual)"
         />
         <Kpi
-          label="OpEx"
-          value={money(stats.opex || 980000)}
-        />
-        <Kpi
-          label="Avg occupancy"
-          value={`${(stats.avgOcc || 91).toFixed(0)}%`}
-        />
-        <Kpi label="Managed properties" value={String(stats.propertyCount)} />
-        <Kpi label="Tenants on ledger" value={String(stats.tenantCount)} />
-        <Kpi
-          label="Employee turnover"
-          value={`${stats.employeeTurnover}%`}
-          hint="HR annualized"
-        />
-        <Kpi
-          label="Maint. completion time"
-          value={
-            stats.completionDays == null
-              ? "4.2 days"
-              : `${stats.completionDays.toFixed(1)} days`
+          label="NOI (rent minus expenses)"
+          value={money(stats.noi)}
+          hint={
+            stats.revenue > 0
+              ? `${stats.margin.toFixed(0)}% kept after OpEx`
+              : "Add rent roll data to calculate"
           }
-          hint={`${stats.completedWo} closed · ${stats.openWo} open`}
-        />
-        <Kpi label="Tenants past due" value={String(stats.pastDue)} />
-        <Kpi label="S&M campaign spend" value={money(stats.smSpend)} />
-        <Kpi
-          label="Expenses awaiting approval"
-          value={money(stats.pendingSpend)}
         />
         <Kpi
-          label="Profit margin"
-          value={`${(stats.margin || 40).toFixed(1)}%`}
-          hint="NOI / revenue"
+          label="Units filled (occupancy)"
+          value={stats.propertyCount ? `${stats.avgOcc.toFixed(0)}%` : "—"}
+          hint={
+            propertyId === "all"
+              ? `Average across ${stats.propertyCount} properties`
+              : "This property"
+          }
+        />
+        <Kpi
+          label="Tenants behind on rent"
+          value={String(stats.pastDue)}
+          hint={`${stats.tenantCount} tenants in this view`}
+        />
+        <Kpi
+          label="Open maintenance jobs"
+          value={String(stats.openWo)}
+          hint={
+            stats.completionDays != null
+              ? `${stats.completionDays.toFixed(1)} day avg to finish`
+              : `${stats.completedWo} completed on file`
+          }
         />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
-        {[
-          {
-            dept: "Maintenance",
-            metrics: [
-              `${stats.openWo} open WOs`,
-              `${stats.completionDays?.toFixed(1) ?? "4.2"}d avg close`,
-            ],
-          },
-          {
-            dept: "Sales & Marketing",
-            metrics: [
-              `${campaigns.length} campaigns`,
-              `${money(stats.smSpend)} spend`,
-            ],
-          },
-          {
-            dept: "Human Resources",
-            metrics: [
-              `${stats.employeeTurnover}% turnover`,
-              "Headcount module TBD",
-            ],
-          },
-        ].map((d) => (
-          <div
-            key={d.dept}
-            className="rounded-xl border border-[var(--harbor-deep)]/10 bg-white/90 p-4"
-          >
-            <p className="font-semibold">{d.dept}</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm opacity-75">
-              {d.metrics.map((m) => (
-                <li key={m}>{m}</li>
-              ))}
-            </ul>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <ChartCard
+          title="Money in vs money out"
+          subtitle="Yearly rent collected potential, operating costs, and what’s left (NOI)"
+        >
+          <GroupedBarChart
+            categories={[propertyId === "all" ? "Portfolio" : "Property"]}
+            series={[
+              {
+                key: "rev",
+                label: "Yearly rent",
+                color: "var(--harbor-deep)",
+                values: [stats.revenue],
+              },
+              {
+                key: "opex",
+                label: "Expenses",
+                color: "#b45309",
+                values: [stats.opex],
+              },
+              {
+                key: "noi",
+                label: "NOI left over",
+                color: "#0d9488",
+                values: [stats.noi],
+              },
+            ]}
+            formatValue={(n) => money(n)}
+            height={160}
+          />
+          <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-[var(--harbor-deep)]/[0.04] px-3 py-3 text-center text-xs">
+            <p>
+              <span className="opacity-55">Yearly rent</span>
+              <br />
+              <strong className="tabular-nums">{money(stats.revenue)}</strong>
+            </p>
+            <p>
+              <span className="opacity-55">Expenses</span>
+              <br />
+              <strong className="tabular-nums">{money(stats.opex)}</strong>
+            </p>
+            <p>
+              <span className="opacity-55">Left over (NOI)</span>
+              <br />
+              <strong className="tabular-nums">{money(stats.noi)}</strong>
+            </p>
           </div>
-        ))}
+        </ChartCard>
+
+        <ChartCard
+          title="Day-to-day operations"
+          subtitle="Maintenance workload and who is current on rent"
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <DonutChart
+              centerLabel="Jobs"
+              centerValue={String(stats.openWo + stats.completedWo)}
+              slices={[
+                {
+                  id: "open",
+                  label: "Still open",
+                  value: stats.openWo,
+                  color: "#b45309",
+                },
+                {
+                  id: "done",
+                  label: "Finished",
+                  value: stats.completedWo,
+                  color: "#0d9488",
+                },
+              ]}
+            />
+            <DonutChart
+              centerLabel="Tenants"
+              centerValue={String(stats.tenantCount)}
+              slices={[
+                {
+                  id: "ok",
+                  label: "Paid up",
+                  value: Math.max(0, stats.tenantCount - stats.pastDue),
+                  color: "#0d9488",
+                },
+                {
+                  id: "late",
+                  label: "Behind",
+                  value: stats.pastDue,
+                  color: "#be123c",
+                },
+              ]}
+            />
+          </div>
+        </ChartCard>
+
+        <ChartCard
+          title={
+            propertyId === "all"
+              ? "Which properties bring in the most rent?"
+              : "This property’s yearly rent"
+          }
+          subtitle="Longer bars = higher annual rent roll"
+        >
+          <HorizontalBarChart
+            rows={
+              topPropertiesByRent.length > 0
+                ? topPropertiesByRent
+                : [{ id: "empty", label: "No rent-roll data yet", value: 0 }]
+            }
+            formatValue={(n) => money(n)}
+          />
+        </ChartCard>
+
+        <ChartCard
+          title="Other costs to watch"
+          subtitle="Company-wide spend signals (not always limited to one property)"
+        >
+          <HorizontalBarChart
+            rows={[
+              {
+                id: "sm",
+                label: "Marketing campaign spend",
+                value: Math.max(stats.smSpend, 0),
+                color: "#0d9488",
+              },
+              {
+                id: "pending",
+                label: "Bills waiting for approval",
+                value: Math.max(stats.pendingSpend, 0),
+                color: "#b45309",
+              },
+              {
+                id: "wo",
+                label: "Open + finished work orders",
+                value: stats.openWo + stats.completedWo,
+                color: "var(--harbor-deep)",
+              },
+            ]}
+            formatValue={(n) => (n >= 100 ? money(n) : String(n))}
+          />
+        </ChartCard>
       </div>
     </div>
   );

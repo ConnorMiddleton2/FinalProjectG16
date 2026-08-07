@@ -1,7 +1,7 @@
 /**
- * Tenant portal (main-dash “I am a tenant or future tenant”) navigation.
- * Private `/portal` routes require authenticated current-tenant role.
- * `/portal/apply` stays public for future tenants. Not the staff `/tenant` shell.
+ * Tenant portal navigation.
+ * Private `/portal` routes require an authenticated tenant session.
+ * Public entry is `/portal/start` (browse) and `/portal/start/apply`.
  */
 
 export type PortalNavItem = {
@@ -22,12 +22,7 @@ export const PORTAL_PRIMARY_NAV: PortalNavItem[] = [
   {
     href: "/portal/payments",
     label: "Payments",
-    description: "See what’s due and recent payment activity.",
-  },
-  {
-    href: "/portal/charges",
-    label: "Utilities & fees",
-    description: "Pay utilities, common area maintenance, parking, and amenity charges.",
+    description: "Balance due, late fees, payment options, and payment history.",
   },
   {
     href: "/portal/maintenance",
@@ -40,16 +35,6 @@ export const PORTAL_PRIMARY_NAV: PortalNavItem[] = [
     description: "View lease terms and unit details.",
   },
   {
-    href: "/portal/insurance",
-    label: "Insurance",
-    description: "Track coverage and upload certificates of insurance.",
-  },
-  {
-    href: "/portal/documents",
-    label: "Documents",
-    description: "Access lease files and statements.",
-  },
-  {
     href: "/portal/announcements",
     label: "Announcements",
     description: "Building and property notices.",
@@ -57,7 +42,7 @@ export const PORTAL_PRIMARY_NAV: PortalNavItem[] = [
   {
     href: "/portal/messages",
     label: "Messages",
-    description: "Message Harborline management.",
+    description: "Message CPMC management.",
   },
   {
     href: "/portal/profile",
@@ -66,51 +51,8 @@ export const PORTAL_PRIMARY_NAV: PortalNavItem[] = [
   },
 ];
 
-/** Secondary actions for current tenants. */
-export const PORTAL_SECONDARY_ACTIONS: PortalNavItem[] = [
-  {
-    href: "/portal/notification-preferences",
-    label: "Mobile alerts",
-    description: "Manage mobile notification preferences.",
-  },
-  {
-    href: "/portal/renewal",
-    label: "Request Renewal",
-    description: "Ask to renew your lease.",
-  },
-  {
-    href: "/portal/move-out",
-    label: "Submit Move-Out Notice",
-    description: "Give notice that you intend to vacate.",
-  },
-];
-
-/** Primary navigation when a future-tenant session is inside current-tenant chrome. */
-export const PORTAL_FUTURE_PRIMARY_NAV: PortalNavItem[] = [
-  {
-    href: "/portal/future",
-    label: "Leasing home",
-    description: "Browse units and start an application.",
-    exact: true,
-  },
-  {
-    href: "/portal/future/units",
-    label: "Available units",
-    description: "Search open inventory.",
-  },
-  {
-    href: "/portal/apply",
-    label: "Move-in progress",
-    description: "Track approval stage, deadlines, and readiness.",
-  },
-];
-
-/** Future-tenant entry (leasing discovery + application). */
-export const PORTAL_FUTURE_TENANT_LINK: PortalNavItem = {
-  href: "/portal/future",
-  label: "Future tenant leasing",
-  description: "Browse units, schedule tours, and apply with Harborline.",
-};
+/** Secondary actions for current tenants (kept empty — renewals/move-out handled offline). */
+export const PORTAL_SECONDARY_ACTIONS: PortalNavItem[] = [];
 
 export type PortalPageMeta = {
   title: string;
@@ -121,12 +63,12 @@ export const PORTAL_PAGE_META: Record<string, PortalPageMeta> = {
   "/portal": {
     title: "Dashboard",
     description:
-      "Rent, maintenance, lease, and notices for your current Harborline space.",
+      "Rent, maintenance, lease, and notices for your current CPMC space.",
   },
   "/portal/payments": {
-    title: "Payments overview",
+    title: "Payments",
     description:
-      "Balance, due dates, autopay, saved methods, and recent transactions for your lease.",
+      "See your current or next bill, choose debit, check, or ACH, and review payment history.",
   },
   "/portal/payments/make": {
     title: "Make a payment",
@@ -175,12 +117,12 @@ export const PORTAL_PAGE_META: Record<string, PortalPageMeta> = {
   "/portal/announcements": {
     title: "Announcements",
     description:
-      "Property updates, service interruptions, events, safety notices, policies, and other Harborline notices.",
+      "Property updates, service interruptions, events, safety notices, policies, and other CPMC notices.",
   },
   "/portal/messages": {
     title: "Messages",
     description:
-      "Secure async messages with Harborline management — questions, follow-ups, and replies (not live chat).",
+      "Secure async messages with CPMC management — questions, follow-ups, and replies (not live chat).",
   },
   "/portal/notifications": {
     title: "Notifications",
@@ -208,24 +150,23 @@ export const PORTAL_PAGE_META: Record<string, PortalPageMeta> = {
       "Submit a move-out notice, review checklist items, and track status. Notices are not accepted until management acknowledges them.",
   },
   "/portal/apply": {
-    title: "Move-in progress",
-    description:
-      "Approved future tenants: track stages, documents, lease signing, deposits, scheduling, and readiness before move-in.",
+    title: "Start application",
+    description: "Redirects to the public application form.",
   },
   "/portal/start": {
-    title: "Choose your path",
+    title: "Browse properties",
     description:
-      "Select current tenant or future tenant to open the matching Harborline experience.",
+      "Browse CPMC properties, start an application, or sign in to your tenant dashboard.",
   },
   "/portal/unauthorized": {
     title: "Unauthorized",
     description:
-      "This area is only for authenticated current tenants. Choose another path if you need to apply or sign in.",
+      "This area is only for authenticated tenants. Apply or sign in from the tenant welcome path.",
   },
   "/portal/login": {
     title: "Tenant login",
     description:
-      "Sign in to the Harborline tenant portal with your lease email and password.",
+      "Sign in to the CPMC tenant portal with your lease email and password.",
   },
   "/portal/signup": {
     title: "Tenant signup",
@@ -237,9 +178,6 @@ export const PORTAL_PAGE_META: Record<string, PortalPageMeta> = {
     description: "Choose a new password for your tenant portal account.",
   },
 };
-
-export const PORTAL_HELP_HREF = "/portal/messages";
-export const PORTAL_HELP_LABEL = "Contact management";
 
 export function isPortalNavActive(
   pathname: string,
@@ -266,7 +204,7 @@ export function resolvePortalPageMeta(pathname: string): PortalPageMeta {
 
   return {
     title: "Tenant portal",
-    description: "Manage your lease, payments, and requests with Harborline.",
+    description: "Manage your lease and requests with CPMC.",
   };
 }
 

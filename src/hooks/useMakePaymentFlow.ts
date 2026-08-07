@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   formatUsd,
   maskMethodSummary,
 } from "@/lib/portal/make-payment-mock";
 import type {
   AmountChoice,
+  MakePaymentContext,
   MakePaymentDraft,
   MakePaymentStep,
   PaymentConfirmation,
@@ -18,10 +19,7 @@ import {
   validateAmountSelection,
   validateMethodSelection,
 } from "@/lib/portal/make-payment-validation";
-import {
-  getMakePaymentContextSync,
-  submitPayment,
-} from "@/lib/portal/services/paymentService";
+import { getMakePaymentContext, submitPayment } from "@/lib/portal/services/paymentService";
 
 const STEPS: MakePaymentStep[] = [
   "review-balance",
@@ -48,8 +46,13 @@ const initialDraft: MakePaymentDraft = {
   methodId: null,
 };
 
+type LoadState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; context: MakePaymentContext; source: "live" | "mock" };
+
 export function useMakePaymentFlow() {
-  const context = useMemo(() => getMakePaymentContextSync(), []);
+  const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [step, setStep] = useState<MakePaymentStep>("review-balance");
   const [draft, setDraft] = useState<MakePaymentDraft>(initialDraft);
   const [amountError, setAmountError] = useState<string | null>(null);
@@ -61,12 +64,43 @@ export function useMakePaymentFlow() {
     null
   );
 
+  const loadContext = useCallback(async () => {
+    setLoadState({ status: "loading" });
+    try {
+      const result = await getMakePaymentContext();
+      if (!result.ok) {
+        setLoadState({ status: "error", message: result.error.message });
+        return;
+      }
+      setLoadState({
+        status: "ready",
+        context: result.data,
+        source: result.source,
+      });
+    } catch (err) {
+      setLoadState({
+        status: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Could not load payment options from Management.",
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadContext();
+  }, [loadContext]);
+
+  const context =
+    loadState.status === "ready" ? loadState.context : null;
+
   const stepIndex = STEPS.indexOf(step);
   const selectedMethod =
-    context.methods.find((m) => m.id === draft.methodId) ?? null;
+    context?.methods.find((m) => m.id === draft.methodId) ?? null;
 
   const resolvedAmount = useMemo(() => {
-    if (!draft.amountChoice) return null;
+    if (!context || !draft.amountChoice) return null;
     return resolveAmountForChoice(
       draft.amountChoice,
       draft.customAmountInput,
@@ -98,6 +132,7 @@ export function useMakePaymentFlow() {
   }, []);
 
   const goNextFromAmount = useCallback(() => {
+    if (!context) return false;
     const error = validateAmountSelection(draft, context);
     if (error) {
       setAmountError(amountErrorMessage(error));
@@ -144,6 +179,10 @@ export function useMakePaymentFlow() {
   }, [processing, step]);
 
   const confirmPayment = useCallback(async () => {
+    if (!context) {
+      setConfirmError("Payment options are still loading.");
+      return;
+    }
     if (processing) {
       setConfirmError("Payment is already processing. Please wait.");
       return;
@@ -199,7 +238,7 @@ export function useMakePaymentFlow() {
       setConfirmError(
         err instanceof Error
           ? err.message
-          : "Mock payment failed. Try again."
+          : "Payment failed. Try again."
       );
     } finally {
       setProcessing(false);
@@ -215,9 +254,11 @@ export function useMakePaymentFlow() {
     setSubmitted(false);
     setConfirmation(null);
     setStep("review-balance");
-  }, []);
+    void loadContext();
+  }, [loadContext]);
 
   return {
+    loadState,
     context,
     step,
     stepIndex,
@@ -234,6 +275,7 @@ export function useMakePaymentFlow() {
     confirmation,
     formatUsd,
     maskMethodSummary,
+    reload: loadContext,
     goNextFromBalance,
     setAmountChoice,
     setCustomAmountInput,

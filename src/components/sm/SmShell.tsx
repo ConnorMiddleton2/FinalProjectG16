@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { OpsBrandHomeLink } from "@/components/OpsBrandHomeLink";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { teamLogout } from "@/app/team/actions";
 
 const tileClass =
-  "border border-[#8aa3b5]/55 bg-[#b7c9d6] text-[#2f4556] shadow-[0_1px_2px_rgba(47,69,86,0.10)] transition hover:-translate-y-0.5 hover:bg-[#a9bdcd] hover:border-[#7a95a9]/65";
+  "border border-[var(--harbor-border)] bg-[var(--harbor-card)] text-[var(--harbor-text)] shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--harbor-mid)]/40 hover:shadow-md";
 
 export const SM_NAV = [
   {
@@ -45,13 +46,10 @@ export function SmShell({
   const showSideNav = Boolean(activeNavHref);
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
+    <div className="min-h-screen bg-[var(--harbor-sand)]">
       <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Sales & Marketing</p>
-          </div>
+          <OpsBrandHomeLink subtitle="Sales & Marketing" />
           <form action={teamLogout}>
             <button
               type="submit"
@@ -85,14 +83,14 @@ export function SmShell({
           }
         >
           {showSideNav ? (
-            <aside className="lg:sticky lg:top-6 lg:self-start">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--harbor-ink)]/45">
+            <aside className="rounded-2xl border border-[var(--harbor-ink)] bg-[var(--harbor-ink)] p-3 text-[var(--harbor-on-dark)] lg:sticky lg:top-6 lg:self-start">
+              <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--harbor-on-dark)]/55">
                 Sales & Marketing
               </p>
               <nav className="flex flex-row flex-wrap gap-2 lg:flex-col lg:gap-1.5">
                 <Link
                   href="/ops/sales-marketing"
-                  className="rounded-xl px-3 py-2 text-sm text-[var(--harbor-ink)]/70 transition hover:bg-white/70"
+                  className="rounded-xl px-3 py-2 text-sm text-[var(--harbor-on-dark)]/80 transition hover:bg-white/10"
                 >
                   Hub overview
                 </Link>
@@ -104,8 +102,8 @@ export function SmShell({
                       href={item.href}
                       className={`rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                         active
-                          ? "bg-[var(--harbor-deep)] text-[var(--harbor-sand)] shadow-sm"
-                          : "bg-white/70 text-[var(--harbor-ink)]/80 hover:bg-white"
+                          ? "bg-[var(--harbor-mid)] text-[var(--harbor-on-dark)] shadow-sm"
+                          : "text-[var(--harbor-on-dark)]/85 hover:bg-white/10"
                       }`}
                     >
                       {item.label}

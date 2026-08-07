@@ -31,7 +31,6 @@ export function NotificationCenterPage() {
     unreadCount,
     actionMessage,
     reload,
-    loadDemoData,
     markRead,
     markUnread,
     markAllRead,
@@ -72,23 +71,14 @@ export function NotificationCenterPage() {
                 {state.message}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn btn-neutral btn-sm gap-1"
-                onClick={reload}
-              >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                Try again
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={loadDemoData}
-              >
-                Use demo data
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm gap-1"
+              onClick={reload}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Try again
+            </button>
           </div>
         </div>
       </div>
@@ -112,13 +102,6 @@ export function NotificationCenterPage() {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn btn-outline btn-sm"
-          onClick={loadDemoData}
-        >
-          Preview with demo data
-        </button>
       </div>
     );
   }
@@ -129,8 +112,7 @@ export function NotificationCenterPage() {
         className="rounded-xl border border-success/20 bg-success/5 px-4 py-3 text-sm text-[var(--harbor-ink)]/80"
         role="status"
       >
-        In-portal notifications
-        {state.source === "mock" ? " (demo)" : ""}. Payment, maintenance, lease,
+        In-portal notifications. Payment, maintenance, lease,
         and property alerts stay here — email, SMS, and push are not used.
         {unreadCount > 0 ? (
           <>

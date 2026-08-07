@@ -1,6 +1,6 @@
 import { portalStorageKey } from "@/lib/portal/storage-key";
 
-const STORAGE_BASE = "harborline.portal.documentAck.v1";
+const STORAGE_BASE = "cpmc.portal.documentAck.v1";
 
 function canUseStorage() {
   return (
@@ -29,7 +29,7 @@ function writeSet(tenantScopeId: string, ids: Set<string>) {
     JSON.stringify([...ids])
   );
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("harborline:document-ack-changed"));
+    window.dispatchEvent(new Event("cpmc:document-ack-changed"));
   }
 }
 

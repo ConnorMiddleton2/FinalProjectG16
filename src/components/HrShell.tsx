@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { OpsBrandHomeLink } from "@/components/OpsBrandHomeLink";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -18,6 +19,13 @@ import {
   clearEmployeeTempPassword,
   issueEmployeeTempPassword,
 } from "@/app/ops/hr/actions";
+import {
+  accruePayrollRunAction,
+  payPayrollRunAction,
+  resetRosterAndRunPayrollAction,
+} from "@/app/ops/hr/payroll-actions";
+import type { PayrollRun } from "@/lib/payroll-run";
+import { payrollLiabilityLabel } from "@/lib/payroll-run";
 import {
   COLLECTIONS,
   useSharedCollection,
@@ -407,13 +415,10 @@ export function HrDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#e8f4f6_0%,#f3efe6_100%)]">
+    <div className="min-h-screen bg-[var(--harbor-sand)]">
       <header className="border-b border-[var(--harbor-deep)]/10 bg-[var(--harbor-ink)] text-[var(--harbor-sand)]">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4 pl-14 sm:pl-6">
-          <div>
-            <p className="font-display text-2xl leading-tight">Harborline</p>
-            <p className="text-xs opacity-70">Human resources</p>
-          </div>
+          <OpsBrandHomeLink subtitle="Human resources" />
           <form action={teamLogout}>
             <button
               type="submit"
@@ -588,6 +593,8 @@ export function HrDashboard() {
                   `Updated payroll for ${employeeDisplayName(emp)}.`
                 )
               }
+              onFlash={flash}
+              onEmployeesChanged={() => void refresh()}
             />
           ) : null}
 
@@ -827,7 +834,7 @@ function DirectoryPanel({
                 onChange={(e) => onUpdateForm("propertyName", e.target.value)}
                 placeholder={
                   form.category === "corporate"
-                    ? "Harborline Corporate"
+                    ? "CPMC Corporate"
                     : "Assigned community / building"
                 }
               />
@@ -1154,6 +1161,8 @@ function PayrollPanel({
   onSelect,
   saving,
   onSave,
+  onFlash,
+  onEmployeesChanged,
 }: {
   loading: boolean;
   employees: HrEmployee[];
@@ -1161,13 +1170,20 @@ function PayrollPanel({
   onSelect: (id: string) => void;
   saving: boolean;
   onSave: (emp: HrEmployee, patch: PayrollProfilePatch) => void;
+  onFlash: (message: string) => void;
+  onEmployeesChanged: () => void;
 }) {
   const {
     items: payStubs,
     setItems: setPayStubs,
     loading: stubsLoading,
     saveOne: saveStub,
+    refresh: refreshStubs,
   } = useSharedCollection<HrPayStub>(COLLECTIONS.hrPayStubs, seedPayStubs);
+  const {
+    items: payrollRuns,
+    refresh: refreshRuns,
+  } = useSharedCollection<PayrollRun>(COLLECTIONS.payrollRuns);
 
   const [payType, setPayType] = useState<HrPayType>("hourly");
   const [payRate, setPayRate] = useState("");
@@ -1182,6 +1198,7 @@ function PayrollPanel({
   const [directDepositRoutingLast4, setDirectDepositRoutingLast4] =
     useState("");
   const [payrollNotes, setPayrollNotes] = useState("");
+  const [runBusy, setRunBusy] = useState(false);
 
   const [stubForm, setStubForm] = useState(EMPTY_STUB_FORM);
   const [editingStubId, setEditingStubId] = useState<string | null>(null);
@@ -1189,6 +1206,14 @@ function PayrollPanel({
 
   const categoryMeta = HR_EMPLOYEE_CATEGORIES.find(
     (c) => c.value === selected?.category
+  );
+
+  const latestRun = useMemo(
+    () =>
+      [...payrollRuns].sort((a, b) =>
+        (b.payDate || "").localeCompare(a.payDate || "")
+      )[0] ?? null,
+    [payrollRuns]
   );
 
   const employeeStubs = useMemo(
@@ -1268,6 +1293,179 @@ function PayrollPanel({
 
   return (
     <div className="space-y-4 rounded-2xl border border-[var(--harbor-deep)]/12 bg-white/90 p-5 shadow-sm">
+      <div className="space-y-3 rounded-xl border border-[var(--harbor-deep)]/15 bg-[var(--harbor-mist)]/40 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">Company payroll run</h3>
+            <p className="mt-1 max-w-2xl text-sm opacity-65">
+              Accrues liabilities (net pay, tax withholdings, employer taxes,
+              benefits) — not one AP invoice per employee — then pays from the
+              corporate bank for HQ staff and each property bank for on-site
+              staff.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={runBusy}
+              onClick={() =>
+                void (async () => {
+                  setRunBusy(true);
+                  try {
+                    const accrued = await accruePayrollRunAction();
+                    if (!("ok" in accrued) || !accrued.ok) {
+                      onFlash("Could not accrue payroll.");
+                      return;
+                    }
+                    await refreshRuns();
+                    await refreshStubs();
+                    onFlash(
+                      `Accrued payroll for ${accrued.run.employeeCount} employees · ${money(accrued.run.totalCashOut)} cash out when paid.`
+                    );
+                  } finally {
+                    setRunBusy(false);
+                  }
+                })()
+              }
+            >
+              Accrue liabilities
+            </button>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm"
+              disabled={runBusy || !latestRun || latestRun.status === "paid"}
+              onClick={() =>
+                void (async () => {
+                  if (!latestRun) return;
+                  setRunBusy(true);
+                  try {
+                    const paid = await payPayrollRunAction({
+                      runId: latestRun.id,
+                    });
+                    if ("error" in paid && paid.error) {
+                      onFlash(paid.error);
+                      return;
+                    }
+                    await refreshRuns();
+                    await refreshStubs();
+                    onFlash(
+                      `Payroll paid · ${paid.withdrawals} bank withdrawals · ${money(paid.totalCashOut || 0)}.`
+                    );
+                  } finally {
+                    setRunBusy(false);
+                  }
+                })()
+              }
+            >
+              Pay from banks
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={runBusy}
+              onClick={() =>
+                void (async () => {
+                  if (
+                    !window.confirm(
+                      "Replace all employees except Cade with the CPMC corporate + property roster, then accrue and pay one biweekly payroll?"
+                    )
+                  ) {
+                    return;
+                  }
+                  setRunBusy(true);
+                  try {
+                    const result = await resetRosterAndRunPayrollAction();
+                    if ("error" in result && result.error) {
+                      onFlash(result.error);
+                      return;
+                    }
+                    onEmployeesChanged();
+                    await refreshRuns();
+                    await refreshStubs();
+                    onFlash(
+                      `Roster reset (${result.seeded?.count ?? 0} staff) and payroll paid · ${money(result.paid?.totalCashOut || 0)}.`
+                    );
+                  } finally {
+                    setRunBusy(false);
+                  }
+                })()
+              }
+            >
+              Reset roster &amp; run payday
+            </button>
+          </div>
+        </div>
+        {latestRun ? (
+          <dl className="grid gap-2 text-sm sm:grid-cols-4">
+            <div>
+              <dt className="text-xs opacity-55">Pay date</dt>
+              <dd className="font-medium tabular-nums">{latestRun.payDate}</dd>
+            </div>
+            <div>
+              <dt className="text-xs opacity-55">Status</dt>
+              <dd className="font-medium capitalize">{latestRun.status}</dd>
+            </div>
+            <div>
+              <dt className="text-xs opacity-55">Gross / net</dt>
+              <dd className="font-medium tabular-nums">
+                {money(latestRun.grossPay)} / {money(latestRun.netPay)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs opacity-55">Cash leaving banks</dt>
+              <dd className="font-medium tabular-nums">
+                {money(latestRun.totalCashOut)}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="text-sm opacity-60">
+            No payroll run yet — accrue liabilities or reset the roster.
+          </p>
+        )}
+        {latestRun?.accountDebits?.length ? (
+          <div className="overflow-x-auto rounded-lg border border-base-300 bg-white">
+            <table className="table table-sm">
+              <thead>
+                <tr>
+                  <th>Bank cost center</th>
+                  <th className="text-right">Net deposits</th>
+                  <th className="text-right">Taxes</th>
+                  <th className="text-right">Benefits</th>
+                  <th className="text-right">Total debit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {latestRun.accountDebits.map((d) => (
+                  <tr
+                    key={`${d.costCenter}-${d.propertyId || "corp"}`}
+                  >
+                    <td>{d.bankAccountHint}</td>
+                    <td className="text-right tabular-nums">
+                      {money(d.netPay)}
+                    </td>
+                    <td className="text-right tabular-nums">
+                      {money(d.taxRemittance)}
+                    </td>
+                    <td className="text-right tabular-nums">
+                      {money(d.benefits)}
+                    </td>
+                    <td className="text-right font-medium tabular-nums text-red-800">
+                      −{money(d.totalDebit)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        <p className="text-xs opacity-50">
+          Liability buckets include {payrollLiabilityLabel("net_pay")}, taxes,
+          employer FICA/FUTA, and benefits — settled together on payday.
+        </p>
+      </div>
+
       <EmployeePicker
         employees={employees}
         selectedId={selected?.id ?? ""}

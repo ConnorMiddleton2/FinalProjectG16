@@ -37,7 +37,6 @@ export function AnnouncementsPage() {
     urgentUnread,
     actionMessage,
     reload,
-    loadDemoData,
     markRead,
     markUnread,
     markAllRead,
@@ -80,23 +79,14 @@ export function AnnouncementsPage() {
                 {state.message}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn btn-neutral btn-sm gap-1"
-                onClick={reload}
-              >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                Try again
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={loadDemoData}
-              >
-                Use demo data
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm gap-1"
+              onClick={reload}
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Try again
+            </button>
           </div>
         </div>
       </div>
@@ -125,13 +115,6 @@ export function AnnouncementsPage() {
             <Mail className="h-4 w-4" aria-hidden="true" />
             Messages
           </Link>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            onClick={loadDemoData}
-          >
-            Preview with demo data
-          </button>
         </div>
       </div>
     );
@@ -143,8 +126,7 @@ export function AnnouncementsPage() {
         className="rounded-xl border border-success/20 bg-success/5 px-4 py-3 text-sm text-[var(--harbor-ink)]/80"
         role="status"
       >
-        Announcements loaded
-        {state.source === "mock" ? " (demo data)" : ""}. Includes payment,
+        Announcements loaded. Includes payment,
         maintenance, lease, and property notices for your building.
       </div>
 
@@ -449,8 +431,8 @@ function AnnouncementCard({
 function downloadAttachment(item: AnnouncementWithRead) {
   if (!item.attachment) return;
   const body = [
-    "Harborline Property Management",
-    "Announcement attachment (demo)",
+    "CPMC Property Management Company",
+    "Announcement attachment",
     "",
     `Announcement: ${item.title}`,
     `Category: ${item.category}`,

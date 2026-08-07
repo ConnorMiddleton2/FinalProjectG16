@@ -1,7 +1,7 @@
 import type { MoveOutNoticeRecord } from "@/lib/portal/move-out-types";
 import { portalStorageKey } from "@/lib/portal/storage-key";
 
-const STORAGE_BASE = "harborline.portal.moveOutNotice.v1";
+const STORAGE_BASE = "cpmc.portal.moveOutNotice.v1";
 
 function canUseStorage() {
   return (

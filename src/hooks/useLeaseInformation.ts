@@ -8,7 +8,6 @@ import type {
 import {
   emptyLeaseMessage,
   getLease,
-  getLeaseDemoFixture,
 } from "@/lib/portal/services/leaseService";
 
 /**
@@ -52,13 +51,9 @@ export function useLeaseInformation() {
     }
   }, [applyLease]);
 
-  const loadDemoData = useCallback(() => {
-    applyLease(getLeaseDemoFixture(), "mock");
-  }, [applyLease]);
-
   useEffect(() => {
     void load();
   }, [load]);
 
-  return { state, reload: load, loadDemoData };
+  return { state, reload: load };
 }

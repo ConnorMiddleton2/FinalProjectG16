@@ -10,6 +10,7 @@ import {
 import type { ManagementContractDraft } from "@/lib/management-contract";
 import {
   buildAssetsForProperty,
+  normalizeAssetOwnership,
   type PropertyAsset,
 } from "@/lib/property-assets";
 
@@ -59,8 +60,16 @@ export async function ensurePropertyAssetsAction() {
 
 export async function savePropertyAssetAction(asset: PropertyAsset) {
   await requireOpsModule("assets");
+  if (!asset.propertyId || !asset.name.trim()) {
+    return { error: "Property and asset name are required." as const };
+  }
   const client = await createClient();
-  const next = { ...asset, updatedAt: new Date().toISOString() };
+  const next: PropertyAsset = {
+    ...asset,
+    name: asset.name.trim(),
+    ownership: normalizeAssetOwnership(asset.ownership),
+    updatedAt: new Date().toISOString(),
+  };
   await upsertSharedRecord(
     client,
     COLLECTIONS.propertyAssets,

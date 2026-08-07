@@ -1,9 +1,19 @@
 import {
-  rentCollectedFromReceivables,
+  operationalRentCollected,
   type Receivable,
 } from "@/lib/accounts-receivable";
+import {
+  operatingExpensesForProperty,
+  type PayableInvoice,
+} from "@/lib/accounts-payable";
 import type { ManagementContractDraft } from "@/lib/management-contract";
-import { monthPeriodLabel, shiftDays } from "@/lib/seed-dates";
+import {
+  bankCashAvailable,
+  sumBankTxnAmount,
+  type BankAccount,
+  type BankTransaction,
+} from "@/lib/bank-accounts-shared";
+import { monthPeriodLabel, monthSlug, periodsMatch, shiftDays } from "@/lib/seed-dates";
 
 export type OwnerPaymentType =
   | "monthly_distribution"
@@ -35,7 +45,7 @@ export type OwnerPayable = {
   paymentType: OwnerPaymentType;
   /** Total rental income collected for the property and period. */
   grossRentCollected: number;
-  /** Harborline management fee % from the signed contract (fallback default). */
+  /** CPMC management fee % from the signed contract (fallback default). */
   managementFeePercent: number;
   managementFeeAmount: number;
   reimbursableExpenses: number;
@@ -209,7 +219,7 @@ export function findManagedProperty(
 }
 
 /**
- * Resolve Harborline's management fee for a remittance from the signed
+ * Resolve CPMC's management fee for a remittance from the signed
  * management contract when available; otherwise use the portfolio default %.
  */
 export function resolveManagementFee(
@@ -255,58 +265,331 @@ export function resolveManagementFee(
   };
 }
 
+export type BankSyncedRemittanceInputs = {
+  propertyName: string;
+  propertyId?: string;
+  period: string;
+  reservesWithheld?: number;
+  amountPaid?: number;
+  receivables: Pick<
+    Receivable,
+    | "id"
+    | "property"
+    | "period"
+    | "category"
+    | "amountReceived"
+    | "unit"
+    | "description"
+    | "customerName"
+  >[];
+  /** Active lease roster — used when unit A/R is absent for a property. */
+  propertyTenants?: {
+    propertyName?: string;
+    status?: string;
+    monthlyRent?: string | number;
+  }[];
+  managedProperties?: ManagedFeeFields[];
+  operatingExpenses?: Pick<
+    PayableInvoice,
+    "id" | "property" | "amount" | "amountPaid" | "invoiceDate" | "disputed"
+  >[];
+  bankAccount?: Pick<
+    BankAccount,
+    "id" | "propertyId" | "propertyName" | "balance" | "reservedBalance"
+  > | null;
+  bankTxns?: Pick<
+    BankTransaction,
+    | "propertyId"
+    | "propertyName"
+    | "period"
+    | "kind"
+    | "direction"
+    | "amount"
+    | "accountId"
+  >[];
+};
+
 /**
- * Rebuild a monthly remittance's rent / fee / net from live A/R and the
- * management contract. Leaves reimbursable expenses, reserves, and payments.
+ * Bank-synced owner remittance waterfall:
+ * rent collected (unit A/R or active leases, prefer bank rent credits when
+ * present) − management fee − operating expenses paid − reserves, then capped
+ * to cash still available in the property operating account.
+ */
+export function computeBankSyncedRemittance(input: BankSyncedRemittanceInputs) {
+  const arRent = operationalRentCollected(
+    input.receivables,
+    input.propertyName,
+    input.period,
+    input.propertyTenants
+  );
+  const bankRent = input.bankTxns
+    ? sumBankTxnAmount(input.bankTxns, {
+        propertyId: input.propertyId,
+        propertyName: input.propertyName,
+        accountId: input.bankAccount?.id,
+        period: input.period,
+        kinds: ["tenant_rent"],
+        direction: "credit",
+      })
+    : 0;
+  // Prefer the larger of AR vs bank rent so partial posting still surfaces collections.
+  const grossRentCollected = round2(Math.max(arRent, bankRent));
+
+  const fee = resolveManagementFee(
+    input.propertyName,
+    grossRentCollected,
+    input.managedProperties ?? []
+  );
+
+  const apExpensesPaid = operatingExpensesForProperty(
+    input.operatingExpenses ?? [],
+    input.propertyName,
+    input.period
+  );
+  const bankExpenses = input.bankTxns
+    ? sumBankTxnAmount(input.bankTxns, {
+        propertyId: input.propertyId,
+        propertyName: input.propertyName,
+        accountId: input.bankAccount?.id,
+        period: input.period,
+        kinds: ["property_expense", "payroll"],
+        direction: "debit",
+      })
+    : 0;
+  const reimbursableExpenses = round2(Math.max(apExpensesPaid, bankExpenses));
+
+  const feeSwept = input.bankTxns
+    ? sumBankTxnAmount(input.bankTxns, {
+        propertyId: input.propertyId,
+        propertyName: input.propertyName,
+        accountId: input.bankAccount?.id,
+        period: input.period,
+        kinds: ["management_fee"],
+        direction: "debit",
+      })
+    : 0;
+  const feePendingInBank = Math.max(0, round2(fee.amount - feeSwept));
+
+  const reservesWithheld = input.reservesWithheld ?? 0;
+  const amountPaid = input.amountPaid ?? 0;
+  const computed = computeNetDue({
+    grossRentCollected,
+    managementFeeAmount: fee.amount,
+    reimbursableExpenses,
+    reservesWithheld,
+  });
+
+  const bankAvailable = input.bankAccount
+    ? Math.max(
+        0,
+        round2(bankCashAvailable(input.bankAccount) - feePendingInBank)
+      )
+    : computed;
+
+  const amount = Math.max(
+    amountPaid,
+    round2(Math.min(computed, bankAvailable))
+  );
+
+  return {
+    grossRentCollected,
+    managementFeePercent: fee.percent,
+    managementFeeAmount: fee.amount,
+    reimbursableExpenses,
+    reservesWithheld,
+    amount,
+    bankAvailable,
+    feePendingInBank,
+    feeSwept,
+    arRent,
+    bankRent,
+  };
+}
+
+/**
+ * Rebuild a monthly remittance from live A/R, paid operating expenses, bank
+ * cash, and the management contract. Leaves statement approval / hold flags.
  */
 export function applyLiveRentToRemittance(
   row: OwnerPayable,
   receivables: Pick<
     Receivable,
-    "property" | "period" | "category" | "amountReceived"
+    | "id"
+    | "property"
+    | "period"
+    | "category"
+    | "amountReceived"
+    | "unit"
+    | "description"
+    | "customerName"
   >[],
-  managedProperties: ManagedFeeFields[] = []
+  managedProperties: ManagedFeeFields[] = [],
+  operatingExpenses: Pick<
+    PayableInvoice,
+    "id" | "property" | "amount" | "amountPaid" | "invoiceDate" | "disputed"
+  >[] = [],
+  bankAccount?: BankSyncedRemittanceInputs["bankAccount"],
+  bankTxns: BankSyncedRemittanceInputs["bankTxns"] = [],
+  propertyTenants: BankSyncedRemittanceInputs["propertyTenants"] = []
 ): OwnerPayable {
   if (row.paymentType !== "monthly_distribution") return row;
 
-  const grossRentCollected = rentCollectedFromReceivables(
-    receivables,
-    row.property,
-    row.period
-  );
-  const fee = resolveManagementFee(
-    row.property,
-    grossRentCollected,
-    managedProperties
-  );
-  const computed = computeNetDue({
-    grossRentCollected,
-    managementFeeAmount: fee.amount,
-    reimbursableExpenses: row.reimbursableExpenses,
+  const synced = computeBankSyncedRemittance({
+    propertyName: row.property,
+    propertyId: bankAccount?.propertyId,
+    period: row.period,
     reservesWithheld: row.reservesWithheld,
+    amountPaid: row.amountPaid,
+    receivables,
+    propertyTenants,
+    managedProperties,
+    operatingExpenses,
+    bankAccount,
+    bankTxns,
   });
-  // Never drop net below what has already been paid.
-  const amount = Math.max(computed, row.amountPaid);
 
   if (
-    grossRentCollected === row.grossRentCollected &&
-    fee.percent === row.managementFeePercent &&
-    fee.amount === row.managementFeeAmount &&
-    amount === row.amount
+    synced.grossRentCollected === row.grossRentCollected &&
+    synced.managementFeePercent === row.managementFeePercent &&
+    synced.managementFeeAmount === row.managementFeeAmount &&
+    synced.reimbursableExpenses === row.reimbursableExpenses &&
+    synced.amount === row.amount
   ) {
     return row;
   }
 
   return {
     ...row,
-    grossRentCollected,
-    managementFeePercent: fee.percent,
-    managementFeeAmount: fee.amount,
-    amount,
+    grossRentCollected: synced.grossRentCollected,
+    managementFeePercent: synced.managementFeePercent,
+    managementFeeAmount: synced.managementFeeAmount,
+    reimbursableExpenses: synced.reimbursableExpenses,
+    amount: synced.amount,
   };
 }
 
-/** Gross rent less Harborline's fee, reimbursable expenses, and reserves. */
+/** Stable id for a property's monthly owner remittance. */
+export function monthlyOwnerRemittanceId(
+  propertyId: string,
+  periodSlug: string
+) {
+  return `opay-${propertyId}-${periodSlug}`;
+}
+
+export function findMonthlyOwnerRemittance(
+  rows: OwnerPayable[],
+  propertyName: string,
+  period: string
+) {
+  const needle = propertyName.trim().toLowerCase();
+  return rows.find(
+    (row) =>
+      row.paymentType === "monthly_distribution" &&
+      (row.property || "").trim().toLowerCase() === needle &&
+      periodsMatch(row.period || "", period)
+  );
+}
+
+/**
+ * Build (or refresh) the current-period monthly remittance for a managed
+ * property from rent collections, paid OpEx, bank cash, and the contract.
+ */
+export function buildMonthlyOwnerRemittance(input: {
+  property: ManagementContractDraft;
+  receivables: Pick<
+    Receivable,
+    | "id"
+    | "property"
+    | "period"
+    | "category"
+    | "amountReceived"
+    | "unit"
+    | "description"
+    | "customerName"
+  >[];
+  propertyTenants?: BankSyncedRemittanceInputs["propertyTenants"];
+  operatingExpenses?: Pick<
+    PayableInvoice,
+    "id" | "property" | "amount" | "amountPaid" | "invoiceDate" | "disputed"
+  >[];
+  bankAccount?: BankSyncedRemittanceInputs["bankAccount"];
+  bankTxns?: BankSyncedRemittanceInputs["bankTxns"];
+  monthsAgo?: number;
+  existing?: OwnerPayable | null;
+}): OwnerPayable {
+  const monthsAgo = input.monthsAgo ?? 0;
+  const periodSlug = monthSlug(monthsAgo);
+  const periodLabel = monthPeriodLabel(monthsAgo);
+  const period = periodSlug;
+  const propertyName = input.property.propertyName;
+  const reservesWithheld = input.existing?.reservesWithheld ?? 0;
+  const amountPaid = input.existing?.amountPaid ?? 0;
+
+  const synced = computeBankSyncedRemittance({
+    propertyName,
+    propertyId: input.property.id,
+    period,
+    reservesWithheld,
+    amountPaid,
+    receivables: input.receivables,
+    propertyTenants: input.propertyTenants,
+    managedProperties: [input.property],
+    operatingExpenses: input.operatingExpenses ?? [],
+    bankAccount: input.bankAccount,
+    bankTxns: input.bankTxns ?? [],
+  });
+
+  const ownerName =
+    input.property.ownerLegalName ||
+    input.property.ownerContactName ||
+    propertyName;
+  const ownerId =
+    input.property.ownerAccountId ||
+    `OWN-${input.property.id.slice(0, 8).toUpperCase()}`;
+
+  if (input.existing) {
+    return {
+      ...input.existing,
+      ownerName: input.existing.ownerName || ownerName,
+      ownerId: input.existing.ownerId || ownerId,
+      property: propertyName,
+      period: input.existing.period || period,
+      grossRentCollected: synced.grossRentCollected,
+      managementFeePercent: synced.managementFeePercent,
+      managementFeeAmount: synced.managementFeeAmount,
+      reimbursableExpenses: synced.reimbursableExpenses,
+      amount: synced.amount,
+    };
+  }
+
+  return {
+    id: monthlyOwnerRemittanceId(input.property.id, periodSlug),
+    paymentId: `OWN-DIST-${periodSlug}-${input.property.id.slice(0, 8).toUpperCase()}`,
+    ownerName,
+    ownerId,
+    property: propertyName,
+    period,
+    paymentType: "monthly_distribution",
+    grossRentCollected: synced.grossRentCollected,
+    managementFeePercent: synced.managementFeePercent,
+    managementFeeAmount: synced.managementFeeAmount,
+    reimbursableExpenses: synced.reimbursableExpenses,
+    reservesWithheld,
+    amount: synced.amount,
+    amountPaid: 0,
+    onHold: false,
+    statementApproved: false,
+    invoiceDate: new Date().toISOString().slice(0, 10),
+    dueDate: shiftDays(15),
+    paymentMethod: "",
+    paymentReference: "",
+    fileName: "",
+    notes: `Bank-synced remittance for ${propertyName} · ${periodLabel}. Net = rent in bank − management fee − OpEx paid from bank − reserves, capped to property operating cash.`,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/** Gross rent less CPMC's fee, operating expenses, and reserves. */
 export function computeNetDue(input: {
   grossRentCollected: number;
   managementFeeAmount: number;
@@ -617,7 +900,7 @@ function specialOwnerPayables(): OwnerPayable[] {
       paymentReference: "",
       fileName: "bob-owner-current-statement.pdf",
       notes:
-        `Demo owner account used for the owner-portal walkthrough. Co-investor distribution after Harborline's ${DEFAULT_MANAGEMENT_FEE_PERCENT}% management fee.`,
+        `Demo owner account used for the owner-portal walkthrough. Co-investor distribution after CPMC's ${DEFAULT_MANAGEMENT_FEE_PERCENT}% management fee.`,
       createdAt: shiftDays(-2),
     },
   ];

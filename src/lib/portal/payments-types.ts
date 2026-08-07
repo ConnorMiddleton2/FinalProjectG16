@@ -26,7 +26,8 @@ export type SavedPaymentMethodSummary = {
   brand: string;
   /** Masked last four only — never full PAN or account number. */
   last4: string;
-  kind: "Card" | "Bank" | "ACH" | "Check" | "Monthly";
+  /** Shared categories: ACH, Check, Debit card (legacy Card/Bank still accepted). */
+  kind: "ACH" | "Check" | "Debit card" | "Card" | "Bank" | "Monthly";
   isDefault: boolean;
 };
 
@@ -60,6 +61,14 @@ export type PaymentsOverview = {
   /** Open charges, fees, and credits that make up the current balance. */
   ledger: PaymentLedgerLine[];
   transactions: PaymentTransaction[];
+  /** Tenant-reported check awaiting A/R approval (not deposited yet). */
+  pendingCheck?: {
+    id: string;
+    amount: string;
+    delivery: "mailed" | "handed";
+    submittedAt: string;
+    status: "pending_ar" | "approved" | "declined";
+  } | null;
 };
 
 export type PaymentsLoadState =
