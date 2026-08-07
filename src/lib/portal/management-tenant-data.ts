@@ -20,7 +20,10 @@ import {
 import type { PortalTenantSession } from "@/lib/portal/auth";
 import type { TenantDashboardData } from "@/lib/portal/dashboard-types";
 import type { LeaseInformation } from "@/lib/portal/lease-types";
-import type { PaymentsOverview } from "@/lib/portal/payments-types";
+import type {
+  PaymentTransaction,
+  PaymentsOverview,
+} from "@/lib/portal/payments-types";
 import type { MakePaymentContext } from "@/lib/portal/make-payment-types";
 import type { PaymentHistoryRecord } from "@/lib/portal/payment-history-types";
 import {
@@ -507,20 +510,24 @@ export function snapshotToPaymentsOverview(
     transactions: [
       ...snap.openReceivables.slice(0, 4).map((r) => {
         const isLate = isLateFeeReceivable(r);
+        const status: PaymentTransaction["status"] =
+          snap.paymentStatus === "Overdue" ? "Overdue" : "Due";
+        const type: PaymentTransaction["type"] = isLate ? "Late fee" : "Rent";
         return {
           id: `open-${r.id}`,
           label: r.description || `${isLate ? "Late fee" : "Charge"} · ${propertyLabel}`,
           amount: moneyExact(openReceivableAmount(r)),
           date: (r.dueDate || "").slice(0, 10),
           displayDate: prettyDate(r.dueDate),
-          status: (snap.paymentStatus === "Overdue" ? "Overdue" : "Due") as const,
-          type: (isLate ? "Late fee" : "Rent") as const,
+          status,
+          type,
           methodSummary: "Not paid",
           receiptAvailable: false,
         };
       }),
       ...snap.paidReceivables.slice(0, 12).map((r) => {
         const isLate = isLateFeeReceivable(r);
+        const type: PaymentTransaction["type"] = isLate ? "Late fee" : "Rent";
         return {
           id: r.id,
           label: r.description || `${isLate ? "Late fee" : "Rent"} · ${propertyLabel}`,
@@ -528,7 +535,7 @@ export function snapshotToPaymentsOverview(
           date: (r.dueDate || "").slice(0, 10),
           displayDate: prettyDate(r.dueDate),
           status: "Paid" as const,
-          type: (isLate ? "Late fee" : "Rent") as const,
+          type,
           methodSummary: r.paymentMethod || "Recorded payment",
           receiptAvailable: true,
         };
